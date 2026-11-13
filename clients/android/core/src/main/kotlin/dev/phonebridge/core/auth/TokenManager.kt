@@ -41,7 +41,15 @@ class TokenManager(
      * @param ttlMillis null = never expires; otherwise must be positive.
      * @throws IllegalArgumentException on invalid arguments; any exception from [TokenStore.save].
      */
-    fun issue(name: String, scopes: Set<String>, confirmPolicy: ConfirmPolicy, ttlMillis: Long?): IssuedToken {
+    fun issue(
+        name: String,
+        scopes: Set<String>,
+        confirmPolicy: ConfirmPolicy,
+        ttlMillis: Long?,
+        origin: String = "manual",
+        clientHost: String? = null,
+        appPolicy: AppPolicy = AppPolicy(),
+    ): IssuedToken {
         val trimmedName = name.trim()
         require(trimmedName.isNotEmpty()) { "Token name must not be blank" }
         require(ttlMillis == null || ttlMillis > 0) { "ttlMillis must be positive" }
@@ -111,6 +119,17 @@ class TokenManager(
     }
 
     /** Removes a token entirely. No-op if unknown. */
+    /**
+     * Edits a token's mutable settings (name, scopes, confirmPolicy, expiresAt, appPolicy, toolRules,
+     * activeHours). [transform]'s changes to id/secretHash/createdAt/origin/lastUsedAt/revoked are
+     * ignored. Persists; returns the updated record. Throws NoSuchElementException for unknown ids.
+     * STUB — core agent (wave 2).
+     */
+    fun update(id: String, transform: (TokenRecord) -> TokenRecord): TokenRecord = TODO()
+
+    /** Revokes every active token; returns how many were revoked. STUB — core agent (wave 2). */
+    fun revokeAll(): Int = TODO()
+
     fun delete(id: String) {
         synchronized(lock) {
             val current = state.value

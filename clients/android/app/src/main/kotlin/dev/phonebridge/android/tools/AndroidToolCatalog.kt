@@ -10,6 +10,7 @@ object AndroidToolCatalog {
         return contactTools(app) +
             messagingTools(app) +
             whatsAppTools(app) +
+            emailTools(app) +
             notificationTools(app) +
             appTools(app) +
             screenTools(app) +

@@ -33,6 +33,8 @@ sealed interface PolicyDecision {
 class PolicyEngine(
     private val limits: RateLimits = RateLimits(),
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Zone for TokenRecord.activeHours (wave 2: core agent implements tool rules + active hours). */
+    private val zone: () -> java.time.ZoneId = { java.time.ZoneId.systemDefault() },
 ) {
     private class Windows(val all: ArrayDeque<Long> = ArrayDeque(), val sensitive: ArrayDeque<Long> = ArrayDeque())
 

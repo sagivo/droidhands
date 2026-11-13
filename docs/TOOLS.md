@@ -70,6 +70,7 @@ candidates, so the agent can ask the user. It never guesses.
 | `sms_send` | messages.send | SENSITIVE (internal) | `to` (phone) or `contact` (name), `message` (req) → waits up to 30 s for the radio's sent status |
 | `whatsapp_send` | messages.send | SENSITIVE (internal) | `to` (phone, international format preferred) or `contact` (name), `message` (req), `business` bool (use WhatsApp Business). Needs accessibility for the automatic Send tap. Without it, the chat opens with the text prefilled and the result says the user must tap Send. Fails if the phone is locked. |
 | `phone_call` | calls | SENSITIVE (internal) | `to` (phone) or `contact` (name) – places a call |
+| `email_send` | messages.send | SENSITIVE (internal) | `to` (email address(es), comma-separated) or `contact` (name, resolved to the contact's email), `cc`, `subject`, `body` (req), `app` (package, default: the default email app, preferring Gmail) – opens the app's compose screen pre-filled and taps Send with accessibility. Without accessibility, the compose screen is left open and the result says the user must tap Send. To reply to a received email: use `notification_reply` when the mail notification has an inline reply, otherwise `notification_action` "Reply" plus screen tools, or the mail app via screen tools. |
 
 ## Notifications — scopes `notifications.read`, `notifications.act`
 
@@ -100,7 +101,10 @@ Messages, Slack…).
 
 ## Screen — scopes `screen.read`, `screen.control`
 
-Generic control of **any** app through the platform's accessibility layer. Element references
+Generic control of **any** app through the platform's accessibility layer. Subject to the token's
+**app access** (docs/SECURITY.md): refused while a blocked app is in the foreground. Blocked apps'
+windows are omitted. Screenshots are refused when any blocked window is visible, and when the
+notification shade or recents screen is showing while app restrictions apply. Element references
 (`ref`, like `n12`) come from the most recent `screen_read`/`screen_find` and stay valid until the
 next one.
 

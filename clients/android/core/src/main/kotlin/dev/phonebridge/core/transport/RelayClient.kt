@@ -30,7 +30,8 @@ import kotlin.random.Random
 sealed interface RelayStatus {
     data object Stopped : RelayStatus
     data object Connecting : RelayStatus
-    data class Connected(val mcpUrl: String) : RelayStatus
+    /** [connectUrl]: device connector URL `{relay}/d/<deviceId>/mcp` from welcome (null for old relays). */
+    data class Connected(val mcpUrl: String, val connectUrl: String? = null) : RelayStatus
 
     /** [fatal] = will not retry (bad access key / unsupported protocol) until settings change. */
     data class Error(val message: String, val retryInMs: Long?, val fatal: Boolean = false) : RelayStatus
@@ -76,6 +77,8 @@ class RelayClient(
     private val handler: suspend (TransportRequest) -> TransportResponse,
     private val scope: CoroutineScope,
     private val httpClient: OkHttpClient = OkHttpClient(),
+    /** Handles pair_request / pair_complete / pair_abandoned / pair_cancel frames (wave 2: core agent wires it). */
+    private val pairingHandler: PairingHandler? = null,
 ) {
     private val lock = Any()
     private val state = MutableStateFlow<RelayStatus>(RelayStatus.Stopped)

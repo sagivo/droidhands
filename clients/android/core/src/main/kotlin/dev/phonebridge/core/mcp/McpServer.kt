@@ -77,6 +77,8 @@ class McpServer(
     private val isAccessEnabled: () -> Boolean = { true },
     private val confirmationTimeoutMs: Long = 60_000,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Device-wide security settings (wave 2: core agent applies them to CallContext + tools/list). */
+    private val globalSecurity: () -> dev.phonebridge.core.policy.GlobalSecurity = { dev.phonebridge.core.policy.GlobalSecurity() },
 ) {
     private val toolCalls = ToolCalls(registry, policy, confirmations, audit, isAccessEnabled, confirmationTimeoutMs, clock)
 

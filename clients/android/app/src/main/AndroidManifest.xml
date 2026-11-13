@@ -71,7 +71,22 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- phonebridge://configure?relay=...&key=... (relay /setup page, QR, setup script). Always asks the user. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="phonebridge" android:host="configure" />
+            </intent-filter>
         </activity>
+
+        <!-- One-tap agent pairing approval (docs/PROTOCOL.md §5). -->
+        <activity
+            android:name=".pairing.PairingActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity="dev.phonebridge.android.pairing" />
 
         <!-- Full details + Allow/Deny for a pending agent action. -->
         <activity
@@ -115,6 +130,10 @@
 
         <receiver
             android:name=".confirm.ConfirmationReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".pairing.PairingReceiver"
             android:exported="false" />
 
         <receiver
