@@ -19,3 +19,6 @@ coverage/
 # Local relay state / secrets
 .env
 relay/data/
+
+# Agent worktrees
+.claude/
