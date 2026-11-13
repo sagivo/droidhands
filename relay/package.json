@@ -1,0 +1,38 @@
+{
+  "name": "phonebridge-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stateless relay that exposes PhoneBridge devices to MCP clients by tunneling Streamable HTTP over a device WebSocket.",
+  "type": "module",
+  "main": "dist/relay.js",
+  "types": "dist/relay.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/relay.d.ts",
+      "default": "./dist/relay.js"
+    }
+  },
+  "bin": {
+    "phonebridge-relay": "dist/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node -e \"for (const d of ['dist', 'build-test']) require('node:fs').rmSync(d, { recursive: true, force: true })\"",
+    "build": "tsc -p tsconfig.build.json",
+    "build:test": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "test": "npm run clean && npm run build && npm run build:test && node --test build-test/test/*.test.js",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "~5.9.3"
+  }
+}
