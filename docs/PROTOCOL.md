@@ -28,6 +28,13 @@ iOS/desktop later) and the relay MUST follow them exactly. All JSON is UTF-8.
 | `tokenId` | 12 chars `[a-z2-7]{12}` (60 random bits), base32 of random bytes truncated to 12 chars. |
 | `tokenSecret` | 32 random bytes, base64url (43 chars). |
 
+**Test vectors** (every implementation MUST pass these):
+
+| input | output |
+|---|---|
+| deviceSecret = bytes `00 01 02 … 1f` (32 bytes) | base64url `AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8`, deviceId `mmg42klgyqzwneiskrelxms3j4` |
+| tokenSecret = bytes `64 65 66 … 83` (100..131) | base64url `ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1-f4CBgoM`, stored hash `e3e16780becf601d55e4751e7d722ef91d750bb0cea61b1bb5ea8bc308cdf262` |
+
 ## 2. Agent tokens
 
 ```
