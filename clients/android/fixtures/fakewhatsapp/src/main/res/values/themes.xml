@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="wa_green">#FF075E54</color>
+    <color name="wa_accent">#FF25D366</color>
+    <color name="wa_chat_bg">#FFECE5DD</color>
+    <color name="wa_bubble_out">#FFDCF8C6</color>
+
+    <style name="Base.FixtureTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/wa_green</item>
+        <item name="android:colorPrimaryDark">@color/wa_green</item>
+        <item name="android:colorAccent">@color/wa_accent</item>
+    </style>
+
+    <style name="FixtureTheme" parent="Base.FixtureTheme" />
+</resources>

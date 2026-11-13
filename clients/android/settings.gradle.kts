@@ -20,3 +20,5 @@ rootProject.name = "phonebridge"
 include(":core")
 // Android app: services, UI, and Android tool implementations.
 include(":app")
+// E2E test fixtures (emulator only): fake WhatsApp (com.whatsapp) and a fake mail app. See fixtures/README.md.
+include(":fixtures:fakewhatsapp", ":fixtures:fakemail")
