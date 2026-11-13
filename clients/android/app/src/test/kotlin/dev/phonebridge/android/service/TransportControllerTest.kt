@@ -1,0 +1,284 @@
+package dev.phonebridge.android.service
+
+import dev.phonebridge.android.graph.LocalServerStatus
+import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.core.transport.RelayStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.IOException
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class TransportControllerTest {
+    private class FakeRelay(val config: RelayConfig, val scope: CoroutineScope, private val startFailure: Exception?) : RelayTransport {
+        override val status = MutableStateFlow<RelayStatus>(RelayStatus.Stopped)
+        var starts = 0
+        var stops = 0
+
+        override fun start() {
+            starts++
+            startFailure?.let { throw it }
+            status.value = RelayStatus.Connecting
+        }
+
+        override fun stop() {
+            stops++
+            status.value = RelayStatus.Stopped
+        }
+    }
+
+    private class FakeLocal(val config: LocalConfig, private val failure: Exception?) : LocalTransport {
+        var running = false
+
+        override fun start() {
+            failure?.let { throw it }
+            running = true
+        }
+
+        override fun stop() {
+            running = false
+        }
+
+        override val boundPort: Int get() = config.port
+    }
+
+    private class Harness(scope: TestScope, initial: BridgeSettings) {
+        var settings = initial
+        val relays = mutableListOf<FakeRelay>()
+        val locals = mutableListOf<FakeLocal>()
+        var localFailure: Exception? = null
+        var relayFailure: Exception? = null
+        var relayStartFailure: Exception? = null
+        var relayStatus: RelayStatus? = null
+        var localStatus: LocalServerStatus? = null
+        val lanAddresses = mutableListOf("192.168.1.20")
+
+        val controller = TransportController(
+            scope = scope.backgroundScope,
+            settings = { settings },
+            relayFactory = { config, relayScope ->
+                relayFailure?.let { throw it }
+                FakeRelay(config, relayScope, relayStartFailure).also { relays += it }
+            },
+            localFactory = { config -> FakeLocal(config, localFailure).also { locals += it } },
+            lanAddresses = { lanAddresses.toList() },
+            onRelayStatus = { relayStatus = it },
+            onLocalStatus = { localStatus = it },
+        )
+    }
+
+    private val relayOn = BridgeSettings(relayEnabled = true, relayUrl = "https://relay.example.com", relayAccessKey = "k1")
+    private val both = relayOn.copy(localServerEnabled = true)
+
+    @Test
+    fun applyStartsEnabledTransportsAndForwardsStatus() = runTest {
+        val h = Harness(this, both)
+        h.controller.apply()
+        runCurrent()
+
+        assertEquals(1, h.relays.size)
+        assertEquals(RelayConfig("https://relay.example.com", "k1"), h.relays[0].config)
+        assertEquals(1, h.relays[0].starts)
+        assertEquals(RelayStatus.Connecting, h.relayStatus)
+        assertTrue(h.locals.single().running)
+        assertEquals(LocalServerStatus.Running(listOf("http://127.0.0.1:8765/mcp")), h.localStatus)
+
+        h.relays[0].status.value = RelayStatus.Connected("https://relay.example.com/mcp")
+        runCurrent()
+        assertEquals(RelayStatus.Connected("https://relay.example.com/mcp"), h.relayStatus)
+    }
+
+    @Test
+    fun applyWithUnchangedSettingsKeepsTransports() = runTest {
+        val h = Harness(this, both)
+        h.controller.apply()
+        runCurrent()
+        h.controller.apply()
+        runCurrent()
+        assertEquals(1, h.relays.size)
+        assertEquals(1, h.locals.size)
+        assertEquals(0, h.relays[0].stops)
+    }
+
+    @Test
+    fun changingTheAccessKeyReconnectsTheRelay() = runTest {
+        val h = Harness(this, relayOn)
+        h.controller.apply()
+        runCurrent()
+        h.settings = relayOn.copy(relayAccessKey = "k2")
+        h.controller.apply()
+        runCurrent()
+
+        assertEquals(2, h.relays.size)
+        assertEquals(1, h.relays[0].stops)
+        assertFalse(h.relays[0].scope.isActive)
+        assertEquals("k2", h.relays[1].config.accessKey)
+        assertEquals(RelayStatus.Connecting, h.relayStatus)
+    }
+
+    @Test
+    fun changingPortOrBindingRebindsTheLocalServer() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true))
+        h.controller.apply()
+        runCurrent()
+        h.settings = h.settings.copy(localServerPort = 9000, localServerBindAll = true)
+        h.controller.apply()
+        runCurrent()
+
+        assertEquals(2, h.locals.size)
+        assertFalse(h.locals[0].running)
+        assertEquals(LocalConfig(9000, true), h.locals[1].config)
+        assertEquals(
+            LocalServerStatus.Running(listOf("http://127.0.0.1:9000/mcp", "http://192.168.1.20:9000/mcp")),
+            h.localStatus,
+        )
+        assertEquals(LocalConfig(9000, true), h.controller.localConfig)
+    }
+
+    @Test
+    fun disablingTheRelayStopsItAndIgnoresLateStatus() = runTest {
+        val h = Harness(this, relayOn)
+        h.controller.apply()
+        runCurrent()
+        val old = h.relays.single()
+        h.settings = relayOn.copy(relayEnabled = false)
+        h.controller.apply()
+        runCurrent()
+
+        assertEquals(1, old.stops)
+        assertEquals(RelayStatus.Stopped, h.relayStatus)
+        old.status.value = RelayStatus.Connected("https://late/mcp")
+        runCurrent()
+        assertEquals(RelayStatus.Stopped, h.relayStatus)
+        assertNull(h.controller.relayConfig)
+    }
+
+    @Test
+    fun invalidRelayUrlReportsFatalErrorWithoutConnecting() = runTest {
+        val h = Harness(this, relayOn.copy(relayUrl = "relay.example.com"))
+        h.controller.apply()
+        runCurrent()
+        assertTrue(h.relays.isEmpty())
+        val status = h.relayStatus as RelayStatus.Error
+        assertTrue(status.fatal)
+    }
+
+    @Test
+    fun relayFactoryFailureBecomesErrorStatus() = runTest {
+        val h = Harness(this, relayOn)
+        h.relayFailure = IllegalArgumentException("bad url")
+        h.controller.apply()
+        runCurrent()
+        val status = h.relayStatus as RelayStatus.Error
+        assertTrue(status.message.contains("bad url"))
+        assertNull(h.controller.relayConfig)
+    }
+
+    @Test
+    fun relayStartFailureStopsTheHalfStartedClient() = runTest {
+        val h = Harness(this, relayOn)
+        h.relayStartFailure = IllegalStateException("boom")
+        h.controller.apply()
+        runCurrent()
+        val relay = h.relays.single()
+        assertEquals(1, relay.stops)
+        assertFalse(relay.scope.isActive)
+        assertTrue((h.relayStatus as RelayStatus.Error).message.contains("boom"))
+        assertNull(h.controller.relayConfig)
+    }
+
+    @Test
+    fun localBindFailureIsReportedAndRetriedOnNextApply() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true))
+        h.localFailure = IOException("Address already in use")
+        h.controller.apply()
+        runCurrent()
+        val error = h.localStatus as LocalServerStatus.Error
+        assertTrue(error.message.contains("8765"))
+        assertTrue(error.message.contains("Address already in use"))
+        assertNull(h.controller.localConfig)
+
+        h.localFailure = null
+        h.controller.apply()
+        runCurrent()
+        assertTrue(h.locals.last().running)
+        assertEquals(LocalServerStatus.Running(listOf("http://127.0.0.1:8765/mcp")), h.localStatus)
+    }
+
+    @Test
+    fun restartRelayReconnectsUnlessStoppedOrFatal() = runTest {
+        val h = Harness(this, relayOn)
+        h.controller.restartRelay()
+        runCurrent()
+        assertTrue("inactive controller ignores restarts", h.relays.isEmpty())
+
+        h.controller.apply()
+        runCurrent()
+        h.controller.restartRelay()
+        runCurrent()
+        assertEquals(2, h.relays.size)
+        assertEquals(1, h.relays[0].stops)
+        assertEquals(h.relays[0].config, h.relays[1].config)
+
+        h.relays[1].status.value = RelayStatus.Error("access key rejected", null, fatal = true)
+        runCurrent()
+        h.controller.restartRelay()
+        runCurrent()
+        assertEquals(2, h.relays.size)
+    }
+
+    @Test
+    fun refreshLocalUrlsPicksUpNewAddresses() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBindAll = true))
+        h.controller.apply()
+        runCurrent()
+        h.lanAddresses.clear()
+        h.lanAddresses += "10.0.0.5"
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertEquals(LocalServerStatus.Running(listOf("http://127.0.0.1:8765/mcp", "http://10.0.0.5:8765/mcp")), h.localStatus)
+        assertEquals(1, h.locals.size)
+    }
+
+    @Test
+    fun stopAllStopsEverythingAndDeactivates() = runTest {
+        val h = Harness(this, both)
+        h.controller.apply()
+        runCurrent()
+        h.controller.stopAll()
+        runCurrent()
+
+        assertEquals(1, h.relays.single().stops)
+        assertFalse(h.locals.single().running)
+        assertEquals(RelayStatus.Stopped, h.relayStatus)
+        assertEquals(LocalServerStatus.Stopped, h.localStatus)
+
+        h.controller.restartRelay()
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertEquals(1, h.relays.size)
+        assertEquals(LocalServerStatus.Stopped, h.localStatus)
+    }
+
+    @Test
+    fun commandsRunInSubmissionOrder() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true))
+        // A service instance being destroyed and a new one starting right after.
+        h.controller.apply()
+        h.controller.stopAll()
+        h.controller.apply()
+        runCurrent()
+        assertEquals(2, h.locals.size)
+        assertFalse(h.locals[0].running)
+        assertTrue(h.locals[1].running)
+    }
+}

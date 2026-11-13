@@ -1,26 +1,119 @@
 package dev.phonebridge.android.confirm
 
 import android.content.Context
+import android.util.Log
+import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.core.confirm.ConfirmationProvider
 import dev.phonebridge.core.confirm.ConfirmationRequest
 import dev.phonebridge.core.confirm.ConfirmationResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Shows a high-priority notification with Allow/Deny (explicit, immutable PendingIntents carrying the
- * request id as nonce) and suspends until resolved; tapping opens [ConfirmationActivity].
+ * Shows a high-priority notification with Allow/Deny (explicit, immutable PendingIntents carrying a
+ * per-prompt random nonce) and suspends until resolved; tapping opens [ConfirmationActivity].
  * Cancellation (timeout) removes the notification.
  *
- * STUB — implemented by the services agent.
+ * If notifications can't be shown (POST_NOTIFICATIONS denied or the channel blocked), it starts
+ * [ConfirmationActivity] directly as a best effort (Android may block background activity starts)
+ * and still waits. As a safety net it gives up with [ConfirmationResult.TIMED_OUT] slightly after
+ * [timeoutMs] even if the caller never cancels.
+ *
+ * Thread-safe; [requestConfirmation] may be called concurrently from any dispatcher.
  */
-class NotificationConfirmationProvider(private val context: Context) : ConfirmationProvider {
-    override suspend fun requestConfirmation(request: ConfirmationRequest): ConfirmationResult = TODO()
+class NotificationConfirmationProvider(
+    private val context: Context,
+    /** How long the server waits for an answer (must match McpServer's confirmationTimeoutMs). */
+    private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+) : ConfirmationProvider {
+    private val appContext: Context = context.applicationContext
+    private val registry = PendingConfirmations()
+
+    override suspend fun requestConfirmation(request: ConfirmationRequest): ConfirmationResult {
+        val entry = registry.register(request, timeoutMs) ?: run {
+            Log.w(TAG, "Duplicate confirmation id for ${request.toolName}; denying")
+            return ConfirmationResult.DENIED
+        }
+        try {
+            prompt(entry)
+            return withTimeoutOrNull(timeoutMs + ConfirmationNotifications.NOTIFICATION_GRACE_MS) { entry.result.await() }
+                ?: ConfirmationResult.TIMED_OUT
+        } finally {
+            dismiss(entry)
+        }
+    }
 
     /** Pending requests (oldest first) — the UI may show them in-app too. */
-    val pendingRequests: StateFlow<List<ConfirmationRequest>> get() = TODO()
+    val pendingRequests: StateFlow<List<ConfirmationRequest>> get() = registry.requests
 
-    fun pending(id: String): ConfirmationRequest? = TODO()
+    fun pending(id: String): ConfirmationRequest? = registry[id]?.request
 
-    /** Completes a pending request; no-op for unknown/finished ids. */
-    fun resolve(id: String, approved: Boolean): Unit = TODO()
+    /** Epoch millis when the server stops waiting for [id], or null if it is not pending. */
+    fun expiresAt(id: String): Long? = registry[id]?.expiresAt
+
+    /** Completes a pending request; no-op for unknown/finished ids. For trusted in-app UI only. */
+    fun resolve(id: String, approved: Boolean) {
+        val entry = registry[id] ?: return
+        if (registry.resolve(id, approved)) dismiss(entry)
+    }
+
+    /**
+     * Completes a pending request only if [nonce] matches the one issued with its notification
+     * (used by [ConfirmationReceiver]). Returns false for unknown/finished ids or a wrong nonce.
+     */
+    fun resolveWithNonce(id: String, nonce: String, approved: Boolean): Boolean {
+        val entry = registry[id] ?: return false
+        val resolved = registry.resolveWithNonce(id, nonce, approved)
+        if (resolved) dismiss(entry) else Log.w(TAG, "Ignored a stale or mismatched confirmation callback")
+        return resolved
+    }
+
+    /** Denies every pending request, e.g. when the user pauses access. */
+    fun denyAll() {
+        val entries = registry.all()
+        registry.denyAll()
+        entries.forEach(::dismiss)
+    }
+
+    private suspend fun prompt(entry: PendingConfirmation) {
+        val posted = try {
+            ConfirmationNotifications.canPost(appContext) && run {
+                ConfirmationNotifications.show(appContext, entry, timeoutMs)
+                true
+            }
+        } catch (e: RuntimeException) {
+            // e.g. SecurityException if the notification permission was revoked a moment ago.
+            Log.w(TAG, "Could not post the confirmation notification; opening the confirmation screen", e)
+            false
+        }
+        if (!posted) withContext(Dispatchers.Main) { launchActivity(entry) }
+    }
+
+    private fun launchActivity(entry: PendingConfirmation) {
+        // A bound accessibility service is exempt from background-activity-launch limits.
+        val launcher: Context = BridgeAccessibilityService.instance ?: appContext
+        try {
+            launcher.startActivity(ConfirmationActivity.intent(appContext, entry.request.id))
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not open the confirmation screen; the request will time out", e)
+        }
+    }
+
+    private fun dismiss(entry: PendingConfirmation) {
+        registry.remove(entry)
+        try {
+            ConfirmationNotifications.cancel(appContext, entry.notificationId)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not cancel confirmation notification", e)
+        }
+    }
+
+    companion object {
+        private const val TAG = "PhoneBridge/Confirm"
+
+        /** McpServer's default confirmation timeout. */
+        const val DEFAULT_TIMEOUT_MS = 60_000L
+    }
 }
