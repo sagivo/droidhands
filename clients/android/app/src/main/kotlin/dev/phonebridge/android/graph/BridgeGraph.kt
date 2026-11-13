@@ -1,16 +1,44 @@
 package dev.phonebridge.android.graph
 
 import android.app.Application
+import android.app.ForegroundServiceStartNotAllowedException
 import android.content.Context
+import android.os.Build
+import android.util.Log
+import androidx.core.content.ContextCompat
+import dev.phonebridge.android.BuildConfig
+import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.confirm.NotificationConfirmationProvider
+import dev.phonebridge.android.notify.BridgeNotificationListener
+import dev.phonebridge.android.service.BridgeService
+import dev.phonebridge.android.service.CoreTransports
+import dev.phonebridge.android.service.NetworkAddresses
+import dev.phonebridge.android.service.StatusText
+import dev.phonebridge.android.service.TransportConfig
+import dev.phonebridge.android.service.TransportController
+import dev.phonebridge.android.service.WakeLockedHandler
 import dev.phonebridge.android.settings.SettingsRepository
+import dev.phonebridge.android.tools.AndroidToolCatalog
+import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.audit.AuditLog
+import dev.phonebridge.core.audit.FileAuditLog
 import dev.phonebridge.core.auth.DeviceIdentity
+import dev.phonebridge.core.auth.FileTokenStore
 import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.mcp.McpServer
+import dev.phonebridge.core.mcp.ServerInfo
+import dev.phonebridge.core.mcp.capabilitiesTool
+import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.ToolRegistry
 import dev.phonebridge.core.transport.RelayStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.io.File
 
 sealed interface LocalServerStatus {
     data object Stopped : LocalServerStatus
@@ -24,29 +52,202 @@ sealed interface LocalServerStatus {
 /**
  * App-wide manual DI container. Created once in [dev.phonebridge.android.PhoneBridgeApp.onCreate].
  *
- * STUB — implemented by the services agent. Public API below is the contract used by the UI.
+ * Disk-backed components (settings, identity, tokens, audit log) are created lazily and warmed up
+ * on a background thread at startup, so the main thread normally finds them ready. Every property
+ * is thread-safe to read from any thread.
  */
 class BridgeGraph private constructor(val app: Application) {
-    val settings: SettingsRepository get() = TODO()
-    val identity: DeviceIdentity get() = TODO()
-    val tokenManager: TokenManager get() = TODO()
-    val audit: AuditLog get() = TODO()
-    val registry: ToolRegistry get() = TODO()
-    val confirmations: NotificationConfirmationProvider get() = TODO()
-    val mcpServer: McpServer get() = TODO()
+    /** Application-lifetime scope for background work that must outlive any one component. */
+    internal val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val settings: SettingsRepository by lazy { SettingsRepository(app) }
+
+    val identity: DeviceIdentity by lazy { IdentityStore.loadOrCreate(app) }
+
+    val tokenManager: TokenManager by lazy {
+        TokenManager(FileTokenStore(File(app.filesDir, TOKENS_FILE)), identity.deviceId)
+    }
+
+    val audit: AuditLog by lazy { FileAuditLog(File(app.filesDir, AUDIT_FILE)) }
+
+    val registry: ToolRegistry by lazy {
+        ToolRegistry().also { registry ->
+            // First, so agents see it at the top of tools/list.
+            registry.register(capabilitiesTool(registry, ::extraStatus))
+            registry.registerAll(AndroidToolCatalog.build(app))
+        }
+    }
+
+    val confirmations: NotificationConfirmationProvider by lazy { NotificationConfirmationProvider(app) }
+
+    val mcpServer: McpServer by lazy {
+        McpServer(
+            registry = registry,
+            tokens = tokenManager,
+            policy = PolicyEngine(),
+            confirmations = confirmations,
+            audit = audit,
+            serverInfo = ServerInfo("phonebridge-android", BuildConfig.VERSION_NAME, "PhoneBridge (Android)"),
+            instructions = AgentInstructions.TEXT,
+            isAccessEnabled = { settings.state.value.accessEnabled },
+            confirmationTimeoutMs = NotificationConfirmationProvider.DEFAULT_TIMEOUT_MS,
+        )
+    }
+
+    private val _relayStatus = MutableStateFlow<RelayStatus>(RelayStatus.Stopped)
+    private val _localServerStatus = MutableStateFlow<LocalServerStatus>(LocalServerStatus.Stopped)
+    private val _serviceRunning = MutableStateFlow(false)
 
     /** Live relay connection status (Stopped when relay is disabled or service not running). */
-    val relayStatus: StateFlow<RelayStatus> get() = TODO()
+    val relayStatus: StateFlow<RelayStatus> = _relayStatus.asStateFlow()
 
-    val localServerStatus: StateFlow<LocalServerStatus> get() = TODO()
+    val localServerStatus: StateFlow<LocalServerStatus> = _localServerStatus.asStateFlow()
+
+    /** True while BridgeService is created and in the foreground. */
+    val serviceRunning: StateFlow<Boolean> = _serviceRunning.asStateFlow()
+
+    /** The MCP URL to show users for the relay (see [RelayUrls.publicMcpUrl]); null if not configured. */
+    val publicRelayMcpUrl: String?
+        get() = RelayUrls.publicMcpUrl(relayStatus.value, settings.state.value.relayUrl)
+
+    /** MCP handler shared by both transports: per-request wake lock + internal-error safety net. */
+    private val requestHandler: WakeLockedHandler by lazy { WakeLockedHandler(app) { mcpServer.handle(it) } }
+
+    /** Runs the relay client and local server; driven by BridgeService. */
+    internal val transports: TransportController by lazy {
+        TransportController(
+            scope = appScope,
+            settings = { settings.state.value },
+            relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle),
+            localFactory = CoreTransports.localFactory(requestHandler::handle),
+            lanAddresses = NetworkAddresses::nonLoopbackIpv4,
+            onRelayStatus = ::updateRelayStatus,
+            onLocalStatus = ::updateLocalServerStatus,
+            log = { message, error -> Log.w(TAG, message, error) },
+        )
+    }
+
+    init {
+        try {
+            Channels.createAll(app)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not create notification channels", e)
+        }
+        appScope.launch { warmUp() }
+    }
 
     /** Starts/stops/restarts BridgeService so that it matches current settings. Call after settings changes. */
-    fun applySettings(): Unit = TODO()
+    fun applySettings() {
+        val current = settings.state.value
+        if (TransportConfig.shouldRun(current)) {
+            try {
+                ContextCompat.startForegroundService(app, BridgeService.intent(app, BridgeService.ACTION_APPLY))
+            } catch (e: IllegalStateException) {
+                reportStartFailure(e)
+            } catch (e: SecurityException) {
+                reportStartFailure(e)
+            }
+        } else {
+            if (_serviceRunning.value) sendToRunningService(BridgeService.ACTION_STOP, stopIfUndeliverable = true)
+            _relayStatus.value = TransportConfig.idleRelayStatus(current)
+            _localServerStatus.value = LocalServerStatus.Stopped
+        }
+    }
 
-    /** Global kill switch (persisted in settings, reflected in the service notification). */
-    fun setAccessEnabled(enabled: Boolean): Unit = TODO()
+    /**
+     * Global kill switch (persisted in settings, reflected in the service notification). Pausing
+     * also denies every confirmation prompt that is still open. Transports keep running so agents
+     * get a clear "paused" error instead of a connection failure.
+     */
+    fun setAccessEnabled(enabled: Boolean) {
+        settings.update { it.copy(accessEnabled = enabled) }
+        // Pausing also answers every open prompt with "deny": nothing runs while paused.
+        if (!enabled) confirmations.denyAll()
+        if (_serviceRunning.value) sendToRunningService(BridgeService.ACTION_REFRESH, stopIfUndeliverable = false)
+    }
+
+    internal fun updateRelayStatus(status: RelayStatus) {
+        _relayStatus.value = status
+    }
+
+    internal fun updateLocalServerStatus(status: LocalServerStatus) {
+        _localServerStatus.value = status
+    }
+
+    internal fun setServiceRunning(running: Boolean) {
+        _serviceRunning.value = running
+    }
+
+    /** Platform status merged into `bridge_capabilities`. Never throws. */
+    private fun extraStatus(): Map<String, Any?> {
+        val current = settings.state.value
+        return linkedMapOf(
+            "accessibility_enabled" to (BridgeAccessibilityService.instance != null),
+            "notification_access" to try {
+                BridgeNotificationListener.isEnabled(app)
+            } catch (e: Exception) {
+                null
+            },
+            "phone_locked" to DeviceState.isLocked(app),
+            "screen_on" to DeviceState.isScreenOn(app),
+            "access_paused" to !current.accessEnabled,
+            "relay" to StatusText.relayState(current.relayEnabled, relayStatus.value),
+            "local_server" to StatusText.localState(current.localServerEnabled, localServerStatus.value),
+            "android_version" to "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+            "app_version" to BuildConfig.VERSION_NAME,
+        )
+    }
+
+    // The service is in the foreground, so plain startService() is allowed even from the background.
+    private fun sendToRunningService(action: String, stopIfUndeliverable: Boolean) {
+        try {
+            app.startService(BridgeService.intent(app, action))
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Could not deliver $action to BridgeService", e)
+            if (stopIfUndeliverable) app.stopService(BridgeService.intent(app, action))
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Could not deliver $action to BridgeService", e)
+        }
+    }
+
+    private fun reportStartFailure(e: RuntimeException) {
+        val message = if (Build.VERSION.SDK_INT >= 31 && e is ForegroundServiceStartNotAllowedException) {
+            "Android blocked starting PhoneBridge in the background. Open the PhoneBridge app to start it."
+        } else {
+            "Could not start the PhoneBridge service: ${e.message ?: e.javaClass.simpleName}"
+        }
+        Log.w(TAG, message, e)
+        reportServiceError(message)
+    }
+
+    /** Surfaces a service-level failure in the status of every enabled transport. */
+    internal fun reportServiceError(message: String) {
+        val current = settings.state.value
+        if (TransportConfig.relay(current) != null) _relayStatus.value = RelayStatus.Error(message, retryInMs = null, fatal = true)
+        if (TransportConfig.local(current) != null) _localServerStatus.value = LocalServerStatus.Error(message)
+    }
+
+    private fun warmUp() {
+        // Each step is independent: a failure is logged and retried on first real use.
+        listOf<Pair<String, () -> Any>>(
+            "settings" to { settings },
+            "identity" to { identity },
+            "tokens" to { tokenManager },
+            "audit" to { audit },
+        ).forEach { (name, init) ->
+            try {
+                init()
+            } catch (e: Exception) {
+                Log.e(TAG, "Initializing $name failed", e)
+            }
+        }
+    }
 
     companion object {
+        private const val TAG = "PhoneBridge/Graph"
+        private const val TOKENS_FILE = "tokens.json"
+        private const val AUDIT_FILE = "audit.jsonl"
+
         @Volatile
         private var _instance: BridgeGraph? = null
 
