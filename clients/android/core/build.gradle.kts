@@ -30,3 +30,13 @@ tasks.test {
     useJUnit()
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
+
+// Headless demo device for cross-language E2E tests (src/test/kotlin/dev/phonebridge/core/demo/DemoDevice.kt).
+// Env: DEMO_POLICY, DEMO_CONFIRM, DEMO_CONFIRM_TIMEOUT_MS, DEMO_LOCAL_PORT, DEMO_RELAY_URL, DEMO_ACCESS_KEY,
+// DEMO_DEVICE_SECRET. Prints DEMO_TOKEN=... and DEMO_DEVICE_ID=... on stdout, then runs until killed.
+tasks.register<JavaExec>("runDemoDevice") {
+    group = "application"
+    description = "Runs the PhoneBridge demo device for end-to-end tests."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.phonebridge.core.demo.DemoDeviceKt")
+}
