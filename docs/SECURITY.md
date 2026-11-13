@@ -51,6 +51,27 @@ Prompts appear as a high-priority notification with **Allow** and **Deny** butto
 notification opens a screen with the full details. A tool that resolves its targets first
 (`confirm: internal`) shows the resolved recipient and number.
 
+## Advanced controls
+
+These are set per agent (token) in **Agents > (agent) > Advanced**, except where marked *global*.
+
+| Control | Effect | Enforced in |
+|---|---|---|
+| **App access** | `ALL` (default), `ALLOWLIST` (only the selected apps), or `BLOCKLIST` (every app except the selected ones). | Tools, through `CallContext.appAccess` (see below) |
+| **Never-allow apps** (*global*) | Apps no agent can touch, whatever its own app-access setting. First run pre-selects installed banking, payments, password-manager and authenticator apps (heuristics plus a known-package list). PhoneBridge itself is always blocked. | Same as app access |
+| **Per-tool rules** | Each tool can be set to `ALLOW` (never ask, though still rate-limited), `ASK` (always confirm on the phone) or `BLOCK` (hidden from `tools/list` and refused). These override the confirmation policy. | `PolicyEngine` and `McpServer` (core) |
+| **Active hours** | The agent may act only within a daily local-time window, for example 08:00–23:00 (an overnight window like 22:00–06:00 also works). Outside it, calls are refused with an explanation. | `PolicyEngine` (core) |
+| **Hide one-time codes** (*global*, default ON) | Verification and 2FA codes are masked as `[code hidden]` in SMS and notification text before agents see them. | Tools, through `CallContext.redactOneTimeCodes`, using the core `OneTimeCodes.redact()` |
+
+**What "app access" covers.** App access governs the *app-facing* tools:
+
+* Screen reading and control: `screen_*` and `ui_*`. Refused while a blocked app is in the foreground. Windows of blocked apps are left out of `screen_read`. `screen_screenshot` is refused if any visible window belongs to a blocked app, or the system recents screen is showing while the token has app restrictions.
+* Notifications: notifications from blocked apps are filtered out of `notifications_list`, and `notification_reply` / `notification_action` / `notification_dismiss` refuse them.
+* Opening apps: `app_open`, `url_open`, `intent_start`, and `whatsapp_*` / `email_send`. Refused when the target or the resolved handling app is blocked.
+* `apps_list` hides blocked apps.
+
+Data scopes such as `contacts.read`, `messages.send` (SMS through the system API) and `calendar.*` are governed by **scopes**, not by app access, because they go through Android system APIs rather than an app's UI.
+
 ## Rate limits (per token, sliding 60 s window)
 
 120 calls per minute in total, and 20 `SENSITIVE` calls per minute. Calls over the limit are

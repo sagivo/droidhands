@@ -171,7 +171,110 @@ Implemented on the device by `McpServer` (core). The relay is a transparent tunn
 * Local-mode only: requests whose `Origin` header is present and not allowlisted → `403`
   (DNS-rebinding protection, as required by the MCP spec).
 
-## 5. Versioning
+## 5. One-tap agent pairing (OAuth 2.1 through the relay)
+
+The goal is that the user pastes **one URL** into any MCP client, then taps **Allow** on the phone.
+There is no token copy/paste. The relay implements the MCP Authorization spec (2025-06-18) as an
+OAuth 2.1 authorization server whose "login" is a pairing prompt on the phone. The phone still
+mints the token, so the relay never holds anything long-term.
+
+### 5.1 Device connector URL
+
+Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves exactly like
+`POST /mcp` (section 4), with these differences:
+
+* The device is taken from the path. A bearer token whose embedded deviceId differs from the path's
+  gets `401`.
+* Every `401` on this path, whether the relay produced it or the device returned it (for example a
+  revoked token), carries
+  `WWW-Authenticate: Bearer realm="phonebridge", resource_metadata="{relay}/.well-known/oauth-protected-resource/d/<deviceId>/mcp"`.
+  The relay rewrites or adds this header, so MCP clients start (or restart) the OAuth flow.
+* `welcome` gains `"connectUrl": "{relay}/d/<deviceId>/mcp"`. The app shows it as
+  **"Your connection URL"**.
+
+### 5.2 Discovery and registration (relay)
+
+| Endpoint | Behaviour |
+|---|---|
+| `GET /.well-known/oauth-protected-resource/d/<id>/mcp` | RFC 9728: `{"resource":"{relay}/d/<id>/mcp","authorization_servers":["{relay}"],"bearer_methods_supported":["header"],"resource_name":"PhoneBridge"}` |
+| `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414: `issuer` `{relay}`, `authorization_endpoint` `{relay}/oauth/authorize`, `token_endpoint` `{relay}/oauth/token`, `registration_endpoint` `{relay}/oauth/register`, `response_types_supported` `["code"]`, `grant_types_supported` `["authorization_code"]`, `code_challenge_methods_supported` `["S256"]`, `token_endpoint_auth_methods_supported` `["none"]`, `scopes_supported` `["phone"]` |
+| `POST /oauth/register` | RFC 7591 dynamic registration for **public clients**. `redirect_uris` must be `https://…` or loopback `http://localhost|127.0.0.1|[::1]:<port>/…`. Private-use schemes (`com.example.app:/cb`) are allowed if they contain a dot. `client_id` is **stateless**: `base64url(json{n:client_name,r:redirect_uris,t:issuedAt}) + "." + base64url(HMAC-SHA256(relaySecret, payload))`. Answers `201` with `client_id`, `client_name`, `redirect_uris`, `token_endpoint_auth_method:"none"`, `grant_types`, `response_types`, `client_id_issued_at`. |
+
+`relaySecret` comes from `RELAY_SECRET`, or is generated once and persisted to `{DATA_DIR}/relay-secret`.
+Discovery, registration and token endpoints send `Access-Control-Allow-Origin: *` (no
+credentials) so browser-based clients work.
+
+### 5.3 Authorization (browser ⇄ relay ⇄ phone)
+
+`GET /oauth/authorize?response_type=code&client_id&redirect_uri&code_challenge&code_challenge_method=S256&state&resource[&scope]`
+
+1. The relay validates `client_id` (HMAC), checks that `redirect_uri` is one of the registered
+   URIs (exact match), and requires PKCE `S256`. On any of these errors it renders an HTML error
+   page and does **not** redirect.
+2. The relay picks the device from `resource`, which must be `{relay}/d/<id>/mcp` or `{relay}/d/<id>`.
+   If `resource` is missing and exactly one device is online, it uses that one; otherwise it shows an
+   error page.
+3. If the device is offline, the page says "Your phone is offline. Open PhoneBridge, make sure it
+   shows Connected, then reload this page."
+4. The relay creates a pending pairing: `id` = `p_` + 16 random bytes in base64url; `displayCode` = 4
+   chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`; `pageToken` = 16 random bytes; TTL 180 s. At most
+   3 pending pairings per device and 20 per device per hour. Beyond that, an error page.
+5. Relay → device:
+   ```json
+   { "type": "pair_request", "id": "p_…", "clientName": "Claude", "redirectHost": "claude.ai",
+     "displayCode": "K7Q2", "remoteAddress": "203.0.113.7", "userAgent": "…", "expiresAt": 1731500180000 }
+   ```
+   `clientName` is the registered `client_name`, truncated to 60 chars and stripped of control
+   characters. `redirectHost` is the host (and port, for loopback) of `redirect_uri`.
+6. The relay renders an HTML page (no external assets): "Approve on your phone. Open PhoneBridge on
+   **<deviceName>** and tap Allow. Check that the code shown there is **K7Q2**." The page polls
+   `GET /oauth/pair/<id>?t=<pageToken>` every 1.5 s. That endpoint returns
+   `{"status":"pending"|"approved"|"denied"|"expired","redirect":"…"}`, and `redirect` is present
+   once the pairing is decided. On a decision the page navigates to `redirect`. It also has a
+   noscript fallback link that reloads it.
+7. The phone shows a prompt: client name, redirect host, display code, an access-level choice
+   (Read-only / **Assistant** (default) / Full control) and the confirmation policy. Allow requires an
+   unlocked phone. The prompt expires at `expiresAt`. The device answers:
+   ```json
+   { "type": "pair_response", "id": "p_…", "approved": true, "accessToken": "pb1.…", "tokenId": "abcd…" }
+   { "type": "pair_response", "id": "p_…", "approved": false, "reason": "denied" | "timeout" | "busy" }
+   ```
+   The device sets the issued token's `name` to the client name (the user can edit it) and
+   `origin` to `"pairing"`.
+8. Approved: the relay creates a single-use authorization `code` (32 random bytes, TTL 120 s) bound to
+   `client_id`, `redirect_uri`, `code_challenge` and the device, and holds the access token **in
+   memory only**. `redirect` = `redirect_uri?code=…&state=…&iss={relay}`. Denied or expired:
+   `redirect_uri?error=access_denied&state=…`.
+9. When the browser abandons the flow or the code is never exchanged before it expires, the relay sends
+   `{ "type": "pair_abandoned", "id": "p_…", "tokenId": "…" }` (tokenId if one was issued). The
+   device then deletes that token. After a successful exchange the relay sends
+   `{ "type": "pair_complete", "id": "p_…", "tokenId": "…" }`. When a pending pairing expires
+   before the phone answers, the relay sends `{ "type": "pair_cancel", "id": "p_…" }` and the phone
+   removes its prompt.
+
+### 5.4 Token endpoint
+
+`POST /oauth/token` (`application/x-www-form-urlencoded`), with `grant_type=authorization_code`, `code`,
+`redirect_uri`, `client_id`, `code_verifier`, and optionally `resource`. The relay verifies the
+code, client, redirect URI, PKCE (`BASE64URL(SHA256(verifier)) == challenge`) and resource (if
+sent). It then deletes the code and answers
+`{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. There's no `expires_in`, because
+tokens live until revoked on the phone, and no refresh token. A revoked token triggers a `401` with
+`resource_metadata`, and the client simply pairs again. Errors follow RFC 6749 §5.2 (`invalid_grant`,
+`invalid_request`, `invalid_client`, `unsupported_grant_type`) with status 400.
+
+### 5.5 Phone setup link
+
+`GET /setup` serves a mobile-friendly page with: (1) "Install PhoneBridge", a link to
+`/download/phonebridge.apk` if the operator put an APK in the relay's `public/` dir; and (2)
+"Open in PhoneBridge", an `intent://configure?relay=<relay>&key=<accessKey>#Intent;scheme=phonebridge;package=dev.phonebridge.android;end`
+link. The access key is read from the page URL **fragment** (`/setup#key=…`), so it never reaches
+the server or its logs. On startup the relay prints the setup URL, with the fragment when
+`RELAY_ACCESS_KEY` is set, plus a terminal QR code. The app handles
+`phonebridge://configure?relay=…&key=…` by asking "Connect to relay <host>?" and then saving and
+connecting.
+
+## 6. Versioning
 
 * `hello.protocolVersion` is the device⇄relay tunnel version (currently `1`).
 * Token prefix `pb1` versions the token format.
