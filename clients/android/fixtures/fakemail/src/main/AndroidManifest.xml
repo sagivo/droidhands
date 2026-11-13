@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TEST FIXTURE email app for PhoneBridge E2E tests. Emulators / test devices only. See ../../README.md. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_action_email"
+        android:label="Fixture Mail"
+        android:supportsRtl="true"
+        android:theme="@style/FixtureTheme">
+
+        <activity
+            android:name=".InboxActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".EmailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ComposeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- mailto:a@x.com?cc=b@x.com&subject=..&body=.. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SENDTO" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="mailto" />
+            </intent-filter>
+            <!-- url_open("mailto:...") style links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mailto" />
+            </intent-filter>
+            <!-- EXTRA_EMAIL / EXTRA_CC / EXTRA_BCC / EXTRA_SUBJECT / EXTRA_TEXT -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="message/rfc822" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Test trigger: am broadcast -n dev.phonebridge.fixture.mail/.IncomingEmailReceiver
+             -a dev.phonebridge.fixture.mail.INCOMING with string extras from, subject, body and an
+             optional boolean extra inline (default true; false = Gmail-like Reply that opens the app). -->
+        <receiver
+            android:name=".IncomingEmailReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.phonebridge.fixture.mail.INCOMING" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Notification action targets (explicit PendingIntents only). -->
+        <receiver
+            android:name=".InlineReplyReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".ArchiveReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

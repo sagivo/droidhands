@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TEST FIXTURE impersonating com.whatsapp. Emulators / test devices only. See ../../README.md. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@android:drawable/sym_action_chat"
+        android:label="WhatsApp"
+        android:supportsRtl="true"
+        android:theme="@style/FixtureTheme">
+
+        <!-- Launcher "Chats" list, so app_open("WhatsApp") works. Requests POST_NOTIFICATIONS. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Chat screen. singleTask: a second link is delivered to onNewIntent and loads the new chat. -->
+        <activity
+            android:name=".ConversationActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize">
+            <!-- https://api.whatsapp.com/send?phone=<digits>&text=<msg> (also /send/?phone=...) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="api.whatsapp.com"
+                    android:pathPrefix="/send"
+                    android:scheme="https" />
+            </intent-filter>
+            <!-- https://wa.me/<digits>?text=<msg> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="wa.me"
+                    android:scheme="https" />
+            </intent-filter>
+            <!-- whatsapp://send?phone=<digits>&text=<msg> -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="send"
+                    android:scheme="whatsapp" />
+            </intent-filter>
+            <!-- ACTION_SEND text/plain with optional "jid" extra (<digits>@s.whatsapp.net) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Test trigger: am broadcast -n com.whatsapp/.IncomingMessageReceiver -a com.whatsapp.fixture.INCOMING
+             with string extras from, text and (optional) phone. Posts a MessagingStyle notification. -->
+        <receiver
+            android:name=".IncomingMessageReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.whatsapp.fixture.INCOMING" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Notification action targets (explicit PendingIntents only). -->
+        <receiver
+            android:name=".ReplyReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".MarkReadReceiver"
+            android:exported="false" />
+    </application>
+</manifest>
