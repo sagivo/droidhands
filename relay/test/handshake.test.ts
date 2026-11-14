@@ -153,6 +153,39 @@ test('heartbeat: a responsive device stays connected', async (t) => {
   assert.equal(relay.deviceCount(), 1);
 });
 
+test('MAX_DEVICES: a new phone beyond the cap gets relay_full / 4013; connected phones may reconnect', async (t) => {
+  const relay = await startRelay(t, { maxDevices: 2 });
+  const first = await connectReady(relay);
+  await connectReady(relay);
+  assert.equal(relay.deviceCount(), 2);
+
+  const third = await connectDevice(relay);
+  const error = await third.nextFrame('error');
+  assert.equal(error.code, 'relay_full');
+  assert.match(String(error.message), /full/);
+  assert.equal((await third.closed).code, 4013);
+  assert.equal(relay.deviceCount(), 2);
+
+  // A phone that is already connected replaces its own connection: that never counts as a new phone.
+  const again = await connectReady(relay, { identity: first.identity });
+  assert.equal((await first.closed).code, 4009);
+  assert.equal(relay.deviceCount(), 2);
+
+  // Once a phone leaves, the next one gets in.
+  again.ws.close();
+  await waitFor(() => relay.deviceCount() === 1, 'device removal');
+  await connectReady(relay, { identity: third.identity });
+  assert.equal(relay.deviceCount(), 2);
+});
+
+test('MAX_DEVICES is checked after authentication: strangers still get access_key / 4001', async (t) => {
+  const relay = await startRelay(t, { maxDevices: 1, accessKey: 'k' });
+  await connectReady(relay, { hello: { accessKey: 'k' } });
+  const stranger = await connectDevice(relay, { hello: { accessKey: 'wrong' } });
+  assert.equal((await stranger.nextFrame('error')).code, 'access_key');
+  assert.equal((await stranger.closed).code, 4001);
+});
+
 test('an IP blocked for repeated failed hellos cannot open new device sockets (429)', async (t) => {
   const relay = await startRelay(t, { rateLimitAuthFailuresPerMin: 1 });
   for (let i = 0; i < 2; i++) {

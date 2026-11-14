@@ -114,8 +114,9 @@ When the relay starts it prints the **setup link** and a QR code:
 
 `/setup` is a mobile-friendly page with:
 
-1. **Install PhoneBridge**, if you put the APK at `relay/public/phonebridge.apk` (served from
-   `/download/phonebridge.apk`; see [public/README.md](public/README.md)).
+1. **Install PhoneBridge**: a download link to `APK_URL` (for example the latest GitHub release's
+   `PhoneBridge.apk`) if you set it, otherwise to `relay/public/phonebridge.apk` if you put the APK
+   there (served from `/download/phonebridge.apk`; see [public/README.md](public/README.md)).
 2. **Open in PhoneBridge**: opens the app pre-configured for this relay. The app asks "Connect to
    relay …?" and connects.
 3. The relay URL (and access key) for manual entry, plus what to do next.
@@ -224,8 +225,10 @@ docker logs phonebridge-relay    # shows the setup link
 
 The image is multi-stage (`node:22-alpine`), runs as the non-root `node` user, contains only
 production dependencies, keeps the relay secret in the `/data` volume (`DATA_DIR`), and has a
-`HEALTHCHECK` on `/healthz`. To offer the APK from `/setup`, copy it to `relay/public/` before
-building, or mount a directory and set `PUBLIC_DIR`.
+`HEALTHCHECK` on `/healthz`. To offer the APK from `/setup`, set `APK_URL` (e.g.
+`https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk`), or copy the APK to
+`relay/public/` before building, or mount a directory and set `PUBLIC_DIR`. Every release also
+publishes a ready-made image, `ghcr.io/<owner>/phonebridge-relay:<version>` and `:latest`.
 
 **Caddy** (automatic HTTPS, WebSockets and `X-Forwarded-*` out of the box):
 
@@ -269,6 +272,63 @@ also route `/.well-known/oauth-authorization-server/relay` and
 `/.well-known/oauth-protected-resource/relay/…` (RFC 8414/9728 put the prefix after
 `.well-known`) to the relay; it accepts both forms.
 
+## Run the default relay for your build
+
+Release builds of the app can come with a **default relay**: on first run the app connects to it by
+itself, so someone who installs the APK never sees a relay step (they can still switch to their own
+relay at any time). If you publish builds (the project's releases, or your fork's), you run that
+relay. It is the same relay as above; a few settings matter more because strangers' phones use it.
+
+**1. Deploy the image.** Each release pushes `ghcr.io/<owner>/phonebridge-relay:<version>` and
+`:latest` (see [docs/RELEASING.md](../docs/RELEASING.md)). New GHCR packages are private: make it
+public once (*your profile › Packages › phonebridge-relay › Package settings › Change visibility*),
+or log the server in with `docker login ghcr.io`.
+
+* **Any VPS with Caddy** (automatic HTTPS): run the container as in
+  [Docker behind Caddy or nginx](#docker-behind-caddy-or-nginx), with the image from GHCR and these
+  extra variables, and the same two-line Caddyfile:
+
+  ```sh
+  docker run -d --name phonebridge-relay --restart unless-stopped \
+    -p 127.0.0.1:8787:8787 -v phonebridge-data:/data \
+    -e PUBLIC_URL=https://relay.example.com -e TRUST_PROXY=true \
+    -e MAX_DEVICES=1000 \
+    -e APK_URL=https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk \
+    ghcr.io/<owner>/phonebridge-relay:latest
+  ```
+
+* **Fly.io**: from `relay/`, `fly launch --copy-config --no-deploy --name <app>`, then
+  `fly secrets set RELAY_SECRET="$(openssl rand -base64 32)"`, set `MAX_DEVICES` and `APK_URL` in
+  `fly.toml`'s `[env]`, and `fly deploy --ha=false --image ghcr.io/<owner>/phonebridge-relay:<version>`.
+  Raise `[http_service.concurrency]` and the VM's memory together with `MAX_DEVICES`.
+
+**2. Settings for a shared relay.**
+
+* **No `RELAY_ACCESS_KEY`.** The app ships without one, so every phone must be able to register.
+  Phones stay protected: device ids are self-certifying, and every agent needs a token approved on
+  the phone. `MAX_DEVICES` caps how many phones may be connected at once; a new phone beyond it is
+  refused with close code `4013` and keeps retrying, while phones already connected may always
+  reconnect. Start with the default and watch memory.
+* **Keep the relay secret.** Set `RELAY_SECRET` or keep the `/data` volume, so paired apps survive
+  restarts and redeploys.
+* `TRUST_PROXY=true` behind the proxy (per-IP limits need the real client address), and keep
+  `ALLOW_IMPLICIT_DEVICE` and `ALLOW_TOKEN_IN_URL` off (the defaults).
+* `APK_URL` makes the relay's `/setup` page offer the release APK.
+
+The operator of a shared relay can read the traffic it forwards (see [Security model](#security-model)).
+Say who runs it and how, keep it updated, and tell people they can run their own.
+
+**3. Bake its URL into the app.** Set the repository variable `PHONEBRIDGE_RELAY_URL` (*Settings ›
+Secrets and variables › Actions › Variables*) to the relay's public URL, e.g.
+`https://relay.example.com`. The release workflow passes it to the build as
+`PHONEBRIDGE_DEFAULT_RELAY_URL`, which becomes `BuildConfig.DEFAULT_RELAY_URL`: every APK it builds
+goes online through that relay on first run. Without the variable, builds have no default relay and
+the app asks for one as before. Changing it later only affects new installs: the app never replaces
+a relay that is already configured.
+
+Local builds can do the same with `-Pphonebridge.defaultRelayUrl=https://relay.example.com` (or the
+environment variable).
+
 ## Configuration
 
 All settings are environment variables. Empty values mean "use the default".
@@ -283,6 +343,8 @@ All settings are environment variables. Empty values mean "use the default".
 | `RELAY_SECRET` | *(unset)* | Key (at least 32 characters, used verbatim) that signs OAuth client ids. When unset, one is generated into `DATA_DIR/relay-secret`. Changing it disconnects every paired app at its next authorization (they re-pair). |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Where `relay-secret` is created (directory `0700`, file `0600`) when `RELAY_SECRET` is unset. If it cannot be written, the relay uses a temporary secret and logs a warning: apps paired then must reconnect after a restart. |
 | `PUBLIC_DIR` | `relay/public` | Directory served for `/download/phonebridge.apk`. |
+| `APK_URL` | *(unset)* | Where the setup page's **Install PhoneBridge** button downloads the app, e.g. `https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk`. Wins over a file in `PUBLIC_DIR`; `/download/phonebridge.apk` then redirects (`302`) to it. Absolute `http(s)` URL without credentials. |
+| `MAX_DEVICES` | `1000` | Phones that may be connected at the same time. A new phone beyond it gets an `error` frame `relay_full` and close code `4013`, and retries with backoff. A phone that is already connected may always reconnect (its new connection replaces the old one). |
 | `SETUP_BANNER` | `true` | Print the setup link and QR code to stderr at startup. |
 | `ALLOW_TOKEN_IN_URL` | `false` | Also accept `POST /mcp/<token>` for MCP clients that cannot set headers. The relay moves the token into an `authorization` header before tunneling. URLs end up in client configs, proxy logs and browser history, so prefer OAuth or the header. |
 | `ALLOWED_ORIGINS` | *(empty)* | Comma-separated list of allowed `Origin` values (e.g. `https://inspector.example.com`), or `*`, for the MCP endpoints. Requests that carry any other `Origin` get `403`. Requests from an allowed origin get CORS headers for it (`Access-Control-Allow-Origin: <origin>`; `WWW-Authenticate`, `Mcp-Session-Id` and `Retry-After` exposed; no credentials) and `OPTIONS` preflights are answered with `204`, so browser-based MCP clients on that origin work. Native and server-side MCP clients send no `Origin` and are unaffected. OAuth and setup endpoints are not subject to this check. |
@@ -326,11 +388,11 @@ PHONEBRIDGE_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 | `GET /oauth/pair/<id>?t=<pageToken>` | Pairing status for the page: `{"status":"pending"\|"approved"\|"denied"\|"expired","redirect"?}`. With `&view=html`, the reloadable page (redirects once decided). |
 | `POST /oauth/token` | Authorization code + PKCE verifier → `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. Errors per RFC 6749 §5.2. |
 | `GET /setup` | Phone setup page. |
-| `GET /download/phonebridge.apk` | The APK from `PUBLIC_DIR`, if present (`application/vnd.android.package-archive`). |
+| `GET /download/phonebridge.apk` | `302` to `APK_URL` when set; otherwise the APK from `PUBLIC_DIR`, if present (`application/vnd.android.package-archive`). |
 | `POST /setup/qr` | Used by the setup page: `{"key"}` → QR code (SVG path) of the setup link, if the key is the access key. |
 | `GET /healthz` | `200 {"ok":true}` |
 | `GET /` | Short text banner with the setup link. |
-| `GET /v1/device` (WebSocket upgrade) | Device tunnel ([PROTOCOL.md](../docs/PROTOCOL.md) §3). `429`/`503` when too many sockets from that IP / in total are waiting for their `hello`. |
+| `GET /v1/device` (WebSocket upgrade) | Device tunnel ([PROTOCOL.md](../docs/PROTOCOL.md) §3). `429`/`503` when too many sockets from that IP / in total are waiting for their `hello`; close code `4013` (`relay_full`) after the `hello` when `MAX_DEVICES` other phones are connected. |
 | anything else | `404` |
 
 Errors produced by the relay itself on the MCP endpoints (bodies are JSON-RPC errors with `id: null`):
