@@ -55,9 +55,17 @@ regex: ^pb1\.[a-z2-7]{26}\.[a-z2-7]{12}\.[A-Za-z0-9_-]{43}$
 
 ## 3. Device ⇄ relay WebSocket (`/v1/device`)
 
-Endpoint: `wss://<relay-host>/v1/device` (or `ws://` for local development only).
+Endpoint: `wss://<relay-host>/v1/device?deviceId=<deviceId>` (or `ws://` for local development only).
 All frames are JSON text frames, each a single object with a `type` field. Unknown `type`s MUST be
 ignored by both sides (forward compatibility). Max frame size: 16 MiB.
+
+**`deviceId` parameter.** Devices SHOULD append their own `deviceId` as the `deviceId` query
+parameter. Relays that must pick where the device's state lives before they read any frame need it:
+the Cloudflare relay (relay/CLOUDFLARE.md) routes the connection to the device's Durable Object by it,
+and refuses a connection without it with `error` `protocol_version` and close `4002` (so an outdated
+app stops retrying and asks to be updated). Other relays accept connections without it. When the
+parameter is present, the relay refuses a `hello` for any other `deviceId` with `bad_request` and
+`4000`, after the usual secret check (a wrong secret is still `unauthorized`).
 
 ### 3.1 Handshake
 
@@ -101,7 +109,9 @@ with HTTP 502.
 **Pre-hello limits.** Until its `hello` is accepted, a socket may send at most 16 KiB, or it is dropped.
 The 16 MiB frame limit applies only after that. The upgrade is answered `429`/`503` when too many sockets
 per IP, or in total, are waiting for their hello. A refused or timed-out handshake gets its close code and
-is terminated 2 s later.
+is terminated 2 s later. (The Cloudflare relay counts waiting sockets per device and IP instead, cannot
+see bytes before the runtime delivers a whole frame, closes an oversized pre-hello frame with `1009`, and
+relies on the runtime to end the connection after the close handshake. Devices act on the close frame.)
 
 ### 3.2 Tunneled HTTP request (relay → device)
 
@@ -151,6 +161,18 @@ confirmation plus up to 60 s for the tool to run. If the device is offline, the 
 Either side may send `{"type":"ping","t":<millis>}`; the peer answers `{"type":"pong","t":<same>}`.
 The relay also uses WebSocket-level pings every 25 s and drops connections that miss 2 pongs.
 Devices SHOULD send WS-level pings every 20 s (OkHttp `pingInterval`).
+
+**Heartbeat.** Once welcomed (never before: the frame would be taken for the hello), the device
+sends a heartbeat every 30 s: exactly the 13-byte text frame `{"type":"hb"}`, with no whitespace and
+no other fields, so that a relay can match it without parsing. The relay answers
+`{"type":"hb_ack"}`. The Cloudflare relay answers through the runtime's WebSocket auto-response, which
+does not wake a hibernated Durable Object, so an idle phone costs almost nothing; its WebSocket-level
+pings are answered by Cloudflare's edge. A relay MAY treat a device as offline when it has received
+neither a frame nor a heartbeat from it for 75 s: it then answers `503 Device offline` at once instead
+of waiting for the request timeout, and closes the socket with `1001`. Relays that never saw a
+heartbeat from a connection (older apps) keep treating it as online. `hb_ack` is optional: older relays
+ignore `hb` like any unknown type, so devices MUST NOT depend on the answer and keep using
+WebSocket-level pings for liveness.
 
 ### 3.5 Concurrency
 
@@ -213,7 +235,8 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
   `mailto:`, `tel:`, …). Unsupported `token_endpoint_auth_method`/`grant_types` values are replaced in the 201
   response (RFC 7591 §3.2.1). `client_id` is **stateless**: `base64url(json{n:client_name,r:redirect_uris,t:issuedAt}) + "." + base64url(HMAC-SHA256(relaySecret, payload))`. Answers `201` with `client_id`, `client_name`, `redirect_uris`, `token_endpoint_auth_method:"none"`, `grant_types`, `response_types`, `client_id_issued_at`. |
 
-`relaySecret` comes from `RELAY_SECRET`, or is generated once and persisted to `{DATA_DIR}/relay-secret`.
+`relaySecret` comes from `RELAY_SECRET`, or is generated once and persisted to `{DATA_DIR}/relay-secret`
+(the Cloudflare relay has no disk and refuses to serve without the `RELAY_SECRET` secret).
 Discovery, registration and token endpoints send `Access-Control-Allow-Origin: *` (no
 credentials) so browser-based clients work.
 
@@ -283,6 +306,19 @@ queued in memory and delivered when it reconnects. The device rejects malformed 
 prompts. It interprets `expiresAt` in relay time, using the welcome's `serverTime` to correct for
 clock skew. It deletes a paired token that is still unused 15 min after approval if neither
 `pair_complete` nor `pair_abandoned` arrived.
+
+**Opaque values.** Pairing ids, page tokens (`t`) and authorization codes are opaque to the browser,
+the MCP client and the phone. A relay may embed routing data in them: the Cloudflare relay starts page
+tokens and codes with the deviceId (both stay `[A-Za-z0-9_-]`), so its Worker can hand them to the
+device's Durable Object. Nobody may parse them.
+
+**Cloudflare relay differences.** A Durable Object can be evicted while the phone is answering, so
+the Cloudflare relay keeps each device's pairing state, including a token waiting for its code
+exchange (at most 120 s), in that device's Durable Object storage, encrypted with a key derived from
+`RELAY_SECRET`, instead of in memory. Notices for an offline phone are kept there too. It sends
+`pair_complete` when it hands out the token (a Worker cannot observe whether the response reached the
+client). It applies the per-IP pairing limits per device, and does not support
+`ALLOW_IMPLICIT_DEVICE` (it has no list of online phones): `resource` is always required.
 
 ### 5.4 Token endpoint
 

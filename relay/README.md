@@ -189,6 +189,10 @@ The relay speaks plain HTTP; put it behind a TLS-terminating reverse proxy, or u
 provides TLS. In both cases set `TRUST_PROXY=true`, and `PUBLIC_URL` unless the platform is Render
 or Fly.io (detected automatically).
 
+### Cloudflare Workers (no server, free plan)
+
+The same relay also runs on Cloudflare Workers and Durable Objects: see [CLOUDFLARE.md](CLOUDFLARE.md).
+
 ### Fly.io
 
 [`fly.toml`](fly.toml) is ready to use:
