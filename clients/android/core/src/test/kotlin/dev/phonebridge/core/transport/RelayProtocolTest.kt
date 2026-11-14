@@ -33,6 +33,21 @@ class RelayProtocolTest {
     }
 
     @Test
+    fun deviceUrlCarriesTheDeviceId() {
+        val id = DeviceIdentity(ByteArray(32) { it.toByte() }).deviceId
+        assertEquals("wss://example.com/pb/v1/device?deviceId=$id", RelayProtocol.deviceUrl("https://example.com/pb/", id))
+        assertEquals("ws://10.0.2.2:8080/v1/device?deviceId=$id", RelayProtocol.deviceUrl("http://10.0.2.2:8080?x=1", id))
+        assertNull(RelayProtocol.deviceUrl("ftp://x", id))
+    }
+
+    @Test
+    fun heartbeatFrameIsFixed() {
+        // Relays may match these exact bytes (Cloudflare auto-response); never reformat them.
+        assertEquals("""{"type":"hb"}""", RelayProtocol.HEARTBEAT_FRAME)
+        assertEquals(30_000L, RelayProtocol.HEARTBEAT_INTERVAL_MS)
+    }
+
+    @Test
     fun mcpUrlFallback() {
         assertEquals("https://example.com/pb/mcp", RelayProtocol.mcpUrl("https://example.com/pb/"))
         assertEquals("http://10.0.2.2:8080/mcp", RelayProtocol.mcpUrl("http://10.0.2.2:8080"))

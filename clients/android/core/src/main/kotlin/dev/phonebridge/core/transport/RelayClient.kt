@@ -52,7 +52,9 @@ data class DeviceHello(
 
 /**
  * Outbound WebSocket to the relay (docs/PROTOCOL.md §3). [relayBaseUrl] is http(s)://host[:port][/prefix];
- * the client connects to ws(s)://…/v1/device. Sends hello, handles tunneled requests concurrently via
+ * the client connects to ws(s)://…/v1/device?deviceId=<id> (the parameter lets relays such as the
+ * Cloudflare one route before the hello). Sends hello, then the `{"type":"hb"}` heartbeat every
+ * [heartbeatIntervalMs] once welcomed (the `hb_ack` answer is optional), handles tunneled requests concurrently via
  * [handler] (on [scope]), answers pings, reconnects with exponential backoff + jitter (1 s → 60 s),
  * stops retrying on close codes 4001/4002.
  *
@@ -92,6 +94,8 @@ class RelayClient(
     /** Handles pair_request / pair_complete / pair_abandoned / pair_cancel frames; null answers every request "busy". */
     private val pairingHandler: PairingHandler? = null,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** How often a welcomed connection sends the `hb` heartbeat (docs/PROTOCOL.md §3.4). */
+    private val heartbeatIntervalMs: Long = RelayProtocol.HEARTBEAT_INTERVAL_MS,
 ) {
     private val lock = Any()
     private val state = MutableStateFlow<RelayStatus>(RelayStatus.Stopped)
@@ -144,7 +148,7 @@ class RelayClient(
 
     /** Must hold [lock]. */
     private fun connectLocked() {
-        val url = RelayProtocol.deviceUrl(relayBaseUrl) ?: return
+        val url = RelayProtocol.deviceUrl(relayBaseUrl, identity.deviceId) ?: return
         val gen = ++generation
         state.value = RelayStatus.Connecting
         val request = Request.Builder()
@@ -173,6 +177,7 @@ class RelayClient(
         @Volatile
         private var relayError: String? = null
         private var welcomeTimeout: Job? = null
+        private var heartbeat: Job? = null
 
         /** Relay clock minus local clock, from the welcome's `serverTime` (0 until then). */
         @Volatile
@@ -224,6 +229,8 @@ class RelayClient(
                 "pair_cancel" -> pairings.onCancel(frame)
                 "pair_complete" -> pairings.onFinished(frame, completed = true)
                 "pair_abandoned" -> pairings.onFinished(frame, completed = false)
+                // hb_ack is optional (older relays never send it); liveness comes from WebSocket pings.
+                "hb_ack" -> Unit
                 else -> Unit // pong and unknown types are ignored (forward compatibility).
             }
         }
@@ -234,6 +241,14 @@ class RelayClient(
                 welcomed.set(true)
                 welcomeTimeout?.cancel()
                 attempt = 0
+                val socket = webSocket
+                // Only after the welcome: before it, a relay would take the frame for the hello.
+                if (heartbeat == null) heartbeat = launchLocked {
+                    while (true) {
+                        delay(heartbeatIntervalMs)
+                        if (!isCurrent(gen) || socket?.send(RelayProtocol.HEARTBEAT_FRAME) != true) break
+                    }
+                }
                 frame.long("serverTime")?.let { clockOffsetMs = it - clock() }
                 val mcpUrl = frame.string("mcpUrl") ?: RelayProtocol.mcpUrl(relayBaseUrl).orEmpty()
                 val connectUrl = frame.string("connectUrl")?.takeIf { it.isNotBlank() }
@@ -273,6 +288,7 @@ class RelayClient(
             pairings.cancelAll()
             synchronized(lock) {
                 welcomeTimeout?.cancel()
+                heartbeat?.cancel()
                 if (!running || gen != generation) return
                 socket = null
                 if (code == RelayProtocol.CLOSE_UNAUTHORIZED || code == RelayProtocol.CLOSE_PROTOCOL_VERSION) {

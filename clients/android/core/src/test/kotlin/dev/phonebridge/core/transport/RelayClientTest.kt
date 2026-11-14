@@ -92,7 +92,8 @@ class RelayClientTest {
             handled += req
             TransportResponse(200, """{"jsonrpc":"2.0","id":1,"result":{}}""", mapOf("content-type" to "application/json"))
         },
-    ) = RelayClient(baseUrl, identity, hello, handler, scope).also { clients += it }
+        heartbeatIntervalMs: Long = RelayProtocol.HEARTBEAT_INTERVAL_MS,
+    ) = RelayClient(baseUrl, identity, hello, handler, scope, heartbeatIntervalMs = heartbeatIntervalMs).also { clients += it }
 
     private fun RelayClient.await(predicate: (RelayStatus) -> Boolean): RelayStatus = runBlocking {
         withTimeout(10_000) { status.first(predicate) }
@@ -110,7 +111,7 @@ class RelayClientTest {
         val peer = peer()
         val c = client()
         c.start()
-        assertEquals("/relay/v1/device", server.takeRequest(10, TimeUnit.SECONDS)!!.path)
+        assertEquals("/relay/v1/device?deviceId=${identity.deviceId}", server.takeRequest(10, TimeUnit.SECONDS)!!.path)
         val hello = peer.next()
         assertEquals("hello", hello["type"]!!.jsonPrimitive.content)
         assertEquals(1, hello["protocolVersion"]!!.jsonPrimitive.int)
@@ -219,6 +220,44 @@ class RelayClientTest {
         assertEquals("pong", pong["type"]!!.jsonPrimitive.content)
         assertEquals(1731500000123, pong["t"]!!.jsonPrimitive.long)
         assertIs<RelayStatus.Connected>(c.status.value)
+    }
+
+    @Test
+    fun sendsHeartbeatsOnlyAfterTheWelcome() {
+        val peer = peer()
+        val c = client(heartbeatIntervalMs = 100)
+        c.start()
+        assertEquals("hello", peer.next()["type"]!!.jsonPrimitive.content)
+        Thread.sleep(350)
+        assertNull(peer.messages.poll(), "no heartbeat before the welcome (a relay would take it for the hello)")
+
+        peer.welcome()
+        c.await { it is RelayStatus.Connected }
+        repeat(3) { assertEquals(RelayProtocol.HEARTBEAT_FRAME, assertNotNull(peer.messages.poll(5, TimeUnit.SECONDS))) }
+
+        // hb_ack is optional and ignored; heartbeats go on either way.
+        peer.ws().send("""{"type":"hb_ack"}""")
+        assertEquals(RelayProtocol.HEARTBEAT_FRAME, assertNotNull(peer.messages.poll(5, TimeUnit.SECONDS)))
+        assertIs<RelayStatus.Connected>(c.status.value)
+
+        c.stop()
+        Thread.sleep(300)
+        peer.messages.clear()
+        Thread.sleep(300)
+        assertNull(peer.messages.poll(), "no heartbeat after stop()")
+    }
+
+    @Test
+    fun relayWithoutHbAckStaysConnected() {
+        val peer = peer()
+        val c = client(heartbeatIntervalMs = 50)
+        c.start()
+        peer.next()
+        peer.welcome()
+        c.await { it is RelayStatus.Connected }
+        Thread.sleep(500) // ~10 heartbeats, none answered (an older relay ignores unknown frames)
+        assertIs<RelayStatus.Connected>(c.status.value)
+        assertEquals(1, server.requestCount, "no reconnect")
     }
 
     @Test

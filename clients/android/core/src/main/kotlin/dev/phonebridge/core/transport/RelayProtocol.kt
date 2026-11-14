@@ -13,6 +13,7 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import java.net.URI
+import java.net.URLEncoder
 import kotlin.random.Random
 
 /** Device ⇄ relay tunnel frames and helpers (docs/PROTOCOL.md §3). Pure; no I/O. */
@@ -34,6 +35,22 @@ internal object RelayProtocol {
      * input is kept. Trailing slashes, query and fragment are dropped. Null if not a usable URL.
      */
     fun deviceUrl(baseUrl: String): String? = base(baseUrl)?.let { (scheme, rest) -> "$scheme://$rest/v1/device" }
+
+    /**
+     * [deviceUrl] with `?deviceId=<id>` (docs/PROTOCOL.md §3.1): relays that must pick the device's
+     * state before the hello arrives (Cloudflare Workers) route on it; others ignore it.
+     */
+    fun deviceUrl(baseUrl: String, deviceId: String): String? =
+        deviceUrl(baseUrl)?.let { "$it?deviceId=${URLEncoder.encode(deviceId, "UTF-8")}" }
+
+    /**
+     * Application-level heartbeat (docs/PROTOCOL.md §3.4), sent every [HEARTBEAT_INTERVAL_MS] once
+     * welcomed. Exactly these bytes, so a relay can answer without parsing (and a hibernated
+     * Cloudflare Durable Object is not woken). The `{"type":"hb_ack"}` answer is optional: older
+     * relays ignore the frame, and liveness still comes from WebSocket pings.
+     */
+    const val HEARTBEAT_FRAME = """{"type":"hb"}"""
+    const val HEARTBEAT_INTERVAL_MS = 30_000L
 
     /** Fallback MCP URL (`http(s)://…/mcp`) when the relay's welcome lacks `mcpUrl`. */
     fun mcpUrl(baseUrl: String): String? = base(baseUrl)?.let { (scheme, rest) ->
