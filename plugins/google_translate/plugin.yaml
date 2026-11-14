@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_translate
+name: Google Translate
+description: Translation between more than 100 languages.
+category: productivity
+homepage: https://translate.google.com
+status: experimental
+android:
+  packages: [com.google.android.apps.translate]
+
+actions:
+  # Replaces the discovered process_text action (same intent) with a better description.
+  - id: process_text
+    title: Translate text
+    description: >-
+      Opens Google Translate's translation of a text, the same as choosing "Translate" after selecting text.
+      Translate detects the source language and translates into the language last chosen in Translate; to get
+      another language, someone has to change it on screen. The translation is not returned to you: read it with
+      screen_read.
+    keywords: [translate, translation, language, meaning, english, spanish, french, german, chinese]
+    risk: action
+    params:
+      text:
+        description: The text to translate.
+        required: true
+        max_length: 5000
+    confirm: Translate "{{text}}" with Google Translate
+    android:
+      intent:
+        action: android.intent.action.PROCESS_TEXT
+        type: text/plain
+        extras:
+          android.intent.extra.PROCESS_TEXT: "{{text}}"
+          android.intent.extra.PROCESS_TEXT_READONLY: true
+    examples:
+      - params: {text: "Où est la gare ?"}
+        expect:
+          intent:
+            action: android.intent.action.PROCESS_TEXT
+            package: com.google.android.apps.translate
+            type: text/plain
+            extras: {android.intent.extra.PROCESS_TEXT: "Où est la gare ?", android.intent.extra.PROCESS_TEXT_READONLY: true}
+      - params: {}
+        expect: {error: text}

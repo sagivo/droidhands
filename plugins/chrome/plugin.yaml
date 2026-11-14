@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: chrome
+name: Google Chrome
+description: Google's web browser.
+category: browser
+homepage: https://www.google.com/chrome/
+status: experimental
+android:
+  # Stable Chrome only: open_url pins this exact package (Beta, Dev and Canary have their own).
+  packages: [com.android.chrome]
+
+actions:
+  - id: open_url
+    title: Open a web page
+    description: >-
+      Opens a web page in Chrome (not in another browser or app), given its full http:// or https:// address.
+      It only loads the page; nothing on it is clicked or submitted.
+    keywords: [web, website, page, link, url, browse, internet, open site]
+    params:
+      url:
+        description: The full address, starting with https:// or http://, e.g. https://en.wikipedia.org/wiki/Android
+        required: true
+        max_length: 2000
+        pattern: '^https?://\S+$'
+    android:
+      tool:
+        name: url_open
+        args: {url: "{{url}}", package: com.android.chrome}
+    examples:
+      - params: {url: "https://en.wikipedia.org/wiki/Android"}
+        expect:
+          tool: {name: url_open, args: {url: "https://en.wikipedia.org/wiki/Android", package: com.android.chrome}}
+      - params: {url: en.wikipedia.org}
+        expect: {error: url}
+      - params: {url: "javascript:alert(1)"}
+        expect: {error: url}
+
+  - id: search_google
+    title: Search Google
+    description: >-
+      Opens Google search results for a query in Chrome. It always searches Google, whatever Chrome's default
+      search engine is. Nothing else is opened until someone taps a result.
+    keywords: [search, web search, google, look up, find, internet]
+    risk: action
+    params:
+      query:
+        description: What to search for.
+        required: true
+        max_length: 500
+    confirm: Search Google for "{{query}}" in Chrome
+    android:
+      url: "https://www.google.com/search?q={{query}}"
+    examples:
+      - params: {query: weather in Paris}
+        expect: {url: "https://www.google.com/search?q=weather%20in%20Paris"}
+      - params: {}
+        expect: {error: query}
