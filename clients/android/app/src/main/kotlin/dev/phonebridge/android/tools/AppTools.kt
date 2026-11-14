@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import dev.phonebridge.android.tools.support.Launcher
 import dev.phonebridge.android.tools.system.AppEntry
 import dev.phonebridge.android.tools.system.AppPick
@@ -18,7 +19,11 @@ import dev.phonebridge.android.tools.system.packageInfoOrNull
 import dev.phonebridge.android.tools.system.putIfNotNull
 import dev.phonebridge.android.tools.system.resolveActivityCompat
 import dev.phonebridge.android.tools.system.truncate
+import dev.phonebridge.core.plugins.AppActionCatalog
+import dev.phonebridge.core.plugins.AppSummary
+import dev.phonebridge.core.plugins.InstalledApp
 import dev.phonebridge.core.tools.AppAccess
+import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -29,12 +34,15 @@ import dev.phonebridge.core.tools.objectSchema
 import dev.phonebridge.core.tools.optBool
 import dev.phonebridge.core.tools.optString
 import dev.phonebridge.core.tools.tool
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 private const val MAX_LISTED_CANDIDATES = 10
 
@@ -43,15 +51,20 @@ private const val APP_ACCESS_NOTE =
 
 private const val HIDDEN_APPS_FOOTER = "Some apps are hidden by this agent's app access settings."
 
-/** Tools: apps_list, app_open, url_open (docs/TOOLS.md). All honour the agent's app access (docs/SECURITY.md). */
-fun appTools(context: Context): List<Tool> = listOf(appsList(context), appOpen(context), urlOpen(context))
+/**
+ * Tools: apps_list, app_open, url_open (docs/TOOLS.md). All honour the agent's app access (docs/SECURITY.md).
+ * [actions] gives apps_list each app's integration and the ids of the app actions the agent may run (docs/PLUGINS.md).
+ */
+fun appTools(context: Context, actions: AppActionCatalog): List<Tool> = listOf(appsList(context, actions), appOpen(context), urlOpen(context))
 
-private fun appsList(context: Context) = tool(
+private fun appsList(context: Context, actions: AppActionCatalog) = tool(
     name = "apps_list",
     title = "List installed apps",
-    description = "Lists launchable apps as [{package,label,version,system}], sorted by label. 'query' filters by label or " +
-        "package (case-insensitive substring). include_system=false hides preinstalled system apps that were never updated. " +
-        APP_ACCESS_NOTE,
+    description = "Lists launchable apps as [{package,label,version,system,integration,actions}], sorted by label. 'actions' " +
+        "are the app's ready-made actions you may run with app_action_run (app_actions_list shows their parameters); " +
+        "'integration' is plugin (a reviewed plugin), local (an unreviewed plugin imported on the phone) or basic (what the " +
+        "app declares). 'query' filters by label or package (case-insensitive substring). include_system=false hides " +
+        "preinstalled system apps that were never updated. $APP_ACCESS_NOTE",
     scope = Scopes.APPS,
     risk = Risk.READ,
     schema = objectSchema {
@@ -67,6 +80,7 @@ private fun appsList(context: Context) = tool(
             (query == null || app.label.lowercase().contains(query) || app.packageName.lowercase().contains(query))
     }
     val apps = AppVisibility.visible(matching) { LaunchGate.isAllowed(context, ctx.appAccess, it) }
+    val summaries = actionSummaries(actions, apps, ctx)
     val result = ToolResult.json(
         buildJsonArray {
             for (app in apps) {
@@ -76,6 +90,10 @@ private fun appsList(context: Context) = tool(
                         put("label", app.label)
                         putIfNotNull("version", app.versionName)
                         put("system", app.system)
+                        summaries[app.packageName]?.let { summary ->
+                            put("integration", summary.integration.id)
+                            putJsonArray("actions") { summary.actionIds.forEach { add(JsonPrimitive(it)) } }
+                        }
                     },
                 )
             }
@@ -83,6 +101,19 @@ private fun appsList(context: Context) = tool(
     )
     // Say that the list is incomplete (never which apps), so the agent doesn't conclude an app isn't installed.
     if (apps.size < matching.size) result.copy(content = result.content + ToolContent.Text(HIDDEN_APPS_FOOTER)) else result
+}
+
+/**
+ * Each of [apps]' integration and runnable action ids ([AppActionCatalog.summarize]). Empty if the scan fails:
+ * apps_list still lists the apps.
+ */
+private suspend fun actionSummaries(actions: AppActionCatalog, apps: List<AppEntry>, ctx: CallContext): Map<String, AppSummary> = try {
+    actions.summarize(apps.map { InstalledApp(it.packageName, it.label, it.versionName, it.system) }, ctx)
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Exception) {
+    Log.w("PhoneBridge/Apps", "Could not list app actions", e)
+    emptyMap()
 }
 
 private fun appOpen(context: Context) = tool(
