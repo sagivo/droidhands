@@ -55,6 +55,7 @@ import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.android.ui.tokens.TokenState
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.tools.AppAccess
 import java.time.Instant
 import java.time.ZoneId
 
@@ -91,6 +92,9 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     val tools by vm.tools.collectAsStateWithLifecycle()
     val apps by vm.apps.collectAsStateWithLifecycle()
     val neverAllow by vm.neverAllowApps.collectAsStateWithLifecycle()
+    val appActions by vm.appActions.collectAsStateWithLifecycle()
+    val appActionsLoading by vm.appActionsLoading.collectAsStateWithLifecycle()
+    val actionNames by vm.actionNames.collectAsStateWithLifecycle()
     val now by rememberNow()
     val formatTime = rememberTimestampFormatter()
     val formatDay = rememberShortDayFormatter()
@@ -99,6 +103,9 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     var renaming by rememberSaveable { mutableStateOf(false) }
     var confirm by rememberSaveable { mutableStateOf<String?>(null) }
     var showTools by rememberSaveable { mutableStateOf(false) }
+    var showActions by rememberSaveable { mutableStateOf(false) }
+    var actionQuery by rememberSaveable { mutableStateOf("") }
+    var expandedApps by rememberSaveable { mutableStateOf(ArrayList<String>()) }
 
     val usage = usageMap[record.id]
     val state = TokenPresentation.state(record, now)
@@ -108,9 +115,21 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     val recent = remember(entries, record.id) { entries.asSequence().filter { it.tokenId == record.id }.take(RECENT_ROWS).toList() }
     val groups = remember(tools, draft.scopes, draft.maxRisk) { ToolRules.groups(tools, draft.scopes, draft.maxRisk) }
     val visibleToolNames = remember(groups) { groups.flatMap { g -> g.tools.map { it.name } }.toSet() }
+    val access = remember(draft.appPolicy, neverAllow) { AppAccess.of(draft.appPolicy, neverAllow) }
+    val actionsAvailable = ActionRules.canRunActions(draft.scopes, draft.maxRisk, draft.toolRules)
+    val actionGroups = remember(appActions, draft.scopes, draft.maxRisk, draft.toolRules, access) {
+        ActionRules.groups(appActions.orEmpty(), draft.scopes, draft.maxRisk, draft.toolRules, access)
+    }
+    val shownActionGroups = remember(actionGroups, appActions, draft.scopes, draft.maxRisk, draft.toolRules, access, actionQuery) {
+        if (actionQuery.isBlank()) actionGroups else ActionRules.groups(appActions.orEmpty(), draft.scopes, draft.maxRisk, draft.toolRules, access, actionQuery)
+    }
+    val actionToolNames = remember(actionGroups) { ActionRules.names(actionGroups) }
     val colors = statusColors()
 
-    LaunchedEffect(Unit) { if (vm.apps.value == null) vm.loadApps() }
+    LaunchedEffect(Unit) {
+        if (vm.apps.value == null) vm.loadApps()
+        vm.loadAppActions()
+    }
     val leave: () -> Unit = { if (dirty) confirm = DISCARD else actions.onBack() }
     BackHandler(enabled = dirty) { confirm = DISCARD }
 
@@ -138,7 +157,7 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
         LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "header") { AgentHeader(record, usage?.lastCallAt, state, now) }
             item(key = "usage-header") { SectionHeader("Usage") }
-            item(key = "usage") { AgentUsageCard(usage, today, formatDay) }
+            item(key = "usage") { AgentUsageCard(usage, today, formatDay, actionNames) }
             item(key = "recent-header") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SectionHeader("Recent activity", Modifier.weight(1f))
@@ -153,7 +172,10 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
                         Column {
                             recent.forEachIndexed { index, entry ->
                                 if (index > 0) HorizontalDivider()
-                                AuditRow(entry, formatTime(entry.timestamp, now), colors, onClick = actions.onSeeActivity, showAgent = false)
+                                AuditRow(
+                                    entry, formatTime(entry.timestamp, now), colors, onClick = actions.onSeeActivity, showAgent = false,
+                                    names = actionNames,
+                                )
                             }
                         }
                     }
@@ -174,6 +196,27 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
                     )
                 }
                 if (showTools) toolRuleItems(groups, draft, vm)
+                item(key = "action-rules") {
+                    ActionRulesHeader(
+                        summary = ToolRules.summary(draft.toolRules, actionToolNames),
+                        available = actionsAvailable,
+                        loading = appActions == null || appActionsLoading,
+                        appCount = actionGroups.size,
+                        expanded = showActions,
+                        onToggle = { showActions = !showActions },
+                    )
+                }
+                if (showActions && actionsAvailable) {
+                    actionRuleItems(
+                        groups = shownActionGroups,
+                        query = actionQuery,
+                        onQueryChange = { actionQuery = it },
+                        expanded = expandedApps.toSet(),
+                        onToggleApp = { pkg -> expandedApps = ArrayList(if (pkg in expandedApps) expandedApps - pkg else expandedApps + pkg) },
+                        draft = draft,
+                        vm = vm,
+                    )
+                }
                 item(key = "hours") {
                     ActiveHoursCard(draft.activeHours, is24h, draft.activeHoursError, onChange = { hours -> vm.edit { it.copy(activeHours = hours) } })
                 }
@@ -228,6 +271,45 @@ private fun LazyListScope.toolRuleItems(groups: List<ToolGroup>, draft: AgentDra
                     policy = draft.policy,
                     onChoose = { choice -> vm.edit { it.withRule(tool.name, choice) } },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * The expanded app-action rules: a search field, then one collapsible row per app. While searching, every
+ * matching app is open, so the matches show at once.
+ */
+private fun LazyListScope.actionRuleItems(
+    groups: List<ActionRuleGroup>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    expanded: Set<String>,
+    onToggleApp: (String) -> Unit,
+    draft: AgentDraft,
+    vm: AgentsViewModel,
+) {
+    item(key = "action-rules-search") { ActionRulesSearch(query, onQueryChange) }
+    if (groups.isEmpty()) {
+        item(key = "action-rules-none") {
+            Text("No app or action matches.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    groups.forEach { group ->
+        val open = query.isNotBlank() || group.packageName in expanded
+        item(key = "action-app-${group.packageName}") {
+            ActionGroupHeader(group, expanded = open, onToggle = { onToggleApp(group.packageName) })
+        }
+        if (open) {
+            group.actions.forEach { action ->
+                item(key = "action-rule-${action.toolName}") {
+                    ActionRuleRow(
+                        action = action,
+                        choice = RuleChoice.of(draft.toolRules[action.toolName]),
+                        policy = draft.policy,
+                        onChoose = { choice -> vm.edit { it.withRule(action.toolName, choice) } },
+                    )
+                }
             }
         }
     }

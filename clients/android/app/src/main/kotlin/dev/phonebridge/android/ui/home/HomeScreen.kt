@@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.ui.MainViewModel
 import dev.phonebridge.android.ui.activity.ActivityQuery
+import dev.phonebridge.android.ui.activity.AuditPresentation
 import dev.phonebridge.android.ui.activity.AuditRow
 import dev.phonebridge.android.ui.agents.AgentPresentation
 import dev.phonebridge.android.ui.components.MenuAction
@@ -62,6 +64,7 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
     val pending by vm.pendingApprovals.collectAsStateWithLifecycle()
     val allPairings by vm.pendingPairings.collectAsStateWithLifecycle()
     val entries by vm.auditEntries.collectAsStateWithLifecycle()
+    val names by vm.actionNames.collectAsStateWithLifecycle()
     val usage by vm.usage.collectAsStateWithLifecycle()
     val update by vm.availableUpdate.collectAsStateWithLifecycle()
     val now by rememberNow(intervalMs = if (pending.isNotEmpty() || allPairings.isNotEmpty()) 1_000 else 30_000)
@@ -78,6 +81,9 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
     val activeAgents = remember(tokens, now) { AgentPresentation.activeCount(tokens, now) }
     val today = remember(entries, usage, now / MINUTE_MS) { TodaySummary.compute(entries, usage, now, ZoneId.systemDefault()) }
     val recent = remember(entries) { entries.take(RECENT_ROWS) }
+    // Readable app action names ("Spotify – Play music") need the app list; load it only when one is shown.
+    val showsAppAction = remember(recent) { recent.any { AuditPresentation.displayTitle(it).isAppAction } }
+    LaunchedEffect(showsAppAction) { if (showsAppAction) vm.loadAppActions() }
     val deviceIdShort = remember(vm.deviceId) { StatusPresentation.shortDeviceId(vm.deviceId) }
     val colors = statusColors()
 
@@ -162,6 +168,7 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
                                 vm.activityQuery = ActivityQuery()
                                 actions.onOpenActivity()
                             },
+                            names = names,
                         )
                     }
                 }

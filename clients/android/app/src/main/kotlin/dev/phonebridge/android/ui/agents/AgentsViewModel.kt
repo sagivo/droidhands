@@ -10,7 +10,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.phonebridge.android.graph.BridgeGraph
 import dev.phonebridge.android.ui.GraphAdapters
+import dev.phonebridge.android.ui.apps.ActionNames
 import dev.phonebridge.android.ui.apps.AppInfo
+import dev.phonebridge.android.ui.apps.AppListing
 import dev.phonebridge.android.ui.apps.LaunchableApps
 import dev.phonebridge.core.audit.AuditEntry
 import dev.phonebridge.core.audit.TokenUsage
@@ -55,6 +57,17 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Launchable apps for the app picker; null until [loadApps] finished. */
     val apps: StateFlow<List<AppInfo>?> = _apps.asStateFlow()
+
+    /** Installed apps and their actions (per-action rules); null until loaded, see [loadAppActions]. */
+    val appActions: StateFlow<List<AppListing>?> = graph.appDirectory.apps
+
+    /** True while the app actions are being (re)loaded. */
+    val appActionsLoading: StateFlow<Boolean> = graph.appDirectory.loading
+
+    /** Readable names of app actions ("Spotify – Play music") for usage and activity rows. */
+    val actionNames: StateFlow<ActionNames.Index> = graph.appDirectory.apps
+        .map { ActionNames.Index(it.orEmpty()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ActionNames.Index(graph.appDirectory.apps.value.orEmpty()))
 
     /** Id of the agent shown on the detail page. */
     var editingId by mutableStateOf<String?>(null)
@@ -166,6 +179,9 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
     fun delete(record: TokenRecord) = io("Couldn't delete \"${record.name}\"", "\"${record.name}\" deleted") {
         GraphAdapters.deleteAgent(graph, record.id)
     }
+
+    /** Loads the installed apps' actions in the background (a no-op when they were loaded moments ago). */
+    fun loadAppActions() = graph.appDirectory.refresh()
 
     /** Loads (or refreshes) the launchable apps for the picker. */
     fun loadApps() {
