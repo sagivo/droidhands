@@ -35,4 +35,16 @@ class OwnTextHidingTest {
         assertFalse(SelfProtection.isOwnText(node(null), own))
         assertFalse(SelfProtection.isOwnText(node("E2E auto wants to: Send SMS"), emptySet()))
     }
+
+    @Test
+    fun `a shade icon whose description names an own notification is own text`() {
+        val own = setOf("Claude Code (E2E) needs your approval")
+        val icon = UiNode(
+            description = "PhoneBridge notification: Claude Code (E2E) needs your approval",
+            className = "android.widget.ImageView", packageName = "com.android.systemui", bounds = Bounds(0, 0, 10, 10),
+        )
+        assertTrue(SelfProtection.isOwnText(icon, own))
+        val unrelated = UiNode(description = "Messages notification: Dana", className = "android.widget.ImageView", packageName = "com.android.systemui")
+        assertFalse(SelfProtection.isOwnText(unrelated, own))
+    }
 }

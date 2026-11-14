@@ -130,11 +130,14 @@ object SelfProtection {
     /**
      * Heads-up notifications are rendered by System UI and report its package, so PhoneBridge's own prompts are
      * also recognised by text: a node whose text exactly equals the title or body of one of PhoneBridge's currently
-     * posted notifications (e.g. "E2E auto wants to: Send SMS"). Its notification row is then removed with it.
+     * posted notifications (e.g. "E2E auto wants to: Send SMS"), or whose content description contains one: the
+     * shade's notification icons are described as "PhoneBridge notification: <title>", and a pairing title carries
+     * its code. Its notification row is then removed with it.
      */
     internal fun isOwnText(node: UiNode, ownTexts: Set<String>): Boolean {
         if (ownTexts.isEmpty()) return false
-        val text = node.text?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-        return text in ownTexts
+        node.text?.trim()?.takeIf { it.isNotEmpty() }?.let { if (it in ownTexts) return true }
+        val desc = node.description?.takeIf { it.isNotBlank() } ?: return false
+        return ownTexts.any { desc.contains(it) }
     }
 }
