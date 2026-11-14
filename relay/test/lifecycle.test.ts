@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { request } from 'node:http';
 import { test } from 'node:test';
 import { createRelay } from '../src/relay.js';
-import { connectDevice, connectReady, httpRequest, postMcp, startRelay, tokenFor, waitFor } from './helpers.js';
+import { connectDevice, connectReady, httpRequest, postMcp, startRelay, testRelaySecret, tokenFor, waitFor } from './helpers.js';
 
 test('a newer connection replaces the old one: old closed 4009, its pending request -> 502', async (t) => {
   const relay = await startRelay(t);
@@ -74,7 +74,7 @@ test('an agent that disconnects does not break the device connection', async (t)
 });
 
 test('graceful shutdown: devices closed with 1001, pending requests -> 503', async () => {
-  const relay = await createRelay({ port: 0, host: '127.0.0.1', logLevel: 'silent' });
+  const relay = await createRelay({ port: 0, host: '127.0.0.1', logLevel: 'silent', relaySecret: testRelaySecret() });
   const device = await connectReady(relay);
   const idle = await connectDevice(relay, { rawHello: null });
   const pending = postMcp(relay, { token: tokenFor(device.identity.deviceId) });

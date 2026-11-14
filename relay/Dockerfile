@@ -13,14 +13,21 @@ RUN npm run build
 FROM node:22-alpine
 ENV NODE_ENV=production \
     PORT=8787 \
-    HOST=0.0.0.0
+    HOST=0.0.0.0 \
+    DATA_DIR=/data
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
+# Optional: put phonebridge.apk into relay/public/ before building and /setup offers it for download.
+COPY public ./public
 
-# The relay is stateless: nothing is written to disk, so it runs as the unprivileged `node` user
-# against a root-owned, read-only application directory.
+# The relay's only state is DATA_DIR/relay-secret (the key that signs OAuth client ids; or set
+# RELAY_SECRET instead). /data belongs to the unprivileged `node` user, and a named volume created
+# from this image inherits that ownership. The application directory stays root-owned, read-only.
+RUN mkdir -p /data && chown node:node /data && chmod 700 /data
+VOLUME ["/data"]
+
 USER node
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

@@ -38,6 +38,8 @@ export interface WelcomeFrame {
   type: 'welcome';
   deviceId: string;
   mcpUrl: string;
+  /** The device connector URL `{relay}/d/<deviceId>/mcp` (§5.1), shown as "Your connection URL". */
+  connectUrl: string;
   serverTime: number;
 }
 

@@ -3,22 +3,25 @@ import { test } from 'node:test';
 import WebSocket from 'ws';
 import { connectDevice, connectReady, newIdentity, startRelay, waitFor } from './helpers.js';
 
-test('welcome carries the deviceId, mcpUrl from PUBLIC_URL and the server time', async (t) => {
+test('welcome carries the deviceId, mcpUrl and connectUrl from PUBLIC_URL and the server time', async (t) => {
   const relay = await startRelay(t, { publicUrl: 'https://relay.example.com/' });
   const before = Date.now();
   const device = await connectDevice(relay);
   const welcome = await device.nextFrame('welcome');
-  assert.deepEqual(Object.keys(welcome).sort(), ['deviceId', 'mcpUrl', 'serverTime', 'type']);
+  assert.deepEqual(Object.keys(welcome).sort(), ['connectUrl', 'deviceId', 'mcpUrl', 'serverTime', 'type']);
   assert.equal(welcome.deviceId, device.identity.deviceId);
   assert.equal(welcome.mcpUrl, 'https://relay.example.com/mcp');
+  assert.equal(welcome.connectUrl, `https://relay.example.com/d/${device.identity.deviceId}/mcp`);
   assert.ok(typeof welcome.serverTime === 'number' && welcome.serverTime >= before && welcome.serverTime <= Date.now());
   assert.equal(relay.deviceCount(), 1);
 });
 
-test('mcpUrl is derived from the Host header when PUBLIC_URL is unset', async (t) => {
+test('mcpUrl and connectUrl are derived from the Host header when PUBLIC_URL is unset', async (t) => {
   const relay = await startRelay(t);
   const device = await connectDevice(relay);
-  assert.equal((await device.nextFrame('welcome')).mcpUrl, `${relay.url}/mcp`);
+  const welcome = await device.nextFrame('welcome');
+  assert.equal(welcome.mcpUrl, `${relay.url}/mcp`);
+  assert.equal(welcome.connectUrl, `${relay.url}/d/${device.identity.deviceId}/mcp`);
 });
 
 test('X-Forwarded-Proto/Host are used only with TRUST_PROXY', async (t) => {

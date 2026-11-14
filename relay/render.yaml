@@ -1,0 +1,28 @@
+# Render Blueprint for the PhoneBridge relay.
+# Dashboard: New > Blueprint > pick this repository > Blueprint path: relay/render.yaml.
+# After the first deploy, open the service's Logs: they print the phone setup link.
+# PUBLIC_URL defaults to Render's RENDER_EXTERNAL_URL; set it for a custom domain.
+services:
+  - type: web
+    name: phonebridge-relay
+    runtime: docker
+    dockerfilePath: ./relay/Dockerfile
+    dockerContext: ./relay
+    # Free instances sleep when idle, which drops the phone's connection.
+    plan: starter
+    # Exactly one instance: connected phones and pending pairings live in memory.
+    numInstances: 1
+    healthCheckPath: /healthz
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - relay/**
+    envVars:
+      - key: TRUST_PROXY
+        value: "true"
+      # Phones must present this key to connect (it is in the setup link).
+      - key: RELAY_ACCESS_KEY
+        generateValue: true
+      # Signs OAuth client ids, so connected AI apps survive redeploys.
+      - key: RELAY_SECRET
+        generateValue: true

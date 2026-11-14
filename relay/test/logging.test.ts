@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLogger } from '../src/logger.js';
 import { createRelay } from '../src/relay.js';
-import { connectDevice, connectReady, newIdentity, postMcp, tokenFor } from './helpers.js';
+import { connectDevice, connectReady, newIdentity, postMcp, testRelaySecret, tokenFor } from './helpers.js';
+import { approveNext, exchange, newPkce, openAuthorize, pollUntilDecided, registerClient } from './oauthHelpers.js';
 
 test('logs (even at debug) never contain tokens, secrets, access keys or bodies', async () => {
   const lines: string[] = [];
   const accessKey = 'access-key-that-must-not-leak';
   const relay = await createRelay(
-    { port: 0, host: '127.0.0.1', accessKey, allowTokenInUrl: true, requestTimeoutMs: 100 },
+    { port: 0, host: '127.0.0.1', accessKey, allowTokenInUrl: true, requestTimeoutMs: 100, relaySecret: testRelaySecret() },
     { logger: createLogger('debug', (line) => lines.push(line)) },
   );
   try {
@@ -56,6 +57,50 @@ test('logs (even at debug) never contain tokens, secrets, access keys or bodies'
       assert.ok(!output.includes(secret), `log output leaked ${secret.slice(0, 12)}…`);
     }
     for (const line of lines) assert.doesNotThrow(() => JSON.parse(line), 'every line is JSON');
+  } finally {
+    await relay.close();
+  }
+});
+
+test('logs of a full pairing never contain codes, tokens, verifiers, page tokens, state or the relay secret', async () => {
+  const lines: string[] = [];
+  const relaySecret = testRelaySecret();
+  const relay = await createRelay(
+    { port: 0, host: '127.0.0.1', relaySecret },
+    { logger: createLogger('debug', (line) => lines.push(line)) },
+  );
+  try {
+    const device = await connectReady(relay, { hello: { deviceName: 'Private Phone Name' } });
+    const clientId = await registerClient(relay);
+    const pkce = newPkce();
+    const state = 'private-state-value';
+    const page = await openAuthorize(relay, { clientId, pkce, deviceId: device.identity.deviceId, state });
+    const { accessToken } = await approveNext(device);
+    const status = await pollUntilDecided(page.pollUrl);
+    const code = new URL(status.redirect as string).searchParams.get('code') as string;
+    await exchange(relay, { code, client_id: clientId, code_verifier: pkce.verifier });
+    await exchange(relay, { code, client_id: clientId, code_verifier: pkce.verifier }); // reuse -> logged failure
+    await device.nextFrame('pair_complete');
+
+    const output = lines.join('\n');
+    assert.match(output, /"msg":"token issued"/);
+    assert.match(output, /"msg":"token request rejected"/);
+    const pageToken = new URL(page.pollUrl).searchParams.get('t') as string;
+    for (const secret of [
+      accessToken,
+      accessToken.split('.')[3] as string,
+      code,
+      pkce.verifier,
+      pkce.challenge,
+      pageToken,
+      state,
+      relaySecret,
+      clientId,
+      'Private Phone Name',
+      device.identity.deviceId,
+    ]) {
+      assert.ok(!output.includes(secret), `log output leaked ${secret.slice(0, 12)}…`);
+    }
   } finally {
     await relay.close();
   }

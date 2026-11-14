@@ -19,6 +19,12 @@ test('defaults match the documented values', () => {
   assert.equal(config.logLevel, 'info');
   assert.equal(config.rateLimitRequestsPerMin, 600);
   assert.equal(config.rateLimitAuthFailuresPerMin, 30);
+  assert.equal(config.relaySecret, null);
+  assert.equal(config.dataDir, './data');
+  assert.match(config.publicDir, /public$/);
+  assert.equal(config.setupBanner, true);
+  assert.equal(config.pairingTtlMs, 180_000);
+  assert.equal(config.authCodeTtlMs, 120_000);
   assert.equal(DEFAULT_CONFIG.heartbeatIntervalMs, 25_000);
 });
 
@@ -38,6 +44,10 @@ test('reads every variable', () => {
     LOG_LEVEL: 'DEBUG',
     RATE_LIMIT_REQUESTS_PER_MIN: '100',
     RATE_LIMIT_AUTH_FAILURES_PER_MIN: '5',
+    RELAY_SECRET: ' a-relay-secret-that-is-long-enough-1234 ',
+    DATA_DIR: '/var/lib/phonebridge',
+    PUBLIC_DIR: '/srv/public',
+    SETUP_BANNER: 'off',
   });
   assert.equal(config.port, 9000);
   assert.equal(config.host, '127.0.0.1');
@@ -53,6 +63,21 @@ test('reads every variable', () => {
   assert.equal(config.logLevel, 'debug');
   assert.equal(config.rateLimitRequestsPerMin, 100);
   assert.equal(config.rateLimitAuthFailuresPerMin, 5);
+  assert.equal(config.relaySecret, ' a-relay-secret-that-is-long-enough-1234 ', 'relay secret is used verbatim');
+  assert.equal(config.dataDir, '/var/lib/phonebridge');
+  assert.equal(config.publicDir, '/srv/public');
+  assert.equal(config.setupBanner, false);
+});
+
+test('PUBLIC_URL defaults to the address announced by Render or Fly.io', () => {
+  assert.equal(loadConfigFromEnv({ RENDER_EXTERNAL_URL: 'https://pb.onrender.com' }).publicUrl, 'https://pb.onrender.com');
+  assert.equal(loadConfigFromEnv({ FLY_APP_NAME: 'my-relay' }).publicUrl, 'https://my-relay.fly.dev');
+  assert.equal(
+    loadConfigFromEnv({ PUBLIC_URL: 'https://relay.example.com', FLY_APP_NAME: 'my-relay' }).publicUrl,
+    'https://relay.example.com',
+    'an explicit PUBLIC_URL wins',
+  );
+  assert.throws(() => loadConfigFromEnv({ RENDER_EXTERNAL_URL: 'nope' }), /RENDER_EXTERNAL_URL/);
 });
 
 test('empty values fall back to defaults', () => {
@@ -75,6 +100,8 @@ test('invalid values are rejected with the variable name', () => {
     [{ PUBLIC_URL: 'relay.example.com' }, /PUBLIC_URL/],
     [{ PUBLIC_URL: 'ftp://relay.example.com' }, /PUBLIC_URL/],
     [{ PUBLIC_URL: 'https://relay.example.com/?x=1' }, /PUBLIC_URL/],
+    [{ RELAY_SECRET: 'too-short' }, /RELAY_SECRET/],
+    [{ SETUP_BANNER: 'sometimes' }, /SETUP_BANNER/],
   ];
   for (const [env, pattern] of cases) {
     assert.throws(() => loadConfigFromEnv(env), (err: unknown) => err instanceof ConfigError && pattern.test(err.message));

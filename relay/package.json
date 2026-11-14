@@ -28,10 +28,12 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.6",
     "@types/ws": "^8.18.1",
     "typescript": "~5.9.3"
   }

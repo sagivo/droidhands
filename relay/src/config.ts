@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { LOG_LEVELS, type LogLevel } from './logger.js';
 
 /** Relay configuration. See relay/README.md for the matching environment variables. */
@@ -29,6 +30,21 @@ export interface RelayConfig {
   readonly rateLimitRequestsPerMin: number;
   /** Per-IP authentication failures per minute before the IP is blocked for a minute. */
   readonly rateLimitAuthFailuresPerMin: number;
+  /**
+   * HMAC key for stateless OAuth client ids (docs/PROTOCOL.md §5.2). When null, the relay loads or
+   * creates `{dataDir}/relay-secret`. Never log it.
+   */
+  readonly relaySecret: string | null;
+  /** Directory for the persisted relay secret. null = do not persist (temporary secret). */
+  readonly dataDir: string | null;
+  /** Directory the operator may put `phonebridge.apk` in, served at `/download/phonebridge.apk`. */
+  readonly publicDir: string;
+  /** Print the setup URL and a QR code on startup (CLI only). */
+  readonly setupBanner: boolean;
+  /** How long a pairing waits for the phone's answer (§5.3: 180 s). */
+  readonly pairingTtlMs: number;
+  /** Lifetime of an authorization code (§5.3: 120 s). */
+  readonly authCodeTtlMs: number;
 }
 
 export const DEFAULT_CONFIG: RelayConfig = Object.freeze({
@@ -47,7 +63,16 @@ export const DEFAULT_CONFIG: RelayConfig = Object.freeze({
   heartbeatIntervalMs: 25_000,
   rateLimitRequestsPerMin: 600,
   rateLimitAuthFailuresPerMin: 30,
+  relaySecret: null,
+  dataDir: './data',
+  publicDir: fileURLToPath(new URL('../public', import.meta.url)),
+  setupBanner: true,
+  pairingTtlMs: 180_000,
+  authCodeTtlMs: 120_000,
 });
+
+/** Shortest accepted RELAY_SECRET; it keys the HMAC that protects OAuth client ids. */
+export const MIN_RELAY_SECRET_LENGTH = 32;
 
 /** Largest delay `setTimeout` accepts. */
 const MAX_TIMER_MS = 2_147_483_647;
@@ -69,6 +94,9 @@ const ENV_NAMES: Partial<Record<keyof RelayConfig, string>> = {
   logLevel: 'LOG_LEVEL',
   rateLimitRequestsPerMin: 'RATE_LIMIT_REQUESTS_PER_MIN',
   rateLimitAuthFailuresPerMin: 'RATE_LIMIT_AUTH_FAILURES_PER_MIN',
+  relaySecret: 'RELAY_SECRET',
+  dataDir: 'DATA_DIR',
+  publicDir: 'PUBLIC_DIR',
 };
 
 function label(field: keyof RelayConfig): string {
@@ -98,6 +126,11 @@ export function resolveConfig(overrides: Partial<RelayConfig> = {}): RelayConfig
     rateLimitRequestsPerMin: checkInt(merged.rateLimitRequestsPerMin, label('rateLimitRequestsPerMin'), 1),
     rateLimitAuthFailuresPerMin: checkInt(merged.rateLimitAuthFailuresPerMin, label('rateLimitAuthFailuresPerMin'), 1),
     logLevel: checkLogLevel(merged.logLevel, label('logLevel')),
+    relaySecret: checkRelaySecret(merged.relaySecret, label('relaySecret')),
+    dataDir: merged.dataDir === '' ? null : merged.dataDir,
+    publicDir: checkNonEmpty(merged.publicDir, label('publicDir')),
+    pairingTtlMs: checkInt(merged.pairingTtlMs, label('pairingTtlMs'), 1, MAX_TIMER_MS),
+    authCodeTtlMs: checkInt(merged.authCodeTtlMs, label('authCodeTtlMs'), 1, MAX_TIMER_MS),
   });
 }
 
@@ -121,12 +154,14 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RelayCo
     throw new ConfigError(`${name} must be true or false, got "${value}"`);
   };
 
-  const publicUrl = str('PUBLIC_URL');
+  const platform = platformPublicUrl(env);
+  const publicUrl = str('PUBLIC_URL') ?? platform?.url;
+  const publicUrlName = str('PUBLIC_URL') === undefined && platform !== undefined ? platform.variable : 'PUBLIC_URL';
   const logLevel = str('LOG_LEVEL');
   return resolveConfig({
     port: int('PORT'),
     host: str('HOST'),
-    publicUrl: publicUrl === undefined ? undefined : normalizePublicUrl(publicUrl, 'PUBLIC_URL'),
+    publicUrl: publicUrl === undefined ? undefined : normalizePublicUrl(publicUrl, publicUrlName),
     trustProxy: bool('TRUST_PROXY'),
     // Not trimmed: an access key is compared verbatim.
     accessKey: env.RELAY_ACCESS_KEY ? env.RELAY_ACCESS_KEY : undefined,
@@ -139,7 +174,24 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RelayCo
     logLevel: logLevel === undefined ? undefined : checkLogLevel(logLevel.toLowerCase(), 'LOG_LEVEL'),
     rateLimitRequestsPerMin: int('RATE_LIMIT_REQUESTS_PER_MIN'),
     rateLimitAuthFailuresPerMin: int('RATE_LIMIT_AUTH_FAILURES_PER_MIN'),
+    // Not trimmed: a secret is used verbatim.
+    relaySecret: env.RELAY_SECRET ? env.RELAY_SECRET : undefined,
+    dataDir: str('DATA_DIR'),
+    publicDir: str('PUBLIC_DIR'),
+    setupBanner: bool('SETUP_BANNER'),
   });
+}
+
+/**
+ * The public URL announced by a hosting platform, used when PUBLIC_URL is unset so one-click deploys
+ * print a correct setup link: Render's `RENDER_EXTERNAL_URL`, or `https://<FLY_APP_NAME>.fly.dev`.
+ */
+function platformPublicUrl(env: NodeJS.ProcessEnv): { url: string; variable: string } | undefined {
+  const render = env.RENDER_EXTERNAL_URL?.trim();
+  if (render) return { url: render, variable: 'RENDER_EXTERNAL_URL' };
+  const fly = env.FLY_APP_NAME?.trim();
+  if (fly && /^[a-z0-9-]+$/.test(fly)) return { url: `https://${fly}.fly.dev`, variable: 'FLY_APP_NAME' };
+  return undefined;
 }
 
 /**
@@ -176,6 +228,21 @@ function checkInt(value: number, name: string, min: number, max = Number.MAX_SAF
   if (!Number.isSafeInteger(value) || value < min || value > max) {
     throw new ConfigError(`${name} must be an integer in [${min}, ${max}], got ${value}`);
   }
+  return value;
+}
+
+function checkRelaySecret(value: string | null, name: string): string | null {
+  if (value === null || value === '') return null;
+  if (value.length < MIN_RELAY_SECRET_LENGTH) {
+    throw new ConfigError(
+      `${name} must be at least ${MIN_RELAY_SECRET_LENGTH} characters (try: openssl rand -base64 32)`,
+    );
+  }
+  return value;
+}
+
+function checkNonEmpty(value: string, name: string): string {
+  if (value.trim() === '') throw new ConfigError(`${name} must not be empty`);
   return value;
 }
 

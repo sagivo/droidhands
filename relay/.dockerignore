@@ -2,6 +2,7 @@ node_modules
 dist
 build-test
 coverage
+data
 test
 scripts
 *.log
@@ -12,3 +13,5 @@ scripts
 .dockerignore
 Dockerfile
 README.md
+fly.toml
+render.yaml
