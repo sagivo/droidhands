@@ -180,13 +180,20 @@ const FAKEMAIL_PLUGIN = new URL('../../clients/android/fixtures/plugins/fakemail
 const UI = new URL('./ui.py', import.meta.url).pathname;
 const ui = (...a) => execFileSync('timeout', ['-k', '2', '60', 'python3', '-I', UI, ...a], { encoding: 'utf8' }).trim();
 
-/** Approves the pending PhoneBridge prompt whose title contains `title`: opens it from the shade, then taps Allow. */
+/**
+ * Approves the pending PhoneBridge prompt whose title contains `title`: opens it from the shade, then taps Allow.
+ * The prompt's countdown can keep uiautomator from reading the shade; then it asks for a tap on the phone.
+ */
 async function approveOnPhone(title) {
   shell('cmd statusbar expand-notifications');
   await sleep(1500);
-  ui('tap', title);
-  await sleep(1500); // Allow is enabled shortly after the approval screen appears.
-  ui('tap', 'Allow');
+  try {
+    ui('tap', title);
+    await sleep(1500); // Allow is enabled shortly after the approval screen appears.
+    ui('tap', 'Allow');
+  } catch {
+    console.log(`    → could not tap the prompt automatically: tap Allow on the phone ("${title}")`);
+  }
 }
 
 const topActivity = () => shell("dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | head -n 1");

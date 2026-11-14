@@ -24,12 +24,19 @@ def adb(*args, check=True):
 
 
 def nodes():
+    xml = ""
     for attempt in range(3):
+        # Remove the previous dump first: a failed dump leaves the old file, which would describe a stale screen.
+        adb("shell", "rm", "-f", "/sdcard/ui.xml", check=False)
         adb("shell", "uiautomator", "dump", "/sdcard/ui.xml", check=False)
         xml = adb("shell", "cat", "/sdcard/ui.xml", check=False)
         if "<hierarchy" in xml:
             break
         time.sleep(1)
+    if "<hierarchy" not in xml:
+        # uiautomator needs the screen to be still for a second; a ticking countdown (e.g. a PhoneBridge
+        # approval prompt in the shade) prevents that.
+        sys.exit("could not read the screen (uiautomator found no idle moment)")
     root = ET.fromstring(xml[xml.index("<hierarchy"):])
     out = []
     for n in root.iter("node"):

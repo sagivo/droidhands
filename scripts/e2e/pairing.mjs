@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // E2E: one-tap pairing exactly as an MCP client (Claude.ai / Claude Code / ChatGPT) performs it.
-// usage: node scripts/e2e/pairing.mjs <connectUrl> [--approve-with-ui]
+// usage: [PB_TOKEN_FILE=path] node scripts/e2e/pairing.mjs <connectUrl> [--approve-with-ui]
 //   connectUrl: https://relay/d/<deviceId>/mcp (shown in the app / welcome.connectUrl)
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { McpClient, sleep } from './lib.mjs';
 
 const connectUrl = process.argv[2];
@@ -48,12 +49,21 @@ if (!pollPath) { console.log(page.slice(0, 1500)); process.exit(1); }
 // 5. Approve on the phone.
 if (approveWithUi) {
   const ui = (...a) => execFileSync('timeout', ['-k', '2', '60', 'python3', '-I', new URL('./ui.py', import.meta.url).pathname, ...a], { encoding: 'utf8' }).trim();
-  await sleep(2500);
-  execFileSync('timeout', ['10', process.env.ADB || '/opt/homebrew/share/android-commandlinetools/platform-tools/adb', 'shell', 'cmd', 'statusbar', 'expand-notifications']);
-  await sleep(1500);
-  try { ui('tap', 'wants to connect'); } catch { log('could not tap the pairing notification; approve manually'); }
+  const adbPath = process.env.ADB || '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
+  // The shade can take a moment to open, so look for the notification a few times.
+  let opened = false;
+  for (let i = 0; i < 5 && !opened; i++) {
+    await sleep(2000);
+    execFileSync('timeout', ['10', adbPath, 'shell', 'cmd', 'statusbar', 'expand-notifications']);
+    await sleep(1500);
+    try { ui('tap', 'wants to connect'); opened = true; } catch { /* not shown yet */ }
+  }
   await sleep(2000);
-  try { log(ui('tap', 'Allow')); } catch { log('could not tap Allow; approve manually on the phone'); }
+  // Only tap Allow on the approval screen itself; elsewhere "Allow" may match unrelated text.
+  try {
+    ui('has', 'Connect an AI agent?');
+    log(ui('tap', 'Allow'));
+  } catch { log('approval screen not found; approve manually on the phone'); }
 } else {
   log(`→ approve on the phone now (code ${code4})…`);
 }
@@ -76,6 +86,8 @@ const tok = await (await fetch(as.token_endpoint, {
   body: new URLSearchParams({ grant_type: 'authorization_code', code: redirect.searchParams.get('code'), redirect_uri: redirectUri, client_id: reg.client_id, code_verifier: verifier, resource: rm.resource }),
 })).json();
 log('token exchange →', tok.token_type, tok.access_token ? tok.access_token.slice(0, 12) + '…' : JSON.stringify(tok));
+// PB_TOKEN_FILE=path saves the token (mode 600) for chaining, e.g. into scenarios.mjs.
+if (process.env.PB_TOKEN_FILE && tok.access_token) writeFileSync(process.env.PB_TOKEN_FILE, tok.access_token, { mode: 0o600 });
 
 // 8. Use it.
 const c = new McpClient(connectUrl, tok.access_token);
