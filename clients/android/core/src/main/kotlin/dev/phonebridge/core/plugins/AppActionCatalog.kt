@@ -140,7 +140,7 @@ class AppActionCatalog(
     fun applicablePlugins(packageName: String, installed: Set<String>): List<AppPlugin> =
         plugins().pluginsFor(packageName).filter { p -> p.androidPackages.firstOrNull { it in installed } == packageName }
 
-    /** [packageName]'s integration given its applicable [plugins]. */
+    /** The integration of an app whose applicable plugins ([applicablePlugins]) are [plugins]. */
     fun integration(plugins: List<AppPlugin>): Integration = when {
         plugins.any { it.source == PluginSource.LOCAL } -> Integration.LOCAL
         plugins.isNotEmpty() -> Integration.PLUGIN
