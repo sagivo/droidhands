@@ -1,6 +1,7 @@
 package dev.phonebridge.core.plugins
 
 import dev.phonebridge.core.mcp.CallStoppedException
+import dev.phonebridge.core.mcp.ToolText
 import dev.phonebridge.core.tools.AppBlockedException
 import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.Dispatch
@@ -293,8 +294,9 @@ internal object ActionText {
             "params schema."
 
     /**
-     * The approval prompt: the plugin's `confirm` template, or "<App>: <title> (k=v, …)". For local plugins
-     * the rendered recipe is added, because their `confirm` text is unreviewed.
+     * The approval prompt: the plugin's `confirm` template, or "<App>: <title> (k=v, …)". For local plugins,
+     * whose texts are unreviewed, what the rendered recipe will really do comes first:
+     * "<recipe summary>. Plugin says: <confirm>", at most [MAX_PROMPT] chars.
      */
     fun confirmation(target: AppAction, params: JsonObject): String {
         val action = target.action
@@ -312,20 +314,66 @@ internal object ActionText {
         if (!target.isLocal) return base
         val recipe = action.android ?: return base
         val shown = runCatching { recipeSummary(RecipeRenderer(target.app.packageName).render(recipe, params)) }.getOrNull() ?: return base
-        return "$base [$shown]"
+        return ToolText.truncate("${shown.replaceFirstChar { it.uppercaseChar() }}. Plugin says: $base", MAX_PROMPT)
     }
 
-    /** What a rendered recipe will do, in a few words, for prompts. */
-    fun recipeSummary(recipe: RenderedRecipe): String = when (recipe) {
-        is RenderedUrl -> "opens ${recipe.url}"
-        is RenderedIntent -> buildString {
-            append("starts ").append(recipe.action)
-            recipe.data?.let { append(" ").append(it) }
-            if (recipe.extras.isNotEmpty()) append(" with ").append(recipe.extras.keys.joinToString(", "))
+    /** What a rendered recipe will do, in a few words, for prompts (at most [MAX_SUMMARY] chars). */
+    fun recipeSummary(recipe: RenderedRecipe): String = ToolText.truncate(
+        when (recipe) {
+            is RenderedUrl -> "opens ${recipe.url}"
+            is RenderedIntent -> intentSummary(recipe)
+            is RenderedSteps -> {
+                val shown = stepSummaries(recipe.steps)
+                if (shown.isEmpty()) "runs ${recipe.steps.size} screen steps in the app" else "in the app: ${shown.joinToString(", ")}"
+            }
+            is RenderedToolCall -> "runs ${recipe.name}"
+        },
+        MAX_SUMMARY,
+    )
+
+    private fun intentSummary(intent: RenderedIntent): String = buildString {
+        append("starts ").append(intent.action)
+        intent.data?.let { append(" ").append(it) }
+        if (intent.extras.isNotEmpty()) {
+            append(" with ")
+            append(intent.extras.entries.joinToString(", ") { (k, v) -> "$k=${ToolText.truncate(extraText(v), MAX_VALUE)}" })
         }
-        is RenderedSteps -> "runs ${recipe.steps.size} screen steps in the app"
-        is RenderedToolCall -> "runs ${recipe.name}"
     }
+
+    private fun extraText(value: ExtraValue): String = when (value) {
+        is ExtraValue.StringValue -> "\"${value.value}\""
+        is ExtraValue.IntValue -> value.value.toString()
+        is ExtraValue.LongValue -> value.value.toString()
+        is ExtraValue.DoubleValue -> value.value.toString()
+        is ExtraValue.BooleanValue -> value.value.toString()
+        is ExtraValue.StringArrayValue -> value.values.joinToString(", ", "[", "]") { "\"$it\"" }
+    }
+
+    /** The steps that act (taps, typing, links, intents), including those inside `if_present`. */
+    private fun stepSummaries(steps: List<RenderedStep>): List<String> = steps.flatMap { step ->
+        when (val a = step.action) {
+            is RenderedStepAction.Tap -> listOf("taps ${selectorText(a.selector)}")
+            is RenderedStepAction.LongPress -> listOf("long-presses ${selectorText(a.selector)}")
+            is RenderedStepAction.TypeText ->
+                listOf("types \"${ToolText.truncate(a.text, MAX_TYPED)}\"" + if (a.submit) " and submits" else "")
+            is RenderedStepAction.OpenUrl -> listOf("opens ${a.url.url}")
+            is RenderedStepAction.StartIntent -> listOf(intentSummary(a.intent))
+            is RenderedStepAction.IfPresent -> stepSummaries(a.then)
+            else -> emptyList()
+        }
+    }
+
+    /** The element a selector names, for people: its text or description, else its view id or class. */
+    private fun selectorText(s: Selector): String {
+        val text = s.textOrDesc ?: s.text ?: s.desc ?: s.textContains ?: s.descContains
+        if (text != null) return "\"${ToolText.truncate(text, MAX_VALUE)}\""
+        return s.id?.substringAfter(":id/") ?: s.className ?: "an element"
+    }
+
+    private const val MAX_PROMPT = 400
+    private const val MAX_SUMMARY = 300
+    private const val MAX_TYPED = 60
+    private const val MAX_VALUE = 40
 
     fun integrationNote(integration: Integration, plugin: AppPlugin?): String? = when {
         integration == Integration.LOCAL ->
