@@ -189,7 +189,8 @@ Implemented on the device by `McpServer` (core). The relay is a transparent tunn
 * `POST /mcp`, body = one JSON-RPC 2.0 message **or** a batch array (accepted for older clients).
 * Auth: missing or invalid token → HTTP `401`, header `WWW-Authenticate: Bearer realm="phonebridge"`,
   body `{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"Unauthorized"}}`.
-  Revoked and expired tokens get the same response. No detail leaks.
+  Revoked and expired tokens get the same response. No detail leaks. The relay's connector path
+  (§5.1) and the local server (§4.1) add `resource_metadata` to the header.
 * Body that is not valid JSON → `400` with JSON-RPC error `-32700` (Parse error), `id: null`.
 * Only notifications/responses (no requests) → `202`, empty body.
 * Otherwise → `200`, `content-type: application/json`, the JSON-RPC response (or array for batch).
@@ -204,7 +205,63 @@ Implemented on the device by `McpServer` (core). The relay is a transparent tunn
   Tool failures, policy denials, user denials, timeouts and "access paused" are returned as a
   normal result with `isError: true` and a human-readable text explanation, so the LLM can read it.
 * Local-mode only: requests whose `Origin` header is present and not allowlisted → `403`
-  (DNS-rebinding protection, as required by the MCP spec).
+  (DNS-rebinding protection, as required by the MCP spec). This applies to every path, including
+  the pairing endpoints of §4.1.
+
+### 4.1 One-tap pairing on the local server
+
+The phone's own server speaks the same agent-visible OAuth flow as the relay (§5.2-5.4), acting as
+its own authorization server. Pasting `http://<phone>:<port>/mcp` into an MCP client and tapping
+**Allow** pairs it over any direct route: `adb forward` (`http://127.0.0.1:<port>/mcp`), Tailscale
+(`http://<name>.<tailnet>.ts.net:<port>/mcp` or the tailnet IP) or the LAN. The endpoint shapes are
+the relay's, so a client that pairs through the relay pairs here too. Implemented in core by
+`LocalOAuth`, served by `LocalHttpServer`. Differences from the relay:
+
+* **Base URL from `Host`.** `{base}` is `http://<Host>`, taken from the request, so each route gets
+  URLs that work on it without configuration. A `Host` is accepted only when it names the phone on
+  the address the connection arrived on (the socket's local address):
+
+  | Connection arrived on | Accepted `Host` |
+  |---|---|
+  | loopback (on the phone, or through `adb forward`) | `localhost`, a `127.x.x.x` address or `[::1]`, any port (adb may forward from another port) |
+  | a Tailscale address (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) | that address, or a MagicDNS name ending in `.ts.net` |
+  | a private LAN address (RFC 1918, `169.254.0.0/16`, `fc00::/7`), only reachable when the user bound the server to the LAN | that address |
+  | anything else (public addresses) | none |
+
+  Any other `Host` (another name, another address, none) gets `421` on every OAuth endpoint (JSON,
+  or an HTML page for `/oauth/authorize`), and a `401` from `/mcp` keeps the plain
+  `Bearer realm="phonebridge"`. A web page that rebinds its DNS name to the phone therefore cannot
+  read metadata or start a pairing.
+* **Discovery.** Resource `{base}/mcp`. Protected resource metadata at
+  `/.well-known/oauth-protected-resource/mcp` (and without the `/mcp` suffix), with the relay's
+  fields. Authorization server metadata at `/.well-known/oauth-authorization-server` and
+  `/.well-known/openid-configuration` (also with `/mcp` appended), issuer `{base}`, endpoints
+  `{base}/oauth/authorize|token|register`. A `401` from `/mcp` carries
+  `WWW-Authenticate: Bearer realm="phonebridge", resource_metadata="{base}/.well-known/oauth-protected-resource/mcp"`.
+* **Registration** (`POST /oauth/register`, at most 16 KiB): the rules and stateless `client_id`
+  format of §5.2. The HMAC key is `HMAC-SHA256(deviceSecret, "phonebridge:local-oauth-clients")`, so
+  registrations survive app restarts and become invalid when the device identity is reset. No CORS
+  headers: there is no browser-based client that could reach the phone, and the `Origin` rule above
+  applies.
+* **Authorization** (`GET /oauth/authorize`; `HEAD` is refused so it never prompts): the checks of
+  §5.3 step 1. `resource` is optional (the server has a single resource); when present it must be
+  `{base}/mcp` or `{base}`. The waiting page, its poll `GET /oauth/pair/<id>?t=<pageToken>[&view=html]`,
+  the redirects (with `iss`) and same-flow reuse are as in §5.3 steps 6 and 8.
+* **Prompt.** The server calls the phone's pairing handler directly: the user sees the same prompt as
+  for relay pairings, with `remoteAddress` = the client's TCP address and `expiresAt` on the phone's
+  clock. TTL 180 s. At most 3 pending pairings, 2 per client address; at most 20 per hour, 10 per
+  client address. Each client address may make 120 OAuth requests per minute, and after 20 failed
+  client or code checks within 10 minutes it gets `429` on every OAuth endpoint.
+* **Token endpoint** (`POST /oauth/token`): as §5.4, PKCE `S256` required. Codes are 32 random
+  bytes, single use, valid 120 s and stored only as SHA-256. The pairing counts as completed once the
+  token response has been written to the connection. The issued token is deleted on the phone
+  (`pair_abandoned` semantics) when the code expires unused, any check fails after the code was
+  presented, the response cannot be written, or the local server stops.
+* **Plain http.** On loopback the traffic never leaves the phone (or the USB link), and Tailscale
+  encrypts it with WireGuard. On the LAN, the authorization code and the token travel unencrypted:
+  anyone who can watch the Wi-Fi traffic can copy the token (and use it until it is revoked). The
+  server only listens on the LAN after the user turned that on; prefer Tailscale or the relay on
+  networks you don't control.
 
 ## 5. One-tap agent pairing (OAuth 2.1 through the relay)
 
