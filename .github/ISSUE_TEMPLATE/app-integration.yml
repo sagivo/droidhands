@@ -1,0 +1,66 @@
+# Opened from the PhoneBridge app too: Apps > (an app) > "Request a better integration" prefills the title and the
+# `app` and `package` fields below through the URL (?template=app-integration.yml&app=...&package=...), so keep
+# those ids.
+name: App integration
+description: Ask for ready-made actions for an app (or offer to write them), so agents can use it reliably.
+title: "App integration: "
+labels: ["app-integration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every app already gets basic actions that PhoneBridge discovers by itself (open it, share text into it, its
+        shortcuts). An **integration** is a small plugin file that adds the actions that make an app really useful,
+        such as "play this song" or "navigate home". Anyone can write one, no code needed:
+        [Add an app in 5 minutes](../blob/HEAD/CONTRIBUTING.md#add-an-app-in-5-minutes) and the
+        [plugin format](../blob/HEAD/docs/PLUGINS.md). In the app, *Apps → (the app) → Create plugin draft* gives you
+        a starting point.
+  - type: input
+    id: app
+    attributes:
+      label: App name
+      placeholder: Spotify
+    validations:
+      required: true
+  - type: input
+    id: package
+    attributes:
+      label: Android package
+      description: PhoneBridge shows it under Apps → (the app). It is also the `id=` in the app's Play Store link.
+      placeholder: com.spotify.music
+    validations:
+      required: true
+  - type: textarea
+    id: actions
+    attributes:
+      label: Actions you want
+      description: What should an agent be able to do in this app? One per line, with an example of what you would ask.
+      placeholder: |
+        Play a song, album or playlist ("play some lofi beats")
+        Add the current song to a playlist
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Deep links, intents or documentation (optional)
+      description: >-
+        Links the app opens (e.g. spotify:search:...), its developer documentation, or what
+        `./scripts/plugin-scaffold.sh <package>` printed for it.
+  - type: dropdown
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - I'd like to write the plugin myself
+        - I can test a plugin on my phone
+        - Just asking
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I checked [plugins/README.md](../blob/HEAD/plugins/README.md) and the open issues for this app.
+          required: true
