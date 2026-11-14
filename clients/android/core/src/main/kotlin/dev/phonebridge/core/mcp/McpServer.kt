@@ -7,10 +7,13 @@ import dev.phonebridge.core.auth.AuthResult
 import dev.phonebridge.core.auth.TokenFormat
 import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.confirm.ConfirmationProvider
+import dev.phonebridge.core.policy.GlobalSecurity
 import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
+import dev.phonebridge.core.tools.Tool
 import dev.phonebridge.core.tools.ToolRegistry
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -64,6 +67,9 @@ data class TransportResponse(
  * timestamps, audit appends), so call it from a background dispatcher. Every request is
  * authenticated first, including `initialize`. Only `tools/call` and authentication failures are
  * audited.
+ *
+ * `tools/list` hides tools outside the token's scopes and tools the token has a
+ * [ToolRule.BLOCK] rule for (calling one anyway is refused by [PolicyEngine] and audited DENIED_POLICY).
  */
 class McpServer(
     private val registry: ToolRegistry,
@@ -77,10 +83,13 @@ class McpServer(
     private val isAccessEnabled: () -> Boolean = { true },
     private val confirmationTimeoutMs: Long = 60_000,
     private val clock: () -> Long = System::currentTimeMillis,
-    /** Device-wide security settings (wave 2: core agent applies them to CallContext + tools/list). */
-    private val globalSecurity: () -> dev.phonebridge.core.policy.GlobalSecurity = { dev.phonebridge.core.policy.GlobalSecurity() },
+    /**
+     * Device-wide security settings, read on every `tools/call` and applied to its [dev.phonebridge.core.tools.CallContext]
+     * (never-allow apps, one-time-code redaction). If it throws, the call is refused (fail closed).
+     */
+    private val globalSecurity: () -> GlobalSecurity = { GlobalSecurity() },
 ) {
-    private val toolCalls = ToolCalls(registry, policy, confirmations, audit, isAccessEnabled, confirmationTimeoutMs, clock)
+    private val toolCalls = ToolCalls(registry, policy, confirmations, audit, isAccessEnabled, confirmationTimeoutMs, clock, globalSecurity)
 
     suspend fun handle(request: TransportRequest): TransportResponse {
         val auth = try {
@@ -173,7 +182,7 @@ class McpServer(
     private fun toolsList(token: TokenRecord): JsonObject = buildJsonObject {
         putJsonArray("tools") {
             for (tool in registry.all()) {
-                if (!Scopes.allows(token.scopes, tool.scope)) continue
+                if (!isVisible(token, tool)) continue
                 val unavailable = ToolText.unavailableReason(tool)
                 addJsonObject {
                     put("name", tool.name)
@@ -241,6 +250,10 @@ class McpServer(
         private val ACCEPTED = TransportResponse(status = 202, body = null)
 
         private fun json(status: Int, body: JsonElement) = TransportResponse(status, JsonRpc.encode(body), JSON_HEADERS)
+
+        /** `tools/list` shows tools within the token's scopes, except those it has a BLOCK rule for. */
+        internal fun isVisible(token: TokenRecord, tool: Tool): Boolean =
+            Scopes.allows(token.scopes, tool.scope) && token.toolRules[tool.name] != ToolRule.BLOCK
 
         /** Best-effort method (and tool name for tools/call) from an unauthenticated body. */
         internal fun peekMethod(body: String): Pair<String, String?> {

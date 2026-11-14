@@ -1,5 +1,8 @@
 package dev.phonebridge.core.tools
 
+import dev.phonebridge.core.auth.ActiveHours
+import dev.phonebridge.core.auth.ToolRule
+
 /** Per-call information handed to [Tool.call]. */
 class CallContext(
     val tokenId: String,
@@ -13,6 +16,13 @@ class CallContext(
     val appAccess: AppAccess = AppAccess.UNRESTRICTED,
     /** When true, tools returning message/notification text MUST pass it through [dev.phonebridge.core.util.OneTimeCodes.redact]. */
     val redactOneTimeCodes: Boolean = false,
+    /**
+     * The calling token's per-tool rules (informational, e.g. for `bridge_capabilities`): the server has
+     * already applied them, so a tool never runs under a BLOCK rule.
+     */
+    val toolRules: Map<String, ToolRule> = emptyMap(),
+    /** The calling token's daily active window (informational; enforced by the server), or null for always. */
+    val activeHours: ActiveHours? = null,
     // Last so callers can pass it as a trailing lambda.
     private val confirmer: suspend (summary: String) -> Unit,
 ) {

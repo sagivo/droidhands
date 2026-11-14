@@ -1,5 +1,6 @@
 package dev.phonebridge.core.mcp
 
+import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -21,11 +22,14 @@ import kotlinx.serialization.json.putJsonObject
 const val CAPABILITIES_TOOL_NAME = "bridge_capabilities"
 
 /**
- * The `bridge_capabilities` meta tool (scope "", Risk.READ): returns the calling token's name and
- * scopes, plus every tool visible to that token with `available` and `unavailable_reason`, and
- * [extraStatus] (platform status such as accessibility/notification access/locked) merged in.
+ * The `bridge_capabilities` meta tool (scope "", Risk.READ): returns the calling token's name, scopes
+ * and advanced controls (app access summary, per-tool rules, active hours, whether one-time codes are
+ * hidden; see [PolicySummary]), plus every tool visible to that token (in scope and not BLOCKed) with
+ * `available` and `unavailable_reason`, and [extraStatus] (platform status such as
+ * accessibility/notification access/locked) merged in.
  *
- * Output: `{"token":{"name","scopes"},"status":{…extraStatus},"tools":[{"name","title","risk","scope",
+ * Output: `{"token":{"name","scopes","app_access":{…},"tool_rules":{name:rule},"active_hours":{…},
+ * "one_time_codes_hidden"},"status":{…extraStatus},"tools":[{"name","title","risk","scope","rule"?,
  * "available","unavailable_reason"?}]}`. [extraStatus] values may be strings, numbers, booleans,
  * null, lists/arrays, maps (nested) or [JsonElement]s; anything else is rendered with
  * `toString()`. An exception from [extraStatus] is reported as `status.error` instead of failing.
@@ -37,6 +41,7 @@ fun capabilitiesTool(
     name = CAPABILITIES_TOOL_NAME,
     title = "PhoneBridge capabilities",
     description = "Describes what this PhoneBridge connection can do right now: the token's name and scopes, " +
+        "the limits the user set for this agent (which apps it may use, per-tool rules, active hours, whether one-time codes are hidden), " +
         "the phone's status (for example whether accessibility or notification access is enabled, or the phone is locked), " +
         "and every tool this token can use with whether it is available now and why not. " +
         "Call it when unsure which tools work or after a tool reports it is unavailable.",
@@ -48,21 +53,25 @@ fun capabilitiesTool(
     } catch (e: Exception) {
         buildJsonObject { put("error", "Could not read phone status (${ToolText.describe(e)})") }
     }
+    val inScope = registry.all().filter { Scopes.allows(ctx.scopes, it.scope) }
     ToolResult.json {
         putJsonObject("token") {
             put("name", ctx.tokenName)
             putJsonArray("scopes") { ctx.scopes.sorted().forEach { add(JsonPrimitive(it)) } }
+            PolicySummary.put(this, ctx, inScope.mapTo(HashSet()) { it.name })
         }
         put("status", status)
         putJsonArray("tools") {
-            for (t in registry.all()) {
-                if (!Scopes.allows(ctx.scopes, t.scope)) continue
+            for (t in inScope) {
+                val rule = ctx.toolRules[t.name]
+                if (rule == ToolRule.BLOCK) continue
                 val reason = ToolText.unavailableReason(t)
                 addJsonObject {
                     put("name", t.name)
                     put("title", t.title)
                     put("risk", t.risk.name)
                     put("scope", t.scope)
+                    if (rule != null) put("rule", rule.name)
                     put("available", reason == null)
                     if (reason != null) put("unavailable_reason", reason)
                 }
