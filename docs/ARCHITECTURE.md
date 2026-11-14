@@ -59,11 +59,14 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
    `isError` results.
 5. `AuditLog.record()` is called for every call (allowed, denied or failed) and every auth failure.
    Outcomes include `DENIED_POLICY` (tool rule, active hours or the token's `maxRisk`), `DENIED_APP`
-   (app access) and `CANCELLED` (stopped by Pause, Revoke or Delete). An `AuditThrottle` summarizes floods of
-   pre-execution refusals. In-flight calls are tracked per token (`InFlightCalls`), so
-   `McpServer.cancelCalls()` can stop them, and `CallContext.ensureStillAllowed()` re-checks pause and
-   revocation inside long-running tools. `ApprovalGuard` (app) pauses all screen control while any
-   approval UI exists.
+   (app access) and `CANCELLED` (stopped by Pause, Revoke, Delete or the activity notification's Stop). An
+   `AuditThrottle` summarizes floods of pre-execution refusals. In-flight calls are tracked per token
+   (`InFlightCalls`), so `McpServer.cancelCalls()` and `stopCalls()` can stop them, and
+   `CallContext.ensureStillAllowed()` re-checks pause and revocation inside long-running tools.
+   `ApprovalGuard` (app) pauses all screen control while any approval UI exists. A `CallActivity`
+   listener follows each call that passed the policy checks (agent, tool, approval state and the
+   body-free line a tool reports with `ctx.reportActivity()`) until its audit entry; the app turns it
+   into the live activity notification (`live/AgentActivity*`).
    `TrackingAuditLog` also feeds `UsageTracker`, which holds the per-agent counters behind the usage
    screens. `CallContext` carries the call's `appAccess` and `redactOneTimeCodes`, which every
    app-facing tool enforces.

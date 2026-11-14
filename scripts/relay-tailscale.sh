@@ -455,6 +455,7 @@ else
   say "(Claude Code, Codex, Claude Desktop) work; cloud agents (claude.ai, ChatGPT) need --public."
 fi
 say ""
-say "Next: open the setup link above on the phone (or scan the QR code), tap \"Open in PhoneBridge\","
-say "then copy the connection URL the app shows into your agent."
+say "Next: in PhoneBridge on the phone, tap \"Scan QR code\" (Your own relay) and scan the code above,"
+say "or open the setup link there and tap \"Open in PhoneBridge\". Confirm \"Connect to relay?\", then copy"
+say "the connection URL the app shows into your agent."
 say "Stop with: $0 --stop"

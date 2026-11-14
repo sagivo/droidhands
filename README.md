@@ -77,6 +77,8 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
   text, needs an unlocked phone, and auto-denies after 60 s.
 * Per-token rate limits, a full **audit log** with per-agent usage charts, and a global **pause**
   switch (in the app and in the notification).
+* A live **activity notification** while an agent works ("Claude Code is using your phone"), with
+  **Stop** and **Pause all**; a Live Update with a status-bar chip on Android 16.
 * The relay is a tunnel. It can't mint or verify tokens. Its only state is one secret file used to
   sign OAuth client ids, plus, during a pairing, the new token held in memory for at most 120 s. Device ids
   are self-certifying, so nobody can impersonate your phone at the relay.

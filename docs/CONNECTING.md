@@ -9,7 +9,7 @@ the phone, and everything it does is checked, approved and logged there ([SECURI
 |---|---|---|---|---|
 | **PhoneBridge relay** (default) | Agents anywhere, with your connection URL | HTTPS to the relay. Whoever runs the relay could see the requests passing through. | Yes | None: the app is online after the wizard |
 | **Tailscale** (private, no relay) | Only your own devices on your tailnet | No relay. Tailscale (WireGuard) encrypts the traffic end to end. | No | Tailscale on the phone and the computer, then one switch |
-| **Your own relay** | Agents anywhere (or only your tailnet, see below) | Only you handle the requests | Yes, when it has a public HTTPS address | Run the relay, open its setup link on the phone |
+| **Your own relay** | Agents anywhere (or only your tailnet, see below) | Only you handle the requests | Yes, when it has a public HTTPS address | Run the relay, scan its QR code in PhoneBridge |
 | Same Wi-Fi (advanced) | Anyone on the same network | Unencrypted `http://` | No | Settings › Local server › All networks |
 | USB (developers) | The computer the phone is plugged into | Stays on the cable | No | `adb forward` |
 
@@ -80,9 +80,19 @@ long as it has an HTTPS address they can reach.
   [relay/README.md](../relay/README.md#deploy).
 * **On your computer, through Tailscale**: `./scripts/relay-tailscale.sh` (below).
 
-Then point the phone at it: open the relay's **setup link** on the phone (or scan its QR code) and
-tap **Open in PhoneBridge**, or type its address in *More ways to connect* › Your own relay, or in
-*Settings › How agents reach this phone* › Relay. Agents connected through the previous relay need
+Then point the phone at it. The relay prints a **setup link** and its QR code when it starts (its
+setup page, `https://<relay>/setup`, shows them too):
+
+* **Scan QR code in PhoneBridge**: in *More ways to connect* › Your own relay, or *Settings › How
+  agents reach this phone* › Relay, tap **Scan QR code** and point the camera at the code. The
+  scanner is Google Play services', so PhoneBridge needs no camera permission; on phones without
+  Google Play services the button is hidden.
+* Or open the setup link on the phone and tap **Open in PhoneBridge**, or paste the setup link (or
+  just the relay's address) into the Relay URL field there.
+
+Either way PhoneBridge shows **Connect to relay?** with the relay's address before it changes
+anything. A QR code that isn't a relay setup link (another web page, an agent's `/mcp` connection
+URL, `javascript:` and other schemes) is refused. Agents connected through the previous relay need
 the new connection URL.
 
 ### On your computer, with scripts/relay-tailscale.sh

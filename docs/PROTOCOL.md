@@ -403,7 +403,10 @@ link. The access key is read from the page URL **fragment** (`/setup#key=…`), 
 the server or its logs. On startup the relay prints the setup URL, with the fragment when
 `RELAY_ACCESS_KEY` is set, plus a terminal QR code. The app handles
 `phonebridge://configure?relay=…&key=…` (both values percent-encoded) by asking "Connect to relay
-<host>?" and then saving and connecting. When an access key is set, the page draws its QR code
+<host>?" and then saving and connecting. Its **Scan QR code** button (Google Play services' code
+scanner, no camera permission) reads the relay's QR code, i.e. the setup URL `…/setup[#key=…]`, and
+also accepts the `phonebridge://configure` link, its `intent://` form or a bare relay URL; it leads to
+the same "Connect to relay?" question, and anything else is refused. When an access key is set, the page draws its QR code
 through `POST /setup/qr` (`{"key"}` → SVG path; a wrong key gets 403 and counts as an auth failure),
 so the key never appears in a page served to someone who doesn't already have it.
 

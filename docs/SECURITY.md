@@ -95,6 +95,19 @@ Data scopes such as `contacts.read`, `messages.send` (SMS through the system API
 * **Pause, Revoke, Revoke all and Delete stop work that is already running.** Calls waiting for an
   unlock, an approval or the screen are cancelled. Their prompts are withdrawn, and each call is audited
   as `CANCELLED`. Tools re-check pause and token state after every wait and right before each side effect.
+* **You see when an agent is working.** While a tool call runs, one notification says which agent and
+  what it is doing ("Claude Code is using your phone" / "Sending WhatsApp to Tania Cohen"), then
+  *Approval needed* while its prompt is open, then Done, Failed or Stopped for 4 s. Read-only calls
+  appear after 1.5 s, anything that changes something at once. On Android 16 it asks to be a Live
+  Update with a status-bar chip. Its **Stop** ends that agent's running calls (prompts withdrawn,
+  audited `CANCELLED` "stopped by the user"; the agent keeps its access, and is told not to retry
+  unless asked); **Pause all** is the global pause. It shows only the agent's name, the tool's title
+  and a line the tool itself reports about its target (a recipient), never arguments, message text,
+  subjects or codes; that line is cleaned like prompt text and passes through *Hide one-time codes*
+  when it is on. It is `VISIBILITY_PRIVATE` (the lock screen shows only "An agent is using your
+  phone"), silent, local-only, and can be turned off (*Settings* › "Show when agents are working").
+  Like every PhoneBridge notification it is hidden from `screen_read` and its buttons can't be tapped
+  by screen tools, but it does not pause screen control: only approval and pairing prompts do.
 * **No self-approval.** While any approval or pairing prompt is pending or on screen, every screen-control
   gesture is refused. The check runs right before each tap, and hit-testing fails closed on windows that
   Android hides from accessibility. PhoneBridge's own notifications (including heads-up prompts) are removed
@@ -154,6 +167,10 @@ refused with an `isError` result and are audit-logged.
   have screen access.
 * In Doze, Android may delay network access for apps that aren't exempt from battery
   optimization. Grant the exemption in the setup screen. Push wakeups (FCM) are future work.
+* *Scan QR code* (relay setup) uses Google Play services' code scanner: Play services shows the
+  camera and hands PhoneBridge only the decoded text, so PhoneBridge has no camera permission. The
+  ML Kit client library it brings may send Google anonymous usage and diagnostics data under Google's
+  ML Kit terms. A scanned code is never applied without the "Connect to relay?" confirmation.
 * Accessibility gives the app broad power over every app. That is how "control any app" works,
   and also why scopes and confirmation exist.
 
