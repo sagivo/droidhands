@@ -1,7 +1,10 @@
 package dev.phonebridge.android.graph
 
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.ui.deeplink.ConfigureLinkResult
+import dev.phonebridge.android.ui.deeplink.ConfigureLinks
 import dev.phonebridge.android.ui.home.StatusPresentation
+import dev.phonebridge.android.ui.settings.SettingsForm
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -46,6 +49,16 @@ class DefaultRelayTest {
         // The user turned the default relay off later: it stays off.
         val turnedOff = DefaultRelay.applyOnFirstRun(fresh, default).copy(relayEnabled = false)
         assertSame(turnedOff, DefaultRelay.applyOnFirstRun(turnedOff, default))
+    }
+
+    @Test
+    fun anExplicitChoiceBeforeTheFirstRunCheckSticks() {
+        // A setup link on first launch (the first-run check waits for it), later cleared in Settings.
+        val link = ConfigureLinks.parse("phonebridge://configure?relay=https://mine.example.com") as ConfigureLinkResult.Valid
+        val linked = ConfigureLinks.applyTo(fresh, link.request)
+        val cleared = SettingsForm.from(linked).copy(relayEnabled = false, relayUrl = "").applyTo(linked)
+        assertFalse(DefaultRelay.somethingConfigured(cleared))
+        assertSame(cleared, DefaultRelay.applyOnFirstRun(cleared, default))
     }
 
     @Test

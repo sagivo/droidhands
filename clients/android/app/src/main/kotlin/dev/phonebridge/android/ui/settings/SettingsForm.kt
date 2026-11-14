@@ -47,11 +47,12 @@ data class SettingsForm(
     /**
      * Applies the edited fields to [current], keeping everything this form doesn't own (for example
      * the global access switch). A different relay URL is the user's own choice, so it no longer
-     * counts as the build's default relay. Call only when [validate] is valid.
+     * counts as the build's default relay, and any change to how the phone connects records the
+     * default-relay decision ([BridgeSettings.defaultRelayDecided]). Call only when [validate] is valid.
      */
     fun applyTo(current: BridgeSettings): BridgeSettings {
         val url = RelayUrls.normalize(relayUrl)
-        return current.copy(
+        val saved = current.copy(
             relayEnabled = relayEnabled,
             relayUrl = url,
             relayAccessKey = relayAccessKey.trim(),
@@ -61,6 +62,10 @@ data class SettingsForm(
             startOnBoot = startOnBoot,
             relayFromDefault = current.relayFromDefault && url == RelayUrls.normalize(current.relayUrl),
         )
+        // Choosing how to connect is the user's decision: the default relay must not switch itself on later.
+        val connectionChanged = saved.relayEnabled != current.relayEnabled || saved.relayUrl != current.relayUrl ||
+            saved.relayAccessKey != current.relayAccessKey || saved.localServerEnabled != current.localServerEnabled
+        return if (connectionChanged) saved.copy(defaultRelayDecided = true) else saved
     }
 
     /** True if saving would change [current]. */

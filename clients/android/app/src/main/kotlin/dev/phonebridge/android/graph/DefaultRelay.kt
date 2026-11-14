@@ -11,7 +11,9 @@ import dev.phonebridge.android.ui.settings.RelayUrls
  *
  * Rules: it is applied once per install, only when nothing is set up yet (no relay URL and no
  * local server), and it never replaces a relay the user chose. Choosing a relay (typing one,
- * opening a setup link, editing it in Settings) clears [BridgeSettings.relayFromDefault].
+ * opening a setup link, editing it in Settings) clears [BridgeSettings.relayFromDefault]. Any explicit
+ * connection choice (those, or the local server) also sets [BridgeSettings.defaultRelayDecided], so
+ * the default relay can't switch itself on later.
  */
 object DefaultRelay {
     /**

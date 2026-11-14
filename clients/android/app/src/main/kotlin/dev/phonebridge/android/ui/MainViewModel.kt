@@ -191,7 +191,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun connectRelay(url: String, accessKey: String) = io("Couldn't save the relay") {
         val normalized = RelayUrls.normalize(url)
         graph.settings.update {
-            it.copy(relayEnabled = true, relayUrl = normalized, relayAccessKey = accessKey.trim(), relayFromDefault = false)
+            it.copy(relayEnabled = true, relayUrl = normalized, relayAccessKey = accessKey.trim(), relayFromDefault = false, defaultRelayDecided = true)
         }
         graph.applySettings()
         _messages.send("Connecting to the relay…")
@@ -203,7 +203,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * user set up stays as it is.
      */
     fun enableLocalServer() = io("Couldn't start the local server") {
-        graph.settings.update { it.copy(localServerEnabled = true, relayEnabled = it.relayEnabled && !it.relayFromDefault) }
+        graph.settings.update {
+            it.copy(localServerEnabled = true, relayEnabled = it.relayEnabled && !it.relayFromDefault, defaultRelayDecided = true)
+        }
         graph.applySettings()
         _messages.send("Local server starting on port ${settings.value.localServerPort}…")
     }

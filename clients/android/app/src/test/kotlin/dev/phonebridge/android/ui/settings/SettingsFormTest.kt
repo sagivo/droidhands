@@ -88,6 +88,18 @@ class SettingsFormTest {
     }
 
     @Test
+    fun changingHowThePhoneConnectsRecordsTheDefaultRelayDecision() {
+        val undecided = base.copy(relayEnabled = true, relayUrl = "https://mine.example.com")
+        val form = SettingsForm.from(undecided)
+        assertFalse("an unchanged form still compares equal", form.differsFrom(undecided))
+        assertFalse(form.copy(startOnBoot = !undecided.startOnBoot).applyTo(undecided).defaultRelayDecided)
+        assertTrue(form.copy(relayEnabled = false).applyTo(undecided).defaultRelayDecided)
+        assertTrue(form.copy(relayUrl = "").applyTo(undecided).defaultRelayDecided)
+        assertTrue(form.copy(relayAccessKey = "k").applyTo(undecided).defaultRelayDecided)
+        assertTrue(form.copy(localServerEnabled = true).applyTo(undecided).defaultRelayDecided)
+    }
+
+    @Test
     fun whitespaceOnlyEditsAreNotChanges() {
         val current = base.copy(relayUrl = "https://relay.example.com")
         val form = SettingsForm.from(current).copy(relayUrl = "https://relay.example.com/ ")

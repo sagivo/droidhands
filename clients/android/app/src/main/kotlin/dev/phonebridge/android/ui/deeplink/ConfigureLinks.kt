@@ -87,11 +87,18 @@ object ConfigureLinks {
     fun applyTo(settings: BridgeSettings, request: ConfigureRequest): BridgeSettings {
         val sameRelay = RelayUrls.normalize(settings.relayUrl).equals(request.relayUrl, ignoreCase = true)
         val key = request.accessKey ?: if (sameRelay) settings.relayAccessKey else ""
-        return settings.copy(relayEnabled = true, relayUrl = request.relayUrl, relayAccessKey = key, relayFromDefault = false)
+        return settings.copy(
+            relayEnabled = true,
+            relayUrl = request.relayUrl,
+            relayAccessKey = key,
+            relayFromDefault = false,
+            defaultRelayDecided = true,
+        )
     }
 
-    /** True if accepting [request] would change nothing. */
-    fun isAlreadyApplied(settings: BridgeSettings, request: ConfigureRequest): Boolean = applyTo(settings, request) == settings
+    /** True if accepting [request] would change nothing (but record the default-relay decision). */
+    fun isAlreadyApplied(settings: BridgeSettings, request: ConfigureRequest): Boolean =
+        applyTo(settings, request) == settings.copy(defaultRelayDecided = true)
 
     internal fun hostOf(url: String): String? = try {
         val uri = URI(url)
