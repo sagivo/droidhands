@@ -146,9 +146,11 @@ is skipped. Set `RELAY_SECRET` once with `wrangler secret put` as above; deploys
 Clients see the same behavior; the conformance suite checks it. Operational differences:
 
 * Per-IP rate limits (requests, authentication failures) are counted per Worker instance, so they are
-  best effort: Cloudflare runs many instances. Per-phone limits (pairings, requests in flight, sockets
-  waiting for their hello) are exact, because they live in the phone's object. Cloudflare's own DDoS
-  protection sits in front.
+  best effort: Cloudflare runs many instances. Failed device hellos (wrong secret or access key) are
+  counted per phone and IP in the phone's object, and also block that IP's next connections to it.
+  Per-phone limits (pairings, requests in flight, sockets waiting for their hello) are exact, because
+  they live in the phone's object. Cloudflare's own DDoS protection sits in front. Use a long random
+  `RELAY_ACCESS_KEY` (as `openssl rand` makes): guessing is then hopeless at any rate.
 * Phones must send `?deviceId=` on the device URL. Apps from before that change are refused with
   "update the PhoneBridge app" (close code `4002`, so they stop retrying).
 * `pair_complete` is sent when the token is handed out (a Worker cannot see whether the response
