@@ -101,7 +101,7 @@ Gradle runs from `clients/android` and needs a JDK 17 and the Android SDK (`JAVA
 
 ```bash
 cd clients/android
-./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug
+./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleDebug
 ```
 
 CI runs the same commands, plus the relay's tests and build, on every push and pull request. The developer

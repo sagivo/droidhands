@@ -82,8 +82,8 @@ Now ask your agent: *"Send a WhatsApp to Tania saying I'm running 10 minutes lat
   active hours, or **Revoke** it. Revoking takes effect immediately.
 * **Apps.** Every app on the phone with what agents can do in it: *Integration* (a community
   plugin), *Local plugin* or *Basic* (what PhoneBridge found by itself), each action with its risk.
-  Tap an app to **Block it for all agents**, request a better integration, or create a plugin
-  draft to write one yourself ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+  Tap an app for **Block for all agents**, **Request a better integration**, or **Create plugin
+  draft** to write one yourself ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 * **Activity.** The full log of every request, filterable by agent and outcome.
 * **Pause.** One switch in the app, or *Pause* in the PhoneBridge notification, stops all agents.
 * **Security.** Settings → Security covers the global **never-allow apps** list (banking,
