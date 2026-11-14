@@ -21,7 +21,10 @@ export interface WorkerConfig {
   readonly relay: RelayConfig;
   /** HMAC key for stateless OAuth client ids (also keys the encryption of pairing state at rest). */
   readonly relaySecret: Buffer;
-  /** `APK_URL`: where the setup page's Install button points, or null. */
+  /**
+   * `APK_URL`: where the setup page's Install button points, or null. Validated by the Node relay's
+   * config (an http(s) URL without credentials or fragment), so both relays accept the same values.
+   */
   readonly apkUrl: string | null;
   /**
    * `HEARTBEAT_TIMEOUT_MS`: a device that sends heartbeats (§3.4) but has been silent this long is
@@ -32,8 +35,12 @@ export interface WorkerConfig {
   readonly prefix: string;
 }
 
-/** Setting a variable the Worker cannot honor is reported instead of silently ignored. */
-const UNSUPPORTED = ['ALLOW_IMPLICIT_DEVICE', 'TRUST_PROXY', 'DATA_DIR', 'PUBLIC_DIR'] as const;
+/**
+ * Setting a variable the Worker cannot honor is reported instead of silently ignored. `MAX_DEVICES`
+ * caps the Node relay's in-memory registry; here every phone has its own Durable Object, and there
+ * is no relay-wide count to check it against.
+ */
+const UNSUPPORTED = ['ALLOW_IMPLICIT_DEVICE', 'TRUST_PROXY', 'DATA_DIR', 'PUBLIC_DIR', 'MAX_DEVICES'] as const;
 
 const cache = new WeakMap<object, WorkerConfig | ConfigError>();
 
@@ -87,7 +94,7 @@ function parse(env: Env): WorkerConfig {
   return {
     relay,
     relaySecret: Buffer.from(base.relaySecret, 'utf8'),
-    apkUrl: apkUrl(strings.APK_URL),
+    apkUrl: relay.apkUrl,
     heartbeatTimeoutMs: int(strings, 'HEARTBEAT_TIMEOUT_MS') ?? HEARTBEAT_TIMEOUT_MS,
     prefix: relay.publicUrl === null ? '' : new URL(relay.publicUrl).pathname.replace(/\/+$/, ''),
   };
@@ -100,19 +107,4 @@ function int(env: Record<string, string>, name: string): number | undefined {
     throw new ConfigError(`${name} must be a positive integer, got "${value}"`);
   }
   return Number(value);
-}
-
-function apkUrl(value: string | undefined): string | null {
-  const trimmed = value?.trim();
-  if (trimmed === undefined || trimmed === '') return null;
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    throw new ConfigError(`APK_URL must be an absolute https URL, got "${trimmed}"`);
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new ConfigError(`APK_URL must use https, got "${url.protocol}"`);
-  }
-  return url.toString();
 }

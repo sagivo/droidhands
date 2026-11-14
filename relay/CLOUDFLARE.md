@@ -109,8 +109,10 @@ them); secrets are set with `npx wrangler secret put <NAME>`. The variables are 
 
 `REQUEST_TIMEOUT_MS`, `MAX_BODY_BYTES`, `MAX_INFLIGHT_PER_DEVICE`, `HELLO_TIMEOUT_MS`,
 `MAX_PENDING_HANDSHAKES[_PER_IP]`, `RATE_LIMIT_*`, `ALLOW_TOKEN_IN_URL`, `LOG_LEVEL` and
-`RELAY_ACCESS_KEY` work as on the Node relay. `TRUST_PROXY`, `DATA_DIR`, `PUBLIC_DIR` and
-`ALLOW_IMPLICIT_DEVICE` do not apply and are ignored (with a warning in the logs).
+`RELAY_ACCESS_KEY` work as on the Node relay. `TRUST_PROXY`, `DATA_DIR`, `PUBLIC_DIR`,
+`ALLOW_IMPLICIT_DEVICE` and `MAX_DEVICES` do not apply and are ignored (with a warning in the logs):
+every phone has its own Durable Object, so there is no relay-wide count of connected phones (see
+[Running a shared public relay](#running-a-shared-public-relay) for limiting a public Worker).
 `MAX_PENDING_HANDSHAKES[_PER_IP]` count per phone here (see below).
 
 Leave `ALLOW_TOKEN_IN_URL` off on Cloudflare unless you also turn off invocation logs: Cloudflare

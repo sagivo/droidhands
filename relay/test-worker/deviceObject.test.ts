@@ -6,7 +6,7 @@
 import { SELF, evictDurableObject, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { ConfigError } from '../src/config.js';
-import { workerConfig, type Env } from '../src/worker/config.js';
+import { unsupportedSettings, workerConfig, type Env } from '../src/worker/config.js';
 import {
   BASE,
   REDIRECT_URI,
@@ -234,16 +234,24 @@ describe('configuration', () => {
       /REQUEST_TIMEOUT_MS/,
     );
     expect(() => workerConfig({ RELAY_SECRET: 'x'.repeat(40), APK_URL: 'ftp://x' } as unknown as Env)).toThrow(/APK_URL/);
+    // The same APK_URL rules as the Node relay: no credentials or fragment.
+    expect(() => workerConfig({ RELAY_SECRET: 'x'.repeat(40), APK_URL: 'https://u:p@example.com/a.apk' } as unknown as Env)).toThrow(
+      /APK_URL/,
+    );
     const cfg = workerConfig({
       RELAY_SECRET: 'x'.repeat(40),
       PUBLIC_URL: 'https://relay.example.com/pb/',
       APK_URL: 'https://github.com/o/r/releases/latest/download/phonebridge.apk',
       TRUST_PROXY: 'true',
+      MAX_DEVICES: 'lots',
     } as unknown as Env);
     expect(cfg.relay.publicUrl).toBe('https://relay.example.com/pb');
     expect(cfg.prefix).toBe('/pb');
     expect(cfg.apkUrl).toBe('https://github.com/o/r/releases/latest/download/phonebridge.apk');
     expect(cfg.relay.trustProxy).toBe(false);
+    // MAX_DEVICES can't be enforced across Durable Objects: ignored (even when invalid) and reported.
+    expect(cfg.relay.maxDevices).toBe(1000);
+    expect(unsupportedSettings({ TRUST_PROXY: 'true', MAX_DEVICES: '5' } as unknown as Env)).toEqual(['TRUST_PROXY', 'MAX_DEVICES']);
     expect(cfg.heartbeatTimeoutMs).toBe(75_000);
   });
 
