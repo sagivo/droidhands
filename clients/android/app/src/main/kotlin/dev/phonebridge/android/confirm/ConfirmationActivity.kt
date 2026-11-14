@@ -3,9 +3,7 @@ package dev.phonebridge.android.confirm
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -21,8 +19,10 @@ import dev.phonebridge.android.ui.theme.PhoneBridgeTheme
  *
  * Deliberately NOT shown over the lock screen: approving requires an unlocked phone. If the
  * keyguard is up anyway when Allow is tapped, the approval only takes effect after the user
- * dismisses it. The window filters obscured touches (tapjacking) and, on Android 14+, is marked
- * accessibility-data-sensitive so non-tool accessibility services can't read or press it.
+ * dismisses it. The window is hardened with [applySecureWindow]: no screenshots or recording
+ * (FLAG_SECURE), other apps' overlays hidden on Android 12+, obscured touches filtered (tapjacking)
+ * and, on Android 14+, accessibility-data-sensitive so non-tool accessibility services can't read or
+ * press it.
  * Finishes when none of the requests it was opened for is pending any more.
  */
 class ConfirmationActivity : ComponentActivity() {
@@ -39,10 +39,7 @@ class ConfirmationActivity : ComponentActivity() {
             finish()
             return
         }
-        window.decorView.filterTouchesWhenObscured = true
-        if (Build.VERSION.SDK_INT >= 34) {
-            window.decorView.setAccessibilityDataSensitive(View.ACCESSIBILITY_DATA_SENSITIVE_YES)
-        }
+        applySecureWindow()
         setContent {
             PhoneBridgeTheme {
                 val pending by provider.pendingRequests.collectAsStateWithLifecycle()

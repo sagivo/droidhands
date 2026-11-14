@@ -23,8 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -46,9 +46,10 @@ internal fun ConfirmationScreen(
     onAllow: () -> Unit,
     onDeny: () -> Unit,
 ) {
-    val now by produceState(System.currentTimeMillis(), expiresAt) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(expiresAt) {
         while (true) {
-            value = System.currentTimeMillis()
+            now = System.currentTimeMillis()
             delay(250)
         }
     }

@@ -48,6 +48,12 @@ class NotificationConfirmationProvider(
     /** Pending requests (oldest first) — the UI may show them in-app too. */
     val pendingRequests: StateFlow<List<ConfirmationRequest>> get() = registry.requests
 
+    /**
+     * True while an approval prompt is waiting for the user. UI-automation tools use it to stay off
+     * the screen meanwhile (the prompt may be showing, and agents must never operate it).
+     */
+    val hasPendingConfirmation: StateFlow<Boolean> get() = registry.hasPending
+
     fun pending(id: String): ConfirmationRequest? = registry[id]?.request
 
     /** Epoch millis when the server stops waiting for [id], or null if it is not pending. */

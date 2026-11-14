@@ -104,6 +104,18 @@ class PendingConfirmationsTest {
     }
 
     @Test
+    fun hasPendingFollowsTheRegistrations() {
+        assertFalse(registry.hasPending.value)
+        val a = registry.register(request("a"), 60_000)!!
+        val b = registry.register(request("b"), 60_000)!!
+        assertTrue(registry.hasPending.value)
+        registry.remove(a)
+        assertTrue("b is still waiting", registry.hasPending.value)
+        registry.remove(b)
+        assertFalse(registry.hasPending.value)
+    }
+
+    @Test
     fun denyAllDeniesEveryPendingRequest() = runTest {
         val a = registry.register(request("a"), 60_000)!!
         val b = registry.register(request("b"), 60_000)!!

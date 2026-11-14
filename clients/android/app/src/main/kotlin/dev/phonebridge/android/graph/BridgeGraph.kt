@@ -10,6 +10,8 @@ import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.confirm.NotificationConfirmationProvider
 import dev.phonebridge.android.notify.BridgeNotificationListener
+import dev.phonebridge.android.pairing.PairingCoordinator
+import dev.phonebridge.android.pairing.PairingNotifications
 import dev.phonebridge.android.service.BridgeService
 import dev.phonebridge.android.service.CoreTransports
 import dev.phonebridge.android.service.NetworkAddresses
@@ -17,17 +19,22 @@ import dev.phonebridge.android.service.StatusText
 import dev.phonebridge.android.service.TransportConfig
 import dev.phonebridge.android.service.TransportController
 import dev.phonebridge.android.service.WakeLockedHandler
+import dev.phonebridge.android.settings.SecurityDefaults
+import dev.phonebridge.android.settings.SensitiveApps
 import dev.phonebridge.android.settings.SettingsRepository
 import dev.phonebridge.android.tools.AndroidToolCatalog
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.audit.AuditLog
 import dev.phonebridge.core.audit.FileAuditLog
+import dev.phonebridge.core.audit.TrackingAuditLog
+import dev.phonebridge.core.audit.UsageTracker
 import dev.phonebridge.core.auth.DeviceIdentity
 import dev.phonebridge.core.auth.FileTokenStore
 import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.mcp.McpServer
 import dev.phonebridge.core.mcp.ServerInfo
 import dev.phonebridge.core.mcp.capabilitiesTool
+import dev.phonebridge.core.policy.GlobalSecurity
 import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.ToolRegistry
 import dev.phonebridge.core.transport.RelayStatus
@@ -39,6 +46,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.time.ZoneId
 
 sealed interface LocalServerStatus {
     data object Stopped : LocalServerStatus
@@ -68,7 +76,13 @@ class BridgeGraph private constructor(val app: Application) {
         TokenManager(FileTokenStore(File(app.filesDir, TOKENS_FILE)), identity.deviceId)
     }
 
-    val audit: AuditLog by lazy { FileAuditLog(File(app.filesDir, AUDIT_FILE)) }
+    private val usageLazy = lazy { UsageTracker(File(app.filesDir, USAGE_FILE)) }
+
+    /** Per-agent usage counters (calls per tool and per day), fed by [audit]; kept beyond the audit ring buffer. */
+    val usage: UsageTracker by usageLazy
+
+    /** The persisted audit log; every entry also updates [usage]. */
+    val audit: AuditLog by lazy { TrackingAuditLog(FileAuditLog(File(app.filesDir, AUDIT_FILE)), usage) }
 
     val registry: ToolRegistry by lazy {
         ToolRegistry().also { registry ->
@@ -80,18 +94,43 @@ class BridgeGraph private constructor(val app: Application) {
 
     val confirmations: NotificationConfirmationProvider by lazy { NotificationConfirmationProvider(app) }
 
+    /**
+     * One-tap agent pairing (docs/PROTOCOL.md §5): answers the relay's pair requests, shows the
+     * prompt, mints the agent's token. Its [PairingCoordinator.pendingPairings] feed the Home card.
+     */
+    val pairing: PairingCoordinator by lazy {
+        PairingCoordinator(
+            tokens = { tokenManager },
+            prompts = PairingNotifications(app),
+            isLocked = { DeviceState.isLocked(app) },
+            scope = appScope,
+            log = { message, error -> Log.w(TAG, message, error) },
+        )
+    }
+
     val mcpServer: McpServer by lazy {
         McpServer(
             registry = registry,
             tokens = tokenManager,
-            policy = PolicyEngine(),
+            policy = PolicyEngine(zone = { ZoneId.systemDefault() }),
             confirmations = confirmations,
             audit = audit,
             serverInfo = ServerInfo("phonebridge-android", BuildConfig.VERSION_NAME, "PhoneBridge (Android)"),
             instructions = AgentInstructions.TEXT,
             isAccessEnabled = { settings.state.value.accessEnabled },
             confirmationTimeoutMs = NotificationConfirmationProvider.DEFAULT_TIMEOUT_MS,
+            globalSecurity = ::globalSecurity,
         )
+    }
+
+    /**
+     * Device-wide security settings for the current call: the user's never-allow list plus
+     * PhoneBridge itself (agents may never operate it), and one-time-code masking. Read per call, so
+     * changes apply to the next tool call without a restart.
+     */
+    fun globalSecurity(): GlobalSecurity {
+        val current = settings.state.value
+        return GlobalSecurity(neverAllowApps = current.neverAllowApps + app.packageName, redactOneTimeCodes = current.redactOneTimeCodes)
     }
 
     private val _relayStatus = MutableStateFlow<RelayStatus>(RelayStatus.Stopped)
@@ -118,7 +157,7 @@ class BridgeGraph private constructor(val app: Application) {
         TransportController(
             scope = appScope,
             settings = { settings.state.value },
-            relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle),
+            relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle, pairingHandler = { pairing }),
             localFactory = CoreTransports.localFactory(requestHandler::handle),
             lanAddresses = NetworkAddresses::nonLoopbackIpv4,
             onRelayStatus = ::updateRelayStatus,
@@ -133,7 +172,42 @@ class BridgeGraph private constructor(val app: Application) {
         } catch (e: RuntimeException) {
             Log.w(TAG, "Could not create notification channels", e)
         }
+        app.registerComponentCallbacks(FlushOnTrim(::flushUsage))
         appScope.launch { warmUp() }
+    }
+
+    /**
+     * Saves a `phonebridge://configure` link's relay settings (relay on, its URL and access key) and
+     * (re)connects. The caller must have asked the user first ("Connect to relay <host>?"): the link
+     * comes from outside the app.
+     */
+    fun applyConfigureLink(link: ConfigureLink) {
+        settings.update { it.copy(relayEnabled = true, relayUrl = link.relayUrl, relayAccessKey = link.accessKey) }
+        applySettings()
+    }
+
+    /** Persists pending usage counters in the background (service stop, memory trim). No-op if never loaded. */
+    fun flushUsage() {
+        if (!usageLazy.isInitialized()) return
+        appScope.launch {
+            try {
+                usage.flush()
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not save usage counters", e)
+            }
+        }
+    }
+
+    /**
+     * First run (or first run after an update that added it): blocks installed banking, payment,
+     * crypto, password-manager and authenticator apps for every agent, once. If the scan fails the
+     * flag stays unset and it is retried on the next start. Blocking; runs during [warmUp].
+     */
+    private fun applySecurityDefaultsIfNeeded() {
+        if (settings.state.value.securityDefaultsApplied) return
+        val detected = SensitiveApps.suggest(app).map { it.packageName }
+        settings.update { SecurityDefaults.apply(it, detected) }
+        Log.i(TAG, "Security defaults applied: ${detected.size} sensitive apps blocked for agents")
     }
 
     /** Starts/stops/restarts BridgeService so that it matches current settings. Call after settings changes. */
@@ -231,8 +305,10 @@ class BridgeGraph private constructor(val app: Application) {
         // Each step is independent: a failure is logged and retried on first real use.
         listOf<Pair<String, () -> Any>>(
             "settings" to { settings },
+            "security defaults" to ::applySecurityDefaultsIfNeeded,
             "identity" to { identity },
             "tokens" to { tokenManager },
+            "usage" to { usage },
             "audit" to { audit },
         ).forEach { (name, init) ->
             try {
@@ -247,6 +323,7 @@ class BridgeGraph private constructor(val app: Application) {
         private const val TAG = "PhoneBridge/Graph"
         private const val TOKENS_FILE = "tokens.json"
         private const val AUDIT_FILE = "audit.jsonl"
+        private const val USAGE_FILE = "usage.json"
 
         @Volatile
         private var _instance: BridgeGraph? = null

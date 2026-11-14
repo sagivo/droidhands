@@ -37,8 +37,12 @@ class PendingConfirmations(
     private val entries = ConcurrentHashMap<String, PendingConfirmation>()
     private val sequence = AtomicLong()
     private val _requests = MutableStateFlow<List<ConfirmationRequest>>(emptyList())
+    private val _hasPending = MutableStateFlow(false)
 
     val requests: StateFlow<List<ConfirmationRequest>> = _requests.asStateFlow()
+
+    /** True while at least one request waits for the user (published together with [requests]). */
+    val hasPending: StateFlow<Boolean> = _hasPending.asStateFlow()
 
     /** Registers [request]; returns null (fail closed) if a request with the same id is already pending. */
     fun register(request: ConfirmationRequest, timeoutMs: Long): PendingConfirmation? {
@@ -88,7 +92,9 @@ class PendingConfirmations(
 
     // Recomputed from the map under a lock, so the last publisher always reflects the latest state.
     private fun publish() = synchronized(this) {
-        _requests.value = all().map { it.request }
+        val pending = all().map { it.request }
+        _requests.value = pending
+        _hasPending.value = pending.isNotEmpty()
     }
 
     private fun newNonce(): String {

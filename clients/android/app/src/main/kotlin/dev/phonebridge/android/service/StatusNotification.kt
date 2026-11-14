@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import dev.phonebridge.android.R
 import dev.phonebridge.android.graph.Channels
+import dev.phonebridge.android.graph.NotificationGroups
 import dev.phonebridge.android.ui.MainActivity
 
 /** Builds the BridgeService foreground notification from [StatusNotificationContent]. */
@@ -39,6 +40,8 @@ internal object StatusNotification {
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            // Own group, like every PhoneBridge notification, so Android never auto-groups them together.
+            .setGroup(NotificationGroups.STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setPublicVersion(publicVersion)
             // Show right away: the user should always see when agents can reach the phone.
