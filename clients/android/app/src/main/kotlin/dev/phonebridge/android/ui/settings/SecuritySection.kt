@@ -1,107 +1,103 @@
 package dev.phonebridge.android.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
+import dev.phonebridge.android.ui.components.Accents
+import dev.phonebridge.android.ui.components.IconRowInset
+import dev.phonebridge.android.ui.components.IconTile
+import dev.phonebridge.android.ui.components.ListDivider
+import dev.phonebridge.android.ui.components.ListRow
+import dev.phonebridge.android.ui.components.ListSection
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.setup.SetupUiState
 
-/** "Permissions & access": progress of the setup checklist; opens it. */
+/**
+ * "Permissions & access" row: progress of the setup checklist, with a green tile once the
+ * essentials are done and an orange one while one is missing; opens the checklist.
+ */
 @Composable
 internal fun PermissionsRow(setup: SetupUiState, onOpen: () -> Unit) {
-    OutlinedCard(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Permissions & special access", style = MaterialTheme.typography.bodyLarge)
-                val text = when {
-                    !setup.loaded -> "Checking…"
-                    setup.progress.essentialComplete -> "${setup.progress.done} of ${setup.progress.total} granted · essentials done"
-                    else -> "${setup.progress.done} of ${setup.progress.total} granted · ${setup.progress.essentialMissing.size} essential missing"
-                }
-                Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (setup.loaded) {
-                    LinearProgressIndicator(
-                        progress = { setup.progress.fraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp)
-                            .semantics { contentDescription = text },
-                    )
-                }
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open permissions")
-        }
+    val progress = setup.progress
+    val text = when {
+        !setup.loaded -> "Checking…"
+        progress.essentialComplete -> "${progress.done} of ${progress.total} granted · essentials done"
+        else -> "${progress.done} of ${progress.total} granted · ${progress.essentialMissing.size} essential missing"
     }
+    val (icon, color) = when {
+        !setup.loaded -> Icons.Filled.CheckCircle to Accents.Gray
+        progress.essentialComplete -> Icons.Filled.CheckCircle to Accents.Green
+        else -> Icons.Filled.Warning to Accents.Orange
+    }
+    ListRow(
+        title = "Permissions & access",
+        subtitle = text,
+        leading = { IconTile(icon, color) },
+        onClick = onOpen,
+    )
 }
 
-/** Device-wide protections that apply to every agent. */
+/** Device-wide protections that apply to every agent: never-allow apps and hidden one-time codes. */
 @Composable
 internal fun SecuritySection(
     neverAllowCount: Int,
     redactOneTimeCodes: Boolean,
-    activeAgents: Int,
     onOpenNeverAllow: () -> Unit,
     onRedactChange: (Boolean) -> Unit,
-    onRevokeAll: () -> Unit,
 ) {
-    SettingsCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Never-allow apps", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    when (neverAllowCount) {
-                        0 -> "None. Agents may use any app their access allows."
-                        1 -> "1 app no agent can see or operate"
-                        else -> "$neverAllowCount apps no agent can see or operate"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            OutlinedButton(onClick = onOpenNeverAllow) { Text("Choose") }
-        }
-        HorizontalDivider()
+    ListSection(
+        title = "Security",
+        footer = "With hidden codes, verification and 2FA codes in SMS and notifications reach agents as [code hidden], " +
+            "so a tricked agent can't use them to take over your accounts. Screen reading and screenshots can still " +
+            "show a code that is on screen: add your SMS and authenticator apps to Never-allow apps.",
+    ) {
+        ListRow(
+            title = "Never-allow apps",
+            subtitle = when (neverAllowCount) {
+                0 -> "None. Agents may use any app their access allows."
+                1 -> "1 app no agent can see or operate"
+                else -> "$neverAllowCount apps no agent can see or operate"
+            },
+            leading = { IconTile(Icons.Filled.Clear, Accents.Orange) },
+            onClick = onOpenNeverAllow,
+        )
+        ListDivider(IconRowInset)
         SwitchRow(
             title = "Hide one-time codes",
-            subtitle = "Verification and 2FA codes in SMS and notifications are shown to agents as [code hidden], so a " +
-                "tricked agent can't use them to take over your accounts. Recommended. Screen reading and screenshots " +
-                "can still show a code that is on screen: add your SMS and authenticator apps to Never-allow apps.",
+            subtitle = "Recommended. Agents see [code hidden] instead.",
             checked = redactOneTimeCodes,
             onCheckedChange = onRedactChange,
+            leading = { IconTile(Icons.Filled.Lock, Accents.Orange) },
         )
-        HorizontalDivider()
-        Text(
-            "Lock every agent out at once, for example if you think one misbehaved.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedButton(
+    }
+}
+
+/**
+ * "Revoke all agents", last on Settings in its own section: locks every agent out at once. The
+ * caller's confirmation dialog runs before anything is revoked. Disabled without active agents.
+ */
+@Composable
+internal fun RevokeAllSection(activeAgents: Int, onRevokeAll: () -> Unit) {
+    val enabled = activeAgents > 0
+    val scheme = MaterialTheme.colorScheme
+    ListSection(footer = "Lock every agent out at once, for example if you think one misbehaved.") {
+        ListRow(
+            title = "Revoke all agents",
+            subtitle = when (activeAgents) {
+                0 -> "No active agents"
+                1 -> "1 active agent"
+                else -> "$activeAgents active agents"
+            },
+            leading = { IconTile(Icons.Filled.Close, if (enabled) Accents.Red else Accents.Gray) },
+            titleColor = if (enabled) scheme.error else scheme.onSurfaceVariant,
             onClick = onRevokeAll,
-            enabled = activeAgents > 0,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-        ) { Text(if (activeAgents > 0) "Revoke all agents ($activeAgents)" else "No active agents") }
+            enabled = enabled,
+            showChevron = false,
+        )
     }
 }

@@ -1,16 +1,9 @@
 package dev.phonebridge.android.ui.settings
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,7 +17,10 @@ import dev.phonebridge.android.ui.apps.AppPickerList
 import dev.phonebridge.android.ui.components.BottomActionBar
 import dev.phonebridge.android.ui.components.ConfirmDialog
 import dev.phonebridge.android.ui.components.Notice
+import dev.phonebridge.android.ui.components.PrimaryButton
 import dev.phonebridge.android.ui.components.ScreenScaffold
+import dev.phonebridge.android.ui.components.SecondaryButton
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.padded
 
 /**
@@ -49,19 +45,15 @@ fun NeverAllowScreen(vm: SettingsViewModel, onBack: () -> Unit) {
 
     ScreenScaffold(
         title = "Never-allow apps",
-        navigationIcon = {
-            IconButton(onClick = { if (dirty) confirmLeave = true else onBack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
-        },
+        onBack = { if (dirty) confirmLeave = true else onBack() },
         bottomBar = {
             if (dirty) {
                 BottomActionBar {
-                    TextButton(onClick = { selection = ArrayList(saved) }) { Text("Discard") }
-                    Button(onClick = {
+                    TertiaryButton("Discard", onClick = { selection = ArrayList(saved) })
+                    PrimaryButton("Save", onClick = {
                         vm.saveNeverAllowApps(selected)
                         onBack()
-                    }) { Text("Save") }
+                    })
                 }
             }
         },
@@ -76,17 +68,23 @@ fun NeverAllowScreen(vm: SettingsViewModel, onBack: () -> Unit) {
             suggested = suggested,
             header = {
                 item(key = "intro") {
-                    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Notice(
-                            "No agent can read, open or operate these apps, or see their notifications, whatever its own " +
-                                "settings say. PhoneBridge itself is always protected.",
-                        )
-                        if (missingSuggestions.isNotEmpty()) {
-                            TextButton(onClick = { selection = ArrayList(selected + missingSuggestions) }) {
-                                Text("Add all ${missingSuggestions.size} suggested")
+                    Notice(
+                        "No agent can read, open or operate these apps, or see their notifications, whatever its own " +
+                            "settings say. PhoneBridge itself is always protected.",
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        action = if (missingSuggestions.isNotEmpty()) {
+                            {
+                                SecondaryButton(
+                                    "Add all ${missingSuggestions.size} suggested",
+                                    onClick = { selection = ArrayList(selected + missingSuggestions) },
+                                    icon = Icons.Filled.Add,
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
                             }
-                        }
-                    }
+                        } else {
+                            null
+                        },
+                    )
                 }
             },
         )
