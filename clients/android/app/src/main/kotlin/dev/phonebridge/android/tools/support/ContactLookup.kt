@@ -1,7 +1,20 @@
 package dev.phonebridge.android.tools.support
 
+import android.Manifest
 import android.content.Context
+import dev.phonebridge.android.tools.comms.CONTACTS_ACCESS_DENIED
+import dev.phonebridge.android.tools.comms.ContactsRepository
+import dev.phonebridge.android.tools.comms.E164Formatter
+import dev.phonebridge.android.tools.comms.RecipientResolver
+import dev.phonebridge.android.tools.comms.WhatsAppRows
+import dev.phonebridge.android.tools.comms.withProviderAccess
+import dev.phonebridge.core.tools.ToolException
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 data class PhoneEntry(
     /** As stored in contacts. */
@@ -44,11 +57,21 @@ data class Recipient(
 /**
  * Contact search + recipient resolution shared by contacts/SMS/call/WhatsApp tools.
  *
- * STUB — implemented by the comms agent.
+ * All functions block on ContentResolver IPC: call them from `Dispatchers.IO`. Failures the agent
+ * can act on (missing permission, no or several matching contacts, no usable number) are thrown
+ * as [ToolException]. Matching logic: [dev.phonebridge.android.tools.comms.NameMatching]; selection
+ * rules: [dev.phonebridge.android.tools.comms.RecipientSelection].
  */
 object ContactLookup {
+    private const val MAX_LIMIT = 200
+
     /** Exact/prefix matches first, then fuzzy & transliteration-tolerant. Requires READ_CONTACTS. */
-    fun search(context: Context, query: String, limit: Int = 10): List<ContactMatch> = TODO()
+    fun search(context: Context, query: String, limit: Int = 10): List<ContactMatch> {
+        Perms.require(context, Manifest.permission.READ_CONTACTS)
+        return withProviderAccess(CONTACTS_ACCESS_DENIED) {
+            ContactsRepository(context).search(query, limit.coerceIn(1, MAX_LIMIT))
+        }
+    }
 
     /**
      * Resolves a target from tool args. Exactly one of [to] (phone number) / [contact] (name) must be
@@ -56,16 +79,44 @@ object ContactLookup {
      * that contact must have a usable number (prefers WhatsApp numbers when [preferWhatsApp], else mobile;
      * ambiguous multiple mobiles → ToolException listing them so the agent can pass `to`).
      */
-    fun resolveRecipient(context: Context, to: String?, contact: String?, preferWhatsApp: Boolean = false): Recipient = TODO()
+    fun resolveRecipient(context: Context, to: String?, contact: String?, preferWhatsApp: Boolean = false): Recipient =
+        RecipientResolver(context).resolve(to, contact, preferWhatsApp)
 
-    fun toJson(match: ContactMatch): JsonObject = TODO()
+    /**
+     * `{id,name,phones:[{number,type,normalized}],emails,whatsapp:[{number,jid,business?}],starred}`.
+     * WhatsApp numbers are given with '+' so they can be passed back as `to` unambiguously.
+     */
+    fun toJson(match: ContactMatch): JsonObject = buildJsonObject {
+        put("id", match.id)
+        put("name", match.name)
+        putJsonArray("phones") {
+            for (phone in match.phones) {
+                addJsonObject {
+                    put("number", phone.number)
+                    put("type", phone.type)
+                    phone.normalized?.let { put("normalized", it) }
+                }
+            }
+        }
+        putJsonArray("emails") { match.emails.forEach { add(it) } }
+        putJsonArray("whatsapp") {
+            for (entry in match.whatsapp) {
+                addJsonObject {
+                    put("number", "+" + entry.number)
+                    put("jid", entry.jid)
+                    if (entry.packageName == WhatsAppRows.BUSINESS_PACKAGE) put("business", true)
+                }
+            }
+        }
+        put("starred", match.starred)
+    }
 }
 
-/** Phone-number normalization using the SIM/network country as default region. STUB — comms agent. */
+/** Phone-number normalization using the network/SIM country as default region. */
 object PhoneNumbers {
     /** Best-effort E.164 ("+972541234567") or null if it can't be determined. */
-    fun toE164(context: Context, raw: String): String? = TODO()
+    fun toE164(context: Context, raw: String): String? = E164Formatter.toE164(context, raw)
 
     /** International digits without '+' (WhatsApp wa.me format), or null. */
-    fun toWhatsAppDigits(context: Context, raw: String): String? = TODO()
+    fun toWhatsAppDigits(context: Context, raw: String): String? = toE164(context, raw)?.removePrefix("+")
 }
