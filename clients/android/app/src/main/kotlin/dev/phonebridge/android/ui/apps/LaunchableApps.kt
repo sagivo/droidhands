@@ -4,12 +4,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.util.Log
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -60,24 +62,39 @@ internal object LaunchableApps {
             pm.queryIntentActivities(intent, 0)
         }
 
-    /** Cached icon of [packageName], or null if it has none / isn't installed. */
-    fun cachedIcon(packageName: String): ImageBitmap? = icons.get(packageName)
+    /** Cached icon of [packageName] drawn at [sizePx], or null if it isn't loaded (yet). */
+    fun cachedIcon(packageName: String, sizePx: Int): ImageBitmap? = icons.get(iconKey(packageName, sizePx))
 
-    /** Loads (and caches) the icon of [packageName] at [sizePx]; null if unavailable. */
+    /**
+     * Loads (and caches) the launcher icon of [packageName] drawn at [sizePx]; null if the app is gone or its
+     * icon can't be drawn. Drawn into a software bitmap from a fresh copy of the drawable, so the system's
+     * shared icon instance is never resized.
+     */
     suspend fun icon(context: Context, packageName: String, sizePx: Int): ImageBitmap? {
-        icons.get(packageName)?.let { return it }
+        val key = iconKey(packageName, sizePx)
+        icons.get(key)?.let { return it }
         return withContext(Dispatchers.IO) {
             try {
                 val drawable = context.packageManager.getApplicationIcon(packageName)
-                drawable.toBitmap(sizePx, sizePx).asImageBitmap().also { icons.put(packageName, it) }
+                rasterize(drawable, sizePx).asImageBitmap().also { icons.put(key, it) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: PackageManager.NameNotFoundException) {
                 null
             } catch (e: RuntimeException) {
-                Log.w(TAG, "Loading an app icon failed: ${e.javaClass.name}")
+                Log.w(TAG, "Loading the icon of $packageName failed: ${e.javaClass.name}: ${e.message}")
                 null
             }
         }
+    }
+
+    private fun iconKey(packageName: String, sizePx: Int) = "$packageName@$sizePx"
+
+    private fun rasterize(icon: Drawable, sizePx: Int): Bitmap {
+        val drawable = icon.constantState?.newDrawable()?.mutate() ?: icon
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, sizePx, sizePx)
+        drawable.draw(Canvas(bitmap))
+        return bitmap
     }
 }
