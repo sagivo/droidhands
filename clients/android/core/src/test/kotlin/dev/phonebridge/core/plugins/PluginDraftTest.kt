@@ -214,6 +214,17 @@ class PluginDraftTest {
     }
 
     @Test
+    fun scalarsArePlainOnlyWhenYamlReadsThemBackAsTheSameString() {
+        for (plain in listOf("Play music", "android.intent.action.SEND", ".share.ShareActivity", "text/plain", "vnd.android.cursor.item/*", "send to")) {
+            assertEquals(plain, PluginDraft.scalar(plain))
+        }
+        for (tricky in listOf("true", "No", "null", ".5", ".inf", ".NaN", "1.0", "a: b", "x #y", "-dash", "[list]", "it's", "Ünïcode", "")) {
+            assertEquals(PluginDraft.quoted(tricky), PluginDraft.scalar(tricky), tricky)
+            assertEquals(tricky, (PluginYaml.load("k: ${PluginDraft.scalar(tricky)}") as kotlinx.serialization.json.JsonObject)["k"]!!.let { (it as JsonPrimitive).content })
+        }
+    }
+
+    @Test
     fun quotedEscapesWhatYamlWouldMisread() {
         assertEquals("\"a\\\"b\\\\c\\nd\\u0001\"", PluginDraft.quoted("a\"b\\c\nd\u0001"))
         assertEquals("\"שלום\"", PluginDraft.quoted("שלום"))

@@ -334,7 +334,8 @@ object PluginDraft {
     }
 
     /** A plain scalar when it can't be misread (no YAML indicators, not a number, boolean or null), else [quoted]. */
-    private fun scalar(text: String): String = if (PLAIN.matches(text) && text.lowercase(Locale.ROOT) !in RESERVED) text else quoted(text)
+    fun scalar(text: String): String =
+        if (PLAIN.matches(text) && text.lowercase(Locale.ROOT) !in RESERVED && !NUMBERISH.containsMatchIn(text)) text else quoted(text)
 
     /** Mapping keys: plain when safe, else quoted. */
     private fun key(text: String): String = scalar(text)
@@ -373,6 +374,9 @@ object PluginDraft {
     /** Words, ids and dotted names; a leading `.` is fine (relative class names). No `:`, `#`, quotes or flow indicators. */
     private val PLAIN = Regex("^[A-Za-z.][A-Za-z0-9 _./+\\-]*[A-Za-z0-9_*]$|^[A-Za-z]$")
     private val RESERVED = setOf("true", "false", "null", "yes", "no", "on", "off", "y", "n", "~")
+
+    /** YAML floats a plain scalar starting with `.` could be read as: `.5`, `.inf`, `.NaN`. */
+    private val NUMBERISH = Regex("^\\.([0-9]|inf$|nan$)", RegexOption.IGNORE_CASE)
     private val DIACRITICS = Regex("\\p{Mn}+")
     private val NON_ALNUM = Regex("[^a-z0-9]+")
     private val WHITESPACE = Regex("\\s+")
