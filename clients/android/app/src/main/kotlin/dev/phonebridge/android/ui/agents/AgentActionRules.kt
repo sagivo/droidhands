@@ -3,32 +3,19 @@ package dev.phonebridge.android.ui.agents
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -37,45 +24,49 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.ui.apps.ActionInfo
 import dev.phonebridge.android.ui.apps.AppIcon
+import dev.phonebridge.android.ui.components.Accents
+import dev.phonebridge.android.ui.components.AppsIcon
+import dev.phonebridge.android.ui.components.CardPadding
+import dev.phonebridge.android.ui.components.IconTile
+import dev.phonebridge.android.ui.components.ListRow
 import dev.phonebridge.core.auth.ConfirmPolicy
 
+/** Explanation under the app action rules list. */
+internal const val ACTION_RULES_FOOTER =
+    "Allow, Ask or Block single actions of an app, such as Spotify's \"Play music\". Agents run them with app_action_run."
+
 /**
- * Header of the per-action rules: app actions are grouped by app and collapsed, so the list stays short;
- * the rows are separate list items ([ActionRulesSearch], [ActionGroupHeader], [ActionRuleRow]).
+ * First row of the per-action rules: the rules in force, and a toggle that shows the apps. App actions are
+ * grouped by app and collapsed, so the list stays short; the rows are separate list items
+ * ([ActionRulesSearch], [ActionGroupHeader], [ActionRuleRow]). Says why when the agent can't run actions.
  */
 @Composable
-internal fun ActionRulesHeader(summary: String, available: Boolean, loading: Boolean, appCount: Int, expanded: Boolean, onToggle: () -> Unit) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("App action rules", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Allow, Ask or Block single actions of an app, such as Spotify's \"Play music\". Agents run them with " +
-                    "app_action_run.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            when {
-                !available -> Text(
-                    "This agent can't run app actions: it needs the Apps capability and an access level above Read-only " +
-                        "(and no Block rule on app_action_run).",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                else -> {
-                    Text(summary, style = MaterialTheme.typography.bodyMedium)
-                    OutlinedButton(onClick = onToggle, enabled = appCount > 0) {
-                        Text(
-                            when {
-                                appCount == 0 && loading -> "Loading apps…"
-                                appCount == 0 -> "No app actions available"
-                                expanded -> "Hide app actions"
-                                else -> "Edit rules (${if (appCount == 1) "1 app" else "$appCount apps"})"
-                            },
-                        )
-                    }
-                }
-            }
-        }
+internal fun ActionRulesToggleRow(summary: String, available: Boolean, loading: Boolean, appCount: Int, expanded: Boolean, onToggle: () -> Unit) {
+    if (!available) {
+        ListRow(
+            title = "Not available for this agent",
+            subtitle = "It needs the Apps capability and an access level above Read-only (and no Block rule on app_action_run).",
+            leading = { IconTile(AppsIcon, Accents.Gray) },
+        )
+        return
     }
+    ListRow(
+        title = when {
+            appCount == 0 && loading -> "Loading apps…"
+            appCount == 0 -> "No app actions available"
+            expanded -> "Hide app actions"
+            else -> "Edit rules"
+        },
+        subtitle = summary,
+        leading = { IconTile(AppsIcon, Accents.Purple) },
+        trailing = if (appCount > 0) {
+            { ExpandValue(if (appCount == 1) "1 app" else "$appCount apps", expanded) }
+        } else {
+            null
+        },
+        onClick = if (appCount > 0) onToggle else null,
+        modifier = if (appCount > 0) Modifier.semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" } else Modifier,
+    )
 }
 
 /** Search over app names and action titles inside the expanded list. */
@@ -93,37 +84,37 @@ internal fun ActionRulesSearch(query: String, onQueryChange: (String) -> Unit) {
         },
         singleLine = true,
         keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Search),
-        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = CardPadding, vertical = 12.dp),
     )
 }
 
 /** One app in the list: icon, name, "3 actions · 1 rule"; tap to show or hide its actions. */
 @Composable
 internal fun ActionGroupHeader(group: ActionRuleGroup, expanded: Boolean, onToggle: () -> Unit) {
-    Row(
+    ListRow(
+        title = group.label,
+        subtitle = ActionRules.groupSubtitle(group),
+        subtitleMaxLines = 1,
+        leading = { AppIcon(group.packageName) },
+        trailing = { ExpandValue(null, expanded) },
         modifier = Modifier
-            .fillMaxWidth()
             .clickable(onClickLabel = if (expanded) "Hide actions" else "Show actions", onClick = onToggle)
-            .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" }
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AppIcon(group.packageName)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(group.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(ActionRules.groupSubtitle(group), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Icon(if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null)
-    }
+            .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
+    )
 }
 
-/** One app action with the choices that apply to it ([ActionRules.choices]). */
-@OptIn(ExperimentalMaterial3Api::class)
+/** One app action with the choices that apply to it ([ActionRules.choices]), indented under its app. */
 @Composable
 internal fun ActionRuleRow(action: ActionInfo, choice: RuleChoice, policy: ConfirmPolicy, onChoose: (RuleChoice) -> Unit) {
-    val choices = ActionRules.choices(action)
-    Column(Modifier.fillMaxWidth().padding(start = 52.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = ActionRowInset, end = CardPadding, top = 12.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
         Text(action.title, style = MaterialTheme.typography.bodyLarge)
         Text(
             "${ToolRules.riskLabel(action.risk)} · ${ActionRules.meaning(choice, action, policy)}",
@@ -138,16 +129,9 @@ internal fun ActionRuleRow(action: ActionInfo, choice: RuleChoice, policy: Confi
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            choices.forEachIndexed { index, option ->
-                SegmentedButton(
-                    selected = option == choice,
-                    onClick = { onChoose(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index, choices.size),
-                    icon = {},
-                    modifier = Modifier.semantics { contentDescription = "${option.label} for ${action.title}" },
-                ) { Text(option.label, maxLines = 1) }
-            }
-        }
+        RuleChoiceChips(ActionRules.choices(action), choice, action.title, onChoose)
     }
 }
+
+/** Start inset of action rows and their dividers: the text column of the app rows above (40dp icon). */
+internal val ActionRowInset = CardPadding + 40.dp + 14.dp

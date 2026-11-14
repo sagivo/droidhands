@@ -2,9 +2,9 @@ package dev.phonebridge.android.ui.agents
 
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import dev.phonebridge.android.ui.components.ConfirmDialog
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.tokens.TokenDraft
 import dev.phonebridge.core.auth.TokenRecord
 
@@ -74,18 +75,20 @@ internal fun RenameAgentDialog(name: String, onRename: (String) -> Unit, onDismi
                 isError = error != null,
                 supportingText = { Text(error ?: "Shown in approval prompts and the activity log.") },
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
             )
         },
         confirmButton = {
-            TextButton(
+            TertiaryButton(
+                "Rename",
                 enabled = error == null,
                 onClick = {
                     onDismiss()
                     onRename(value.trim())
                 },
-            ) { Text("Rename") }
+            )
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TertiaryButton("Cancel", onClick = onDismiss) },
     )
 }

@@ -3,13 +3,7 @@ package dev.phonebridge.android.ui.agents
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.ui.apps.AppPickerList
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.ScreenScaffold
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.core.auth.AppAccessMode
 
@@ -45,8 +40,8 @@ fun AgentAppsScreen(vm: AgentsViewModel, tokenId: String, onBack: () -> Unit) {
 
     ScreenScaffold(
         title = if (allowlist) "Apps $name may use" else "Apps blocked for $name",
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-        actions = { TextButton(onClick = onBack) { Text("Done") } },
+        onBack = onBack,
+        actions = { TertiaryButton("Done", onClick = onBack) },
     ) { padding ->
         if (draft == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
