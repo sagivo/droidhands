@@ -33,15 +33,16 @@ internal object ClockIntents {
     }.getOrNull()
 
     /**
-     * Hands [intent] to the clock app and returns its package (null if a chooser will be shown).
-     * Throws [ToolException] if no clock app handles it.
+     * Hands [intent] to the clock app and returns its package, or null when several clock apps are
+     * installed without a default, so Android shows a chooser and nothing is set until the user
+     * picks one. Throws [ToolException] if no clock app handles it.
      */
     suspend fun send(context: Context, intent: Intent): String? {
         val handler = withContext(Dispatchers.IO) {
             context.packageManager.resolveActivityCompat(intent, PackageManager.MATCH_DEFAULT_ONLY)
-        } ?: throw ToolException(noClockApp(intent.action))
+        }?.activityInfo ?: throw ToolException(noClockApp(intent.action))
         Launcher.startActivity(context, intent)
-        return handler.activityInfo?.packageName?.takeIf { it != "android" }
+        return handler.packageName.takeUnless { LaunchTargetPolicy.isChooser(LaunchHandler(it, handler.name), emptyList()) }
     }
 
     private fun noClockApp(action: String?) =

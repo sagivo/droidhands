@@ -2,6 +2,7 @@ package dev.phonebridge.android.tools.notifications
 
 import dev.phonebridge.android.notify.NotificationInfo
 import dev.phonebridge.android.notify.NotificationText
+import dev.phonebridge.android.tools.system.Redaction
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
@@ -11,11 +12,15 @@ import java.time.ZoneId
 
 /**
  * Agent-facing JSON for notifications (docs/TOOLS.md `notifications_list`). Compact: absent
- * fields are omitted rather than null, `ongoing` appears only when true. Pure; unit-tested.
+ * fields are omitted rather than null; `ongoing`, `codes_hidden` and `content_hidden_by_android`
+ * appear only when true. Long texts are truncated here, with a note saying so. Pure; unit-tested.
  */
 object NotificationJson {
     /** Sender shown for messages the phone's user sent. */
     const val ME = "me"
+
+    /** Set when Android 15+ hid the notification's content from PhoneBridge ([dev.phonebridge.android.notify.HiddenContent]). */
+    const val CONTENT_HIDDEN = "content_hidden_by_android"
 
     fun list(items: List<NotificationInfo>, zone: ZoneId = ZoneId.systemDefault()): JsonArray =
         buildJsonArray { items.forEach { add(notification(it, zone)) } }
@@ -24,8 +29,8 @@ object NotificationJson {
         put("key", info.key)
         put("package", info.packageName)
         put("app", info.appLabel)
-        info.title?.let { put("title", it) }
-        info.text?.let { put("text", it) }
+        info.title?.let { put("title", NotificationText.truncate(it, NotificationText.MAX_TITLE)) }
+        info.text?.let { put("text", NotificationText.truncate(it, NotificationText.MAX_TEXT)) }
         if (info.messages.isNotEmpty()) {
             put(
                 "messages",
@@ -34,7 +39,7 @@ object NotificationJson {
                         add(
                             buildJsonObject {
                                 (if (m.fromMe) ME else m.sender)?.let { put("sender", it) }
-                                put("text", m.text)
+                                put("text", NotificationText.truncate(m.text, NotificationText.MAX_MESSAGE_TEXT))
                                 if (m.time > 0) put("time", NotificationText.isoTime(m.time, zone))
                             },
                         )
@@ -46,6 +51,8 @@ object NotificationJson {
         put("conversation", info.conversation)
         info.category?.let { put("category", it) }
         if (info.ongoing) put("ongoing", true)
+        if (info.codesHidden) put(Redaction.FLAG, true)
+        if (info.contentHiddenByAndroid) put(CONTENT_HIDDEN, true)
         put(
             "actions",
             buildJsonArray {
@@ -61,4 +68,7 @@ object NotificationJson {
             },
         )
     }
+
+    /** A notification title as returned by the act tools (truncated like in [notification]). */
+    fun title(info: NotificationInfo): String? = info.title?.let { NotificationText.truncate(it, NotificationText.MAX_TITLE) }
 }

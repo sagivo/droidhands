@@ -5,6 +5,8 @@ import android.content.Context
 import dev.phonebridge.android.notify.ActionSelector
 import dev.phonebridge.android.notify.MappedNotification
 import dev.phonebridge.android.notify.NotificationText
+import dev.phonebridge.android.tools.system.Redaction
+import dev.phonebridge.core.tools.AppAccess
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -26,7 +28,8 @@ internal fun notificationReplyTool(context: Context): Tool = tool(
     description = "Reply to a message notification through its inline reply action, exactly as if the user typed into " +
         "the notification. Works for any app with a reply button (WhatsApp, Telegram, Signal, Messages, Slack…) and " +
         "works while the phone is locked. Get `key` from notifications_list and check that the notification has an " +
-        "action with can_reply=true. The reply goes to that notification's conversation. The user may have to " +
+        "action with can_reply=true (its title may be blank when Android hid the content; that is fine). The reply " +
+        "goes to that notification's conversation. Refused for apps blocked for this agent. The user may have to " +
         "approve it on the phone.",
     scope = Scopes.NOTIFICATIONS_ACT,
     risk = Risk.SENSITIVE,
@@ -48,23 +51,30 @@ internal fun notificationReplyTool(context: Context): Tool = tool(
         throw ToolException("The message is too long (${message.length} chars, max $MAX_REPLY_LENGTH). Shorten it or split it.")
     }
 
-    val target = NotificationAccess.find(context, key)
-    val replyInfo = ActionSelector.replyAction(target.info.actions) ?: throw ToolException(ActionSelector.NO_REPLY_ACTION)
+    val target = NotificationAccess.find(context, key, ctx.appAccess)
+    val hidden = target.info.contentHiddenByAndroid
+    val replyInfo = ActionSelector.replyAction(target.info.actions)
+        ?: throw ToolException(if (hidden) NotificationAccess.HIDDEN_WITHOUT_ACTION else ActionSelector.NO_REPLY_ACTION)
     val app = target.info.appLabel
-    val conversation = target.info.title
-
-    ctx.requireConfirmation(NotificationSummaries.reply(app, conversation, message))
+    // The prompt is shown to the phone's owner, so it uses the unmasked title.
+    ctx.requireConfirmation(NotificationSummaries.reply(app, target.info.title.takeUnless { hidden }, message, conversationHidden = hidden))
 
     // Approval can take up to a minute; prefer the PendingIntent the app has posted since.
-    val action = currentReplyAction(context, target)
+    val action = currentReplyAction(context, target, ctx.appAccess)
         ?: target.action(replyInfo.index)
         ?: throw ToolException(ActionSelector.NO_REPLY_ACTION)
     NotificationSender.reply(context, action, message)
 
+    val visible = NotificationRedaction.redact(target.info, Redaction.forCall(ctx))
     ToolResult.json {
         put("replied", true)
         put("app", app)
-        conversation?.let { put("conversation", it) }
+        if (hidden) {
+            put(NotificationJson.CONTENT_HIDDEN, true)
+        } else {
+            NotificationJson.title(visible)?.let { put("conversation", it) }
+        }
+        if (visible.codesHidden) put(Redaction.FLAG, true)
     }
 }
 
@@ -73,9 +83,9 @@ internal fun notificationReplyTool(context: Context): Tool = tool(
  * same conversation. Null otherwise: the caller then uses the action the user approved, whose
  * `PendingIntent` usually stays valid after the notification is gone.
  */
-private suspend fun currentReplyAction(context: Context, original: MappedNotification): Notification.Action? {
+private suspend fun currentReplyAction(context: Context, original: MappedNotification, access: AppAccess): Notification.Action? {
     val current = try {
-        NotificationAccess.find(context, original.info.key)
+        NotificationAccess.find(context, original.info.key, access)
     } catch (e: ToolException) {
         return null
     }

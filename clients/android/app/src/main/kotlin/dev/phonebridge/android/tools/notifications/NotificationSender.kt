@@ -35,6 +35,15 @@ internal object NotificationSender {
         send(context, pendingIntent, fillIn)
     }
 
+    /**
+     * Whether tapping [action] starts an activity (and so is subject to Android's
+     * background-activity-start limits); null when unknown (Android 11 can't tell).
+     */
+    fun opensActivity(action: Notification.Action): Boolean? {
+        val pendingIntent = action.actionIntent ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) pendingIntent.isActivity else null
+    }
+
     /** Triggers [action] without input, like tapping the button. */
     suspend fun tap(context: Context, action: Notification.Action) {
         val pendingIntent = action.actionIntent

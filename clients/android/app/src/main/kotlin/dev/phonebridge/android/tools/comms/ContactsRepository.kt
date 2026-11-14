@@ -26,15 +26,14 @@ import kotlin.math.max
 internal class ContactsRepository(private val context: Context) {
     private val resolver: ContentResolver = context.contentResolver
 
-    private class Row(val id: Long, val name: String, val alternative: String?, val starred: Boolean)
-
-    private class Ranked(val row: Row, val score: Double)
+    private class Ranked(val row: ContactRow, val score: Double)
 
     /**
      * Phone-number queries use PhoneLookup (then a partial-number scan), email queries the email
      * filter, and names the provider's name filter plus our fuzzy/transliterating matcher over
-     * every display name and nickname. Hits are merged by contact, ranked, and the top [limit] get
-     * their phones, emails and WhatsApp ids loaded in batched queries.
+     * every display name and nickname (prepared once and cached by [ContactIndexCache]). Hits are
+     * merged by contact, ranked, and the top [limit] get their phones, emails and WhatsApp ids
+     * loaded in batched queries.
      */
     fun search(query: String, limit: Int): List<ContactMatch> {
         val q = query.trim()
@@ -95,8 +94,9 @@ internal class ContactsRepository(private val context: Context) {
     }
 
     /** Scores every contact by name; returns all rows (needed for ranking anyway). */
-    private fun addNameHits(query: String, hits: MutableMap<Long, Double>): Map<Long, Row> {
-        val rows = readRows(selection = null, args = null)
+    private fun addNameHits(query: String, hits: MutableMap<Long, Double>): Map<Long, ContactRow> {
+        val index = ContactIndexCache.get(context, ::loadNameIndex)
+        val rows = index.rows
         val providerIds = providerNameMatches(query)
         val queryKey = NameKey.of(query)
         if (queryKey.isEmpty) {
@@ -104,19 +104,16 @@ internal class ContactsRepository(private val context: Context) {
             for (id in providerIds) if (id in rows) hits[id] = ContactRanking.PROVIDER_FLOOR
             return rows
         }
-        val nicknames = loadNicknames()
         for (row in rows.values) {
-            val names = sequence {
-                yield(row.name)
-                row.alternative?.let { if (it != row.name) yield(it) }
-                nicknames[row.id]?.let { yieldAll(it) }
-            }
-            var score = NameMatching.bestScore(queryKey, names.map(NameKey::of).asIterable())
+            var score = NameMatching.bestScore(queryKey, index.keysOf(row.id))
             if (row.id in providerIds) score = max(score, ContactRanking.PROVIDER_FLOOR)
             if (score >= NameMatching.FUZZY_MIN) hits[row.id] = score
         }
         return rows
     }
+
+    /** Every contact's names, prepared for matching (two provider queries plus the preparation). */
+    private fun loadNameIndex(): ContactNameIndex = ContactNameIndex.build(readRows(selection = null, args = null), loadNicknames())
 
     /** Contact ids from ContactsContract's own name filter (token prefixes, nicknames, phonetic names). */
     private fun providerNameMatches(query: String): Set<Long> {
@@ -147,21 +144,21 @@ internal class ContactsRepository(private val context: Context) {
 
     // --- Rows and details ---------------------------------------------------------------------------
 
-    private fun loadRows(ids: Collection<Long>): Map<Long, Row> {
-        val rows = HashMap<Long, Row>()
+    private fun loadRows(ids: Collection<Long>): Map<Long, ContactRow> {
+        val rows = HashMap<Long, ContactRow>()
         forEachIdChunk(ids) { placeholders, args -> rows += readRows("${Contacts._ID} IN ($placeholders)", args) }
         return rows
     }
 
-    private fun readRows(selection: String?, args: Array<String>?): Map<Long, Row> {
-        val rows = LinkedHashMap<Long, Row>()
+    private fun readRows(selection: String?, args: Array<String>?): Map<Long, ContactRow> {
+        val rows = LinkedHashMap<Long, ContactRow>()
         val projection = arrayOf(Contacts._ID, Contacts.DISPLAY_NAME_PRIMARY, Contacts.DISPLAY_NAME_ALTERNATIVE, Contacts.STARRED)
         resolver.query(Contacts.CONTENT_URI, projection, selection, args, null)?.use { c ->
             while (c.moveToNext()) {
                 val id = c.getLong(0)
                 val alternative = c.stringOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
                 val name = c.stringOrNull(1)?.trim()?.takeIf { it.isNotEmpty() } ?: alternative.orEmpty()
-                rows[id] = Row(id, name, alternative, c.intOr(3, 0) != 0)
+                rows[id] = ContactRow(id, name, alternative, c.intOr(3, 0) != 0)
             }
         }
         return rows

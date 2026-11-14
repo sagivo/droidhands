@@ -1,6 +1,7 @@
 package dev.phonebridge.android.tools.notifications
 
 import android.content.Context
+import dev.phonebridge.android.tools.system.Redaction
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -19,7 +20,8 @@ internal fun notificationDismissTool(context: Context): Tool = tool(
     name = "notification_dismiss",
     title = "Dismiss a notification",
     description = "Dismiss (clear) a notification, like swiping it away. Ongoing notifications (music, navigation, " +
-        "calls) can't be dismissed. Dismissing a group summary also clears the notifications in its group.",
+        "calls) can't be dismissed. Dismissing a group summary also clears the notifications in its group. Refused for " +
+        "apps blocked for this agent.",
     scope = Scopes.NOTIFICATIONS_ACT,
     risk = Risk.ACTION,
     schema = objectSchema {
@@ -33,9 +35,9 @@ internal fun notificationDismissTool(context: Context): Tool = tool(
             ?.let { NotificationSummaries.dismiss(it.info.appLabel, it.info.title) }
             ?: NotificationSummaries.dismissFallback(key)
     },
-) { args, _ ->
+) { args, ctx ->
     val key = args.reqString("key")
-    val target = NotificationAccess.find(context, key)
+    val target = NotificationAccess.find(context, key, ctx.appAccess)
     val app = target.info.appLabel
     if (!target.info.clearable) {
         throw ToolException(
@@ -47,9 +49,11 @@ internal fun notificationDismissTool(context: Context): Tool = tool(
     if (!withContext(Dispatchers.IO) { listener.cancel(key) }) {
         throw ToolException("Android refused to dismiss the notification. ${NotificationAccess.unavailableReason(context) ?: "Retry in a few seconds."}")
     }
+    val visible = NotificationRedaction.redact(target.info, Redaction.forCall(ctx))
     ToolResult.json {
         put("dismissed", true)
         put("app", app)
-        target.info.title?.let { put("title", it) }
+        NotificationJson.title(visible)?.let { put("title", it) }
+        if (visible.codesHidden) put(Redaction.FLAG, true)
     }
 }

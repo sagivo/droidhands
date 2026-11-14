@@ -2,6 +2,8 @@ package dev.phonebridge.android.tools.comms
 
 import android.content.Context
 import android.provider.Telephony.Sms
+import dev.phonebridge.android.tools.system.Redaction
+import dev.phonebridge.android.tools.system.Redactor
 import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -21,11 +23,15 @@ internal class SmsReader(private val context: Context) {
         val text: String?,
         val sinceMillis: Long?,
         val limit: Int,
+        /** Masks one-time codes in bodies (docs/SECURITY.md "Hide one-time codes"); null = show bodies as stored. */
+        val redactor: Redactor? = null,
     )
 
     /**
      * Newest first. Box, age and text are filtered in SQL; the address filter runs here because
-     * stored addresses come in arbitrary formats ("+972 54-…", "054…").
+     * stored addresses come in arbitrary formats ("+972 54-…", "054…"). With a [Request.redactor],
+     * bodies are masked (flagged `codes_hidden`) and the text filter must also match the masked
+     * body, so it can't be used to guess a hidden code.
      */
     suspend fun list(request: Request): JsonArray = withContext(Dispatchers.IO) {
         val selection = ArrayList<String>()
@@ -56,12 +62,15 @@ internal class SmsReader(private val context: Context) {
                 if (++scanned % CANCEL_CHECK_EVERY == 0) ensureActive()
                 val address = c.stringOrNull(COL_ADDRESS)
                 if (request.filter != null && !request.filter.matches(address)) continue
+                val body = Redaction.apply(c.stringOrNull(COL_BODY).orEmpty(), request.redactor)
+                if (body.changed && !Redaction.visibleMatch(body.text, request.text)) continue
                 messages += buildJsonObject {
                     put("id", c.getLong(COL_ID))
                     put("thread_id", c.longOr(COL_THREAD, -1))
                     put("address", address.orEmpty())
                     names.nameFor(address)?.let { put("contact_name", it) }
-                    put("body", c.stringOrNull(COL_BODY).orEmpty())
+                    put("body", body.text)
+                    if (body.changed) put(Redaction.FLAG, true)
                     put("time", IsoTime.format(c.longOr(COL_DATE, 0)))
                     put("box", SmsBoxes.name(c.intOr(COL_TYPE, -1)))
                     put("read", c.intOr(COL_READ, 0) != 0)
