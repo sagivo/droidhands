@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: linkedin
+name: LinkedIn
+description: Professional social network for profiles, companies and jobs.
+category: social
+homepage: https://www.linkedin.com
+status: experimental
+android:
+  packages: [com.linkedin.android]
+
+actions:
+  - id: open_profile
+    title: Open a person's profile
+    description: >-
+      Opens a LinkedIn member's profile by the name in their profile link, e.g. williamhgates for
+      linkedin.com/in/williamhgates. Nothing else happens: no connection request or message. The profile owner
+      may be able to see that the user viewed it, depending on the user's LinkedIn settings.
+    keywords: [profile, person, member, people, resume, cv, career]
+    risk: action
+    params:
+      username:
+        description: The part after linkedin.com/in/ in the profile link, e.g. williamhgates
+        required: true
+        pattern: "^[A-Za-z0-9-]{3,100}$"
+    completes: true
+    android:
+      url: "https://www.linkedin.com/in/{{username}}"
+    examples:
+      - params: {username: williamhgates}
+        expect: {url: "https://www.linkedin.com/in/williamhgates"}
+      - params: {username: Bill Gates}
+        expect: {error: username}
+      - params: {}
+        expect: {error: username}
+
+  - id: open_company
+    title: Open a company page
+    description: >-
+      Opens a company's LinkedIn page by the name in its link, e.g. microsoft for linkedin.com/company/microsoft.
+      Nothing else happens.
+    keywords: [company, organization, employer, business, page, jobs]
+    risk: action
+    params:
+      company:
+        description: The part after linkedin.com/company/ in the page link, e.g. microsoft
+        required: true
+        pattern: "^[A-Za-z0-9-]{1,100}$"
+    completes: true
+    android:
+      url: "https://www.linkedin.com/company/{{company}}"
+    examples:
+      - params: {company: microsoft}
+        expect: {url: "https://www.linkedin.com/company/microsoft"}
+      - params: {}
+        expect: {error: company}

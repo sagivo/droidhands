@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: notion
+name: Notion
+description: Workspace app for notes, docs, wikis and databases.
+category: productivity
+homepage: https://www.notion.com
+status: experimental
+android:
+  packages: [notion.id]
+
+actions:
+  - id: open_page
+    title: Open a page
+    description: >-
+      Opens a Notion page or database in the app by its ID: the 32 letters and digits at the end of its link
+      (notion.so/My-Page-0123456789abcdef0123456789abcdef), with or without the title part before it. IDs
+      from Notion's API work too once the dashes are removed. Nothing is changed. The user must have access to
+      the page.
+    keywords: [page, doc, document, note, wiki, database, open]
+    risk: action
+    params:
+      page:
+        description: >-
+          The page ID (32 hex characters, no dashes), optionally with the title part from the link, e.g.
+          0123456789abcdef0123456789abcdef or Meeting-Notes-0123456789abcdef0123456789abcdef
+        required: true
+        pattern: "^([A-Za-z0-9-]*-)?[0-9a-f]{32}$"
+    completes: true
+    android:
+      url: "https://www.notion.so/{{page}}"
+    examples:
+      - params: {page: Meeting-Notes-0123456789abcdef0123456789abcdef}
+        expect: {url: "https://www.notion.so/Meeting-Notes-0123456789abcdef0123456789abcdef"}
+      - params: {page: 01234567-89ab-cdef-0123-456789abcdef}
+        expect: {error: page}
+      - params: {}
+        expect: {error: page}

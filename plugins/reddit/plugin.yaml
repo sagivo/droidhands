@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: reddit
+name: Reddit
+description: Community discussion site organized in subreddits.
+category: social
+homepage: https://www.reddit.com
+status: experimental
+android:
+  packages: [com.reddit.frontpage]
+
+actions:
+  - id: open_subreddit
+    title: Open a subreddit
+    description: Opens a subreddit (community) by name, e.g. androiddev for r/androiddev. Nothing else happens.
+    keywords: [subreddit, community, forum, r, browse, feed]
+    risk: action
+    params:
+      subreddit:
+        description: The subreddit name without r/, e.g. androiddev
+        required: true
+        pattern: "^[A-Za-z0-9_]{2,21}$"
+    completes: true
+    android:
+      url: "https://www.reddit.com/r/{{subreddit}}/"
+    examples:
+      - params: {subreddit: androiddev}
+        expect: {url: "https://www.reddit.com/r/androiddev/"}
+      - params: {subreddit: "r/androiddev"}
+        expect: {error: subreddit}
+      - params: {}
+        expect: {error: subreddit}
+
+  - id: open_user
+    title: Open a user's profile
+    description: Opens a Reddit user's profile by username, e.g. spez for u/spez. Nothing else happens.
+    keywords: [user, profile, account, redditor, u]
+    risk: action
+    params:
+      username:
+        description: The username without u/, e.g. spez
+        required: true
+        pattern: "^[A-Za-z0-9_-]{3,20}$"
+    completes: true
+    android:
+      url: "https://www.reddit.com/user/{{username}}/"
+    examples:
+      - params: {username: spez}
+        expect: {url: "https://www.reddit.com/user/spez/"}
+      - params: {username: "u/spez"}
+        expect: {error: username}

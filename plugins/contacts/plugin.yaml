@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: contacts
+name: Contacts
+description: The phone's address book app (Google Contacts, AOSP or Samsung Contacts).
+category: system
+status: experimental
+android:
+  # The insert intents are Android's documented Contacts Provider intents, which every contacts app handles.
+  packages: [com.google.android.contacts, com.android.contacts, com.samsung.android.app.contacts]
+
+actions:
+  - id: add_contact
+    title: Add a new contact
+    description: >-
+      Opens the contacts app's "new contact" form filled in with the details given. Nothing is saved until the
+      user (or you, with screen_read and ui_tap) taps Save; the user may also be asked which account to save it
+      to. The app may warn if the contact already exists. To look contacts up, use the contacts_search tool.
+    keywords: [contact, new, save, number, address book, person, phonebook]
+    risk: action
+    params:
+      name:
+        description: Full name, e.g. Dana Levi
+        max_length: 200
+      phone:
+        description: Phone number, e.g. +15551234567
+        max_length: 40
+      email:
+        description: Email address
+        max_length: 254
+      company:
+        description: Company or organization
+        max_length: 200
+      job_title:
+        description: Job title
+        max_length: 200
+      notes:
+        description: Notes about the contact
+        max_length: 2000
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.INSERT
+        type: vnd.android.cursor.dir/raw_contact
+        extras:
+          name: "{{name}}"
+          phone: "{{phone}}"
+          email: "{{email}}"
+          company: "{{company}}"
+          job_title: "{{job_title}}"
+          notes: "{{notes}}"
+    examples:
+      - params: {name: Dana Levi, phone: "+15551234567", email: dana@example.com}
+        expect:
+          intent:
+            action: android.intent.action.INSERT
+            package: com.google.android.contacts
+            type: vnd.android.cursor.dir/raw_contact
+            data: null
+            extras: {name: Dana Levi, phone: "+15551234567", email: dana@example.com, company: null, notes: null}
+      - params: {name: Acme Plumbing, company: Acme, notes: Fixed the sink in May}
+        expect:
+          intent:
+            extras: {name: Acme Plumbing, company: Acme, notes: Fixed the sink in May, phone: null}
+      - params: {name: Dana Levi, birthday: "1990-05-01"}
+        expect: {error: birthday}
+
+  - id: add_to_contact
+    title: Add a number or email to a contact
+    description: >-
+      Opens the contacts app with a phone number and/or email address ready to add: the user picks an existing
+      contact to add them to (or creates a new one), then taps Save. Nothing is saved until then.
+    keywords: [contact, existing, update, edit, add number, add email]
+    risk: action
+    params:
+      phone:
+        description: Phone number to add, e.g. +15551234567
+        max_length: 40
+      email:
+        description: Email address to add
+        max_length: 254
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.INSERT_OR_EDIT
+        type: vnd.android.cursor.item/contact
+        extras:
+          phone: "{{phone}}"
+          email: "{{email}}"
+    examples:
+      - params: {phone: "+15551234567"}
+        expect:
+          intent:
+            action: android.intent.action.INSERT_OR_EDIT
+            package: com.google.android.contacts
+            type: vnd.android.cursor.item/contact
+            extras: {phone: "+15551234567", email: null}

@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: slack
+name: Slack
+description: Team chat app with workspaces, channels and direct messages.
+category: messaging
+homepage: https://slack.com
+status: experimental
+android:
+  packages: [com.Slack]
+
+actions:
+  - id: open_channel
+    title: Open a channel
+    description: >-
+      Opens a Slack channel in the app. Needs IDs, not names: the workspace (team) ID such as T0123ABCD and the
+      channel ID such as C0123ABCD, e.g. from a Slack link (app.slack.com/client/<team>/<channel>) or Slack's API.
+      Nothing is typed or sent. Unknown IDs open Slack's home screen instead.
+    keywords: [channel, chat, workspace, team, open, conversation]
+    risk: action
+    params:
+      team_id:
+        description: Workspace (team) ID, e.g. T0123ABCD
+        required: true
+        pattern: "^[A-Z][A-Z0-9]{5,20}$"
+      channel_id:
+        description: Channel ID, e.g. C0123ABCD
+        required: true
+        pattern: "^[A-Z][A-Z0-9]{5,20}$"
+    completes: true
+    android:
+      url: "slack://channel?team={{team_id}}&id={{channel_id}}"
+    examples:
+      - params: {team_id: T0123ABCD, channel_id: C0456EFGH}
+        expect: {url: "slack://channel?team=T0123ABCD&id=C0456EFGH"}
+      - params: {team_id: T0123ABCD, channel_id: "#general"}
+        expect: {error: channel_id}
+      - params: {channel_id: C0456EFGH}
+        expect: {error: team_id}
+
+  - id: open_dm
+    title: Open a direct message
+    description: >-
+      Opens the direct-message conversation with a Slack user. Needs IDs, not names: the workspace (team) ID
+      such as T0123ABCD and the member ID such as U0123ABCD (from their Slack profile or Slack's API). Nothing
+      is typed or sent.
+    keywords: [dm, direct message, chat, person, user, colleague, open]
+    risk: action
+    params:
+      team_id:
+        description: Workspace (team) ID, e.g. T0123ABCD
+        required: true
+        pattern: "^[A-Z][A-Z0-9]{5,20}$"
+      user_id:
+        description: The person's Slack member ID, e.g. U0123ABCD
+        required: true
+        pattern: "^[A-Z][A-Z0-9]{5,20}$"
+    completes: true
+    android:
+      url: "slack://user?team={{team_id}}&id={{user_id}}"
+    examples:
+      - params: {team_id: T0123ABCD, user_id: U0789IJKL}
+        expect: {url: "slack://user?team=T0123ABCD&id=U0789IJKL"}
+      - params: {team_id: T0123ABCD, user_id: "@dana"}
+        expect: {error: user_id}
+
+  - id: open_workspace
+    title: Switch to a workspace
+    description: >-
+      Opens Slack in a given workspace, by its team ID such as T0123ABCD (not its name). Use it when the user has
+      several workspaces.
+    keywords: [workspace, team, switch, open]
+    risk: action
+    params:
+      team_id:
+        description: Workspace (team) ID, e.g. T0123ABCD
+        required: true
+        pattern: "^[A-Z][A-Z0-9]{5,20}$"
+    completes: true
+    android:
+      url: "slack://open?team={{team_id}}"
+    examples:
+      - params: {team_id: T0123ABCD}
+        expect: {url: "slack://open?team=T0123ABCD"}
+      - params: {}
+        expect: {error: team_id}

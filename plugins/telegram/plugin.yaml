@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: telegram
+name: Telegram
+description: Cloud messaging app with chats, groups, channels and bots.
+category: messaging
+homepage: https://telegram.org
+status: experimental
+android:
+  # Google Play build, the APK from telegram.org and the beta: the same app and the same links.
+  packages: [org.telegram.messenger, org.telegram.messenger.web, org.telegram.messenger.beta]
+
+actions:
+  - id: open_chat
+    title: Open a chat by username
+    description: >-
+      Opens the Telegram chat with a public username: a person, bot, group or channel (e.g. durov). Nothing is
+      typed or sent. If the username doesn't exist, Telegram shows an error instead.
+    keywords: [chat, conversation, username, bot, channel, group, dm, open]
+    risk: action
+    params:
+      username:
+        description: Public Telegram username without the @, e.g. durov
+        required: true
+        pattern: "^[A-Za-z][A-Za-z0-9_]{3,31}$"
+    completes: true
+    android:
+      url: "tg://resolve?domain={{username}}"
+    examples:
+      - params: {username: durov}
+        expect: {url: "tg://resolve?domain=durov"}
+      - params: {username: "@durov"}
+        expect: {error: username}
+      - params: {}
+        expect: {error: username}
+
+  - id: draft_message
+    title: Open a chat with a message typed in
+    description: >-
+      Opens the Telegram chat with a public username and types the text into the message box. Nothing is sent:
+      the user (or you, with screen_read and ui_tap) must tap Send. Works for chats with people and bots; groups
+      and channels open without the text.
+    keywords: [draft, prefill, compose, write, message, text]
+    risk: action
+    params:
+      username:
+        description: Public Telegram username without the @, e.g. durov
+        required: true
+        pattern: "^[A-Za-z][A-Za-z0-9_]{3,31}$"
+      text:
+        description: The message to type into the chat (not sent)
+        required: true
+        max_length: 4096
+    completes: false
+    android:
+      url: "tg://resolve?domain={{username}}&text={{text}}"
+    examples:
+      - params: {username: durov, text: "Hi, quick question"}
+        expect: {url: "tg://resolve?domain=durov&text=Hi%2C%20quick%20question"}
+      - params: {username: durov}
+        expect: {error: text}
+
+  - id: open_chat_by_phone
+    title: Open a chat by phone number
+    description: >-
+      Opens the Telegram chat with a phone number. Only works if the number is on Telegram and its owner lets
+      people find them by number, or it is in the user's contacts; otherwise Telegram shows an error. Nothing is
+      typed or sent.
+    keywords: [chat, conversation, phone, number, dm, open]
+    risk: action
+    params:
+      phone:
+        description: Phone number in international format, digits with an optional leading +, e.g. +15551234567
+        required: true
+        pattern: "^\\+?[1-9][0-9]{6,14}$"
+    completes: true
+    android:
+      url: "tg://resolve?phone={{phone}}"
+    examples:
+      - params: {phone: "+15551234567"}
+        expect: {url: "tg://resolve?phone=%2B15551234567"}
+      - params: {phone: "555-1234"}
+        expect: {error: phone}
+
+  - id: share_link
+    title: Share a link
+    description: >-
+      Opens Telegram's chat picker to share a link, with an optional comment below it. Nothing is sent until the
+      user picks a chat and taps Send. For plain text without a link, use share_text.
+    keywords: [share, forward, link, url]
+    risk: action
+    params:
+      url:
+        description: The link to share, e.g. https://example.com/article
+        required: true
+        max_length: 2000
+        pattern: "^https?://\\S+$"
+      text:
+        description: Optional comment shown under the link
+        max_length: 4000
+    completes: false
+    android:
+      url: "tg://msg_url?url={{url}}&text={{text}}"
+    examples:
+      - params: {url: "https://example.com/a?b=1", text: Worth a read}
+        expect: {url: "tg://msg_url?url=https%3A%2F%2Fexample.com%2Fa%3Fb%3D1&text=Worth%20a%20read"}
+      - params: {url: "https://example.com"}
+        expect: {url: "tg://msg_url?url=https%3A%2F%2Fexample.com&text="}
+      - params: {url: "example.com"}
+        expect: {error: url}

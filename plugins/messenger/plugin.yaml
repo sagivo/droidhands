@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: messenger
+name: Messenger
+description: Meta's messaging app for Facebook friends and Pages.
+category: messaging
+homepage: https://www.messenger.com
+status: experimental
+android:
+  packages: [com.facebook.orca]
+
+actions:
+  - id: open_chat
+    title: Open a chat
+    description: >-
+      Opens a Messenger conversation with a person or Facebook Page by their Facebook username (the part after
+      facebook.com/ in their profile link) or numeric id, using an m.me link. Nothing is typed or sent. If the
+      name doesn't exist or can't be messaged, Messenger shows an error.
+    keywords: [chat, conversation, message, dm, facebook, page, open]
+    risk: action
+    params:
+      username:
+        description: Facebook username or Page name from their link, e.g. zuck for facebook.com/zuck
+        required: true
+        pattern: "^[A-Za-z0-9.-]{1,100}$"
+    completes: true
+    android:
+      url: "https://m.me/{{username}}"
+    examples:
+      - params: {username: zuck}
+        expect: {url: "https://m.me/zuck"}
+      - params: {username: "Mark Zuckerberg"}
+        expect: {error: username}
+      - params: {}
+        expect: {error: username}

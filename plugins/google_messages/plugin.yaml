@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_messages
+name: Google Messages
+description: Google's SMS, MMS and RCS messaging app (shown as Messages on the phone).
+category: messaging
+homepage: https://messages.google.com
+status: experimental
+android:
+  packages: [com.google.android.apps.messaging]
+
+actions:
+  - id: send_sms
+    title: Send a text message
+    description: >-
+      Sends an SMS from the phone's SIM to a phone number (to) or a contact saved on the phone (contact), using
+      the built-in sms_send tool. The user may have to approve it on the phone. The text goes out directly; the
+      Messages app is not opened, but the message shows up in it. If several contacts match the name, nothing is
+      sent and the candidates are returned so you can ask the user.
+    keywords: [sms, text, message, texting, msg, write]
+    params:
+      to:
+        description: Phone number, e.g. +15551234567. Pass either to or contact.
+        max_length: 40
+      contact:
+        description: Name of a contact saved on the phone, e.g. Dana Levi (instead of to)
+        max_length: 100
+      message:
+        description: The message text
+        required: true
+        max_length: 5000
+    android:
+      tool:
+        name: sms_send
+        args: {to: "{{to}}", contact: "{{contact}}", message: "{{message}}"}
+    examples:
+      - params: {to: "+15551234567", message: "On my way"}
+        expect: {tool: {name: sms_send, args: {to: "+15551234567", message: "On my way"}}}
+      - params: {contact: Dana Levi, message: Call me back}
+        expect: {tool: {name: sms_send, args: {contact: Dana Levi, message: Call me back}}}
+      - params: {to: "+15551234567"}
+        expect: {error: message}
+
+  - id: compose_message
+    title: Write a text message
+    description: >-
+      Opens a new conversation in Messages with the phone number filled in and the text typed in. Nothing is
+      sent: the user (or you, with screen_read and ui_tap) must tap Send. Use send_sms to send directly.
+    keywords: [sms, text, message, draft, compose, prefill, write]
+    risk: action
+    params:
+      to:
+        description: Phone number, e.g. +15551234567 or (555) 123-4567
+        required: true
+        pattern: "^\\+?\\(?[0-9][0-9 ().-]{1,23}[0-9]$"
+      message:
+        description: The text to type in (not sent)
+        max_length: 5000
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.SENDTO
+        data: "smsto:{{to}}"
+        extras:
+          sms_body: "{{message}}"
+    examples:
+      - params: {to: "+15551234567", message: "Running late, start without me"}
+        expect:
+          intent:
+            action: android.intent.action.SENDTO
+            package: com.google.android.apps.messaging
+            data: "smsto:%2B15551234567"
+            extras: {sms_body: "Running late, start without me"}
+      - params: {to: "(555) 123-4567"}
+        expect:
+          intent:
+            data: "smsto:%28555%29%20123-4567"
+            extras: {sms_body: null}
+      - params: {to: "*#06#"}
+        expect: {error: to}
+      - params: {message: hi}
+        expect: {error: to}

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_keep
+name: Google Keep
+description: Google's note-taking app (shown as Keep Notes on the phone).
+category: productivity
+homepage: https://keep.google.com
+status: experimental
+android:
+  packages: [com.google.android.keep]
+
+actions:
+  - id: add_note
+    title: Add a note
+    description: >-
+      Shares text to Keep, which opens its small "add to Keep" window with the text as the note (and the title,
+      if given). The note may need the user to confirm it there: check with screen_read before telling the user
+      it was saved. Keep can also turn it into a list or add a reminder afterwards.
+    keywords: [note, notes, memo, jot, remember, write down, save, keep]
+    risk: action
+    params:
+      text:
+        description: The note's text
+        required: true
+        max_length: 10000
+      title:
+        description: Optional note title
+        max_length: 200
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.SEND
+        type: text/plain
+        extras:
+          android.intent.extra.TEXT: "{{text}}"
+          android.intent.extra.SUBJECT: "{{title}}"
+    examples:
+      - params: {text: "Milk, eggs, coffee", title: Groceries}
+        expect:
+          intent:
+            action: android.intent.action.SEND
+            package: com.google.android.keep
+            type: text/plain
+            extras: {android.intent.extra.TEXT: "Milk, eggs, coffee", android.intent.extra.SUBJECT: Groceries}
+      - params: {text: Call the plumber}
+        expect:
+          intent:
+            extras: {android.intent.extra.TEXT: Call the plumber, android.intent.extra.SUBJECT: null}
+      - params: {title: Groceries}
+        expect: {error: text}

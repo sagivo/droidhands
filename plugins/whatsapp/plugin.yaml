@@ -1,0 +1,134 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: whatsapp
+name: WhatsApp
+description: Messaging app for chats, calls and groups. Covers WhatsApp and WhatsApp Business.
+category: messaging
+homepage: https://www.whatsapp.com
+status: experimental
+android:
+  packages: [com.whatsapp, com.whatsapp.w4b]
+
+actions:
+  - id: send_message
+    title: Send a message
+    description: >-
+      Sends a WhatsApp message to a phone number (to) or a contact saved on the phone (contact), using the
+      built-in whatsapp_send tool. The user may have to approve it on the phone. With PhoneBridge accessibility
+      on, it taps Send and confirms the message went out (sent=true). Without it, the chat opens with the text
+      typed in and the result has sent=false: the user must tap Send. If several contacts match the name,
+      nothing is sent and the candidates are returned so you can ask the user.
+    keywords: [text, message, chat, dm, msg, write, reply]
+    params:
+      to:
+        description: Phone number in international format, e.g. +15551234567. Pass either to or contact.
+        max_length: 40
+      contact:
+        description: Name of a contact saved on the phone, e.g. Dana Levi (instead of to)
+        max_length: 100
+      message:
+        description: The message text
+        required: true
+        max_length: 10000
+      business:
+        type: boolean
+        description: true to send from WhatsApp Business instead of WhatsApp (when both are installed)
+    android:
+      tool:
+        name: whatsapp_send
+        args: {to: "{{to}}", contact: "{{contact}}", message: "{{message}}", business: "{{business}}"}
+    examples:
+      - params: {to: "+15551234567", message: Running 10 minutes late}
+        expect:
+          tool: {name: whatsapp_send, args: {to: "+15551234567", message: Running 10 minutes late}}
+      - params: {contact: Dana Levi, message: "Happy birthday!", business: true}
+        expect:
+          tool: {name: whatsapp_send, args: {contact: Dana Levi, message: "Happy birthday!", business: true}}
+      - params: {to: "+15551234567"}
+        expect: {error: message}
+
+  - id: open_chat
+    title: Open a chat
+    description: >-
+      Opens the WhatsApp chat with a phone number (to) or a contact saved on the phone (contact), without
+      typing or sending anything, using the built-in whatsapp_open_chat tool. With PhoneBridge accessibility on,
+      it also checks that the chat appeared and fails if the number is not on WhatsApp.
+    keywords: [chat, conversation, open, show, dm]
+    params:
+      to:
+        description: Phone number in international format, e.g. +15551234567. Pass either to or contact.
+        max_length: 40
+      contact:
+        description: Name of a contact saved on the phone (instead of to)
+        max_length: 100
+      business:
+        type: boolean
+        description: true to use WhatsApp Business instead of WhatsApp (when both are installed)
+    android:
+      tool:
+        name: whatsapp_open_chat
+        args: {to: "{{to}}", contact: "{{contact}}", business: "{{business}}"}
+    examples:
+      - params: {contact: Dana Levi}
+        expect: {tool: {name: whatsapp_open_chat, args: {contact: Dana Levi}}}
+      - params: {to: "+15551234567", business: false}
+        expect: {tool: {name: whatsapp_open_chat, args: {to: "+15551234567", business: false}}}
+
+  - id: draft_message
+    title: Open a chat with a message typed in
+    description: >-
+      Opens the WhatsApp chat with a phone number and types the message into the text box, using WhatsApp's
+      click-to-chat link. Nothing is sent: the user (or you, with screen_read and ui_tap) must tap Send. Use
+      this when the user wants to review the message first; use send_message to send it. If the number is not
+      on WhatsApp, WhatsApp shows an error instead of a chat.
+    keywords: [draft, prefill, compose, write, message, text]
+    risk: action
+    params:
+      phone:
+        description: >-
+          Phone number in international format as digits only, without +, spaces or dashes, e.g. 15551234567
+        required: true
+        pattern: "^[1-9][0-9]{6,14}$"
+      text:
+        description: The message to type into the chat (not sent)
+        required: true
+        max_length: 10000
+    completes: false
+    android:
+      url: "https://wa.me/{{phone}}?text={{text}}"
+    examples:
+      - params: {phone: "15551234567", text: "See you at 7?"}
+        expect: {url: "https://wa.me/15551234567?text=See%20you%20at%207%3F"}
+      - params: {phone: "+1 555 123 4567", text: hi}
+        expect: {error: phone}
+      - params: {phone: "15551234567"}
+        expect: {error: text}
+
+  - id: share_text
+    title: Share text
+    description: >-
+      Opens WhatsApp's chat picker with the text ready to share. Nothing is sent until the user picks one or
+      more chats and taps Send. Use send_message to message a known person directly.
+    keywords: [share, forward, text, link]
+    risk: action
+    params:
+      text:
+        description: Text or link to share
+        required: true
+        max_length: 10000
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.SEND
+        type: text/plain
+        extras:
+          android.intent.extra.TEXT: "{{text}}"
+    examples:
+      - params: {text: "https://example.com/menu"}
+        expect:
+          intent:
+            action: android.intent.action.SEND
+            package: com.whatsapp
+            type: text/plain
+            extras: {android.intent.extra.TEXT: "https://example.com/menu"}
+      - params: {}
+        expect: {error: text}

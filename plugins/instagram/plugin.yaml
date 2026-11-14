@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: instagram
+name: Instagram
+description: Meta's photo and video sharing app.
+category: social
+homepage: https://www.instagram.com
+status: experimental
+android:
+  packages: [com.instagram.android]
+
+actions:
+  - id: open_profile
+    title: Open a profile
+    description: >-
+      Opens an Instagram account's profile by its username, e.g. nasa for instagram.com/nasa. Nothing else
+      happens: no follow, like or message.
+    keywords: [profile, account, user, follow, photos, feed]
+    risk: action
+    params:
+      username:
+        description: The username without the @, e.g. nasa
+        required: true
+        pattern: "^[A-Za-z0-9._]{1,30}$"
+    completes: true
+    android:
+      url: "https://www.instagram.com/{{username}}/"
+    examples:
+      - params: {username: nasa}
+        expect: {url: "https://www.instagram.com/nasa/"}
+      - params: {username: "@nasa"}
+        expect: {error: username}
+      - params: {}
+        expect: {error: username}

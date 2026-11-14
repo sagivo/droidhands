@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: signal
+name: Signal
+description: Private, end-to-end encrypted messenger.
+category: messaging
+homepage: https://signal.org
+status: experimental
+android:
+  packages: [org.thoughtcrime.securesms]
+
+actions:
+  - id: open_chat
+    title: Open a chat by phone number
+    description: >-
+      Opens the Signal chat with a phone number, using Signal's own signal.me link. Nothing is typed or sent.
+      If the number is not on Signal, or its owner hides it from being found by number, Signal shows a message
+      instead of a chat.
+    keywords: [chat, conversation, message, phone, number, dm, open]
+    risk: action
+    params:
+      number:
+        description: >-
+          Phone number in international format as digits only, without +, spaces or dashes, e.g. 15551234567
+        required: true
+        pattern: "^[1-9][0-9]{6,14}$"
+    completes: true
+    android:
+      # Signal only accepts a literal "+" before the digits (SignalMeUtil.E164_REGEX), so it is part of the template.
+      url: "https://signal.me/#p/+{{number}}"
+    examples:
+      - params: {number: "15551234567"}
+        expect: {url: "https://signal.me/#p/+15551234567"}
+      - params: {number: "+15551234567"}
+        expect: {error: number}
+      - params: {}
+        expect: {error: number}
