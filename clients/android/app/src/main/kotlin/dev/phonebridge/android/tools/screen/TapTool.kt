@@ -3,6 +3,7 @@ package dev.phonebridge.android.tools.screen
 import android.content.Context
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.access.NodeQueries
+import dev.phonebridge.android.access.TextNorm
 import dev.phonebridge.android.access.TextTarget
 import dev.phonebridge.android.access.TreeSerializer
 import dev.phonebridge.android.access.UiNode
@@ -29,7 +30,8 @@ internal fun uiTapTool(context: Context): Tool = tool(
         "screen_read/screen_find; clicks it or its clickable container), text (visible text or content description, " +
         "case-insensitive: exact match beats starts-with beats contains; if several elements match equally you get " +
         "the candidates with refs), or x+y screen pixels. long_press=true touches and holds. Returns a short " +
-        "confirmation and the foreground app; call screen_read to see the result.",
+        "confirmation and the foreground app; call screen_read to see the result. If the phone is locked, the user is " +
+        "asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent.",
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema {
@@ -39,7 +41,7 @@ internal fun uiTapTool(context: Context): Tool = tool(
         integer("y", "Screen y in pixels (with x)", minimum = 0)
         boolean("long_press", "Touch and hold instead of a tap")
     },
-    timeoutMs = 30_000,
+    timeoutMs = 30_000 + UiAutomation.UNLOCK_WAIT_MS,
     unavailable = { UiAutomation.actionUnavailableReason(context) },
     describe = { args ->
         val verb = if (args.optBool("long_press") == true) "Long-press" else "Tap"
@@ -49,7 +51,7 @@ internal fun uiTapTool(context: Context): Tool = tool(
             else -> "$verb the screen at (${args.optInt("x")},${args.optInt("y")})"
         }
     },
-) { args, _ ->
+) { args, ctx ->
     val ref = args.optString("ref")?.trim()
     val text = args.optString("text")?.takeIf { it.isNotBlank() }
     val x = args.optInt("x")
@@ -59,22 +61,27 @@ internal fun uiTapTool(context: Context): Tool = tool(
         throw ToolException("Pass ref (from screen_read), text, or both x and y.")
     }
     val service = UiAutomation.service()
-    UiAutomation.requireUnlocked(context)
+    val access = ScreenAccess.of(context, ctx)
+    val action = if (text != null) "tap \"${TextNorm.truncate(text, 40)}\" on the screen" else "tap on the screen"
+    UiAutomation.awaitUsable(context, ctx.tokenName, action)
     UiAutomation.exclusive {
+        UiAutomation.requireUnlocked(context)
+        UiAutomation.requireOperable(service, access)
         val message = when {
             ref != null -> {
-                val live = withContext(Dispatchers.IO) { ScreenSession.resolve(ref) }
-                tapNode(context, service, live, longPress)
+                val live = withContext(Dispatchers.IO) { ScreenSession.resolve(ref, access) }
+                tapNode(context, service, access, live, longPress)
             }
-            text != null -> tapText(context, service, text, longPress)
-            else -> tapPoint(context, service, x!!, y!!, longPress)
+            text != null -> tapText(context, service, access, text, longPress)
+            else -> tapPoint(context, service, access, x!!, y!!, longPress)
         }
-        ToolResult.text(UiAutomation.report(service, message))
+        ToolResult.text(UiAutomation.report(service, access, message))
     }
 }
 
-private suspend fun tapText(context: Context, service: BridgeAccessibilityService, text: String, longPress: Boolean): String {
-    val state = ScreenCapture.capture(context, service)
+private suspend fun tapText(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, text: String, longPress: Boolean): String {
+    val state = ScreenCapture.capture(context, service, access.visibility)
+    state.blockedForeground?.let { access.refuse(it) }
     return when (val target = NodeQueries.resolveTapText(state.roots, text)) {
         TextTarget.NotFound -> throw ToolException(
             "No visible element shows text or description matching \"$text\" (app=${state.packageName ?: "unknown"}). " +
@@ -85,7 +92,7 @@ private suspend fun tapText(context: Context, service: BridgeAccessibilityServic
             val ref = ScreenSession.refs.register(target.node)
             val fresh = withContext(Dispatchers.IO) { NodeActions.refresh(target.node) }
                 ?: throw ToolException("The element \"$text\" disappeared before it could be tapped; call screen_read again.")
-            tapNode(context, service, ScreenSession.Live(ref, target.node, fresh), longPress)
+            tapNode(context, service, access, ScreenSession.Live(ref, target.node, fresh), longPress)
         }
     }
 }
@@ -94,9 +101,15 @@ private suspend fun tapText(context: Context, service: BridgeAccessibilityServic
  * Clicks [live] (or its nearest clickable container) with an accessibility action; falls back to
  * a real touch gesture at the element's visible center.
  */
-internal suspend fun tapNode(context: Context, service: BridgeAccessibilityService, live: ScreenSession.Live, longPress: Boolean): String {
+internal suspend fun tapNode(
+    context: Context,
+    service: BridgeAccessibilityService,
+    access: ScreenAccess,
+    live: ScreenSession.Live,
+    longPress: Boolean,
+): String {
+    withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, live.fresh, access) }
     val label = "${live.ref} ${TreeSerializer.label(live.fresh)}"
-    withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, live.fresh) }
     if (!live.fresh.enabled) {
         throw ToolException("Element $label is disabled right now (it may need other input first). Call screen_read to check.")
     }
@@ -108,7 +121,7 @@ internal suspend fun tapNode(context: Context, service: BridgeAccessibilityServi
             if (liveTarget == null) {
                 false
             } else {
-                ScreenGuard.checkNode(context, liveTarget)
+                ScreenGuard.checkNode(context, liveTarget, access)
                 if (longPress) NodeActions.longClick(liveTarget) else NodeActions.click(liveTarget)
             }
         }
@@ -121,19 +134,19 @@ internal suspend fun tapNode(context: Context, service: BridgeAccessibilityServi
     if (!live.fresh.visible || area.isEmpty) {
         throw ToolException("Element $label is not visible on screen, so it can't be tapped. Scroll to it (ui_scroll), then screen_read again.")
     }
-    gestureAt(context, service, area.centerX, area.centerY, longPress)
+    gestureAt(context, service, access, area.centerX, area.centerY, longPress)
     return "$verb $label at (${area.centerX},${area.centerY})."
 }
 
-private suspend fun tapPoint(context: Context, service: BridgeAccessibilityService, x: Int, y: Int, longPress: Boolean): String {
+private suspend fun tapPoint(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, x: Int, y: Int, longPress: Boolean): String {
     val screen = service.screenBounds()
     if (!screen.contains(x, y)) throw ToolException("Point ($x,$y) is outside the screen (${screen.width}x${screen.height} px).")
-    gestureAt(context, service, x, y, longPress)
+    gestureAt(context, service, access, x, y, longPress)
     return "${if (longPress) "Long-pressed" else "Tapped"} at ($x,$y)."
 }
 
-private suspend fun gestureAt(context: Context, service: BridgeAccessibilityService, x: Int, y: Int, longPress: Boolean) {
-    withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, x, y) }
+private suspend fun gestureAt(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, x: Int, y: Int, longPress: Boolean) {
+    withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, x, y, access) }
     val ok = if (longPress) service.longPress(x, y) else service.tap(x, y)
     if (!ok) throw ToolException("Android cancelled the touch gesture (another gesture or the user interrupted it). Retry.")
 }

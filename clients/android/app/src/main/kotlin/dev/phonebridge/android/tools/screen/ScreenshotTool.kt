@@ -6,7 +6,7 @@ import android.util.Base64
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.access.ScreenshotException
 import dev.phonebridge.android.access.SelfProtection
-import dev.phonebridge.android.tools.support.Accessibility
+import dev.phonebridge.android.access.SystemOverlays
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
@@ -30,7 +30,9 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
         "is at most max_dimension pixels (default ${ScreenshotMath.DEFAULT_MAX_DIMENSION}). The caption gives the " +
         "factor to convert image coordinates to screen pixels for ui_tap/ui_swipe. Apps that protect their content " +
         "(banking, DRM video, incognito tabs; Android FLAG_SECURE) appear black: use screen_read for those. " +
-        "Prefer screen_read for finding and tapping elements; use screenshots for visual content.",
+        "Prefer screen_read for finding and tapping elements; use screenshots for visual content. If the user blocked " +
+        "some apps for this agent, screenshots are refused while any of them is visible, and while the notification " +
+        "shade, Quick Settings, the lock screen or the recent-apps screen is showing (use notifications_list instead).",
     scope = Scopes.SCREEN_READ,
     risk = Risk.READ,
     schema = objectSchema {
@@ -41,8 +43,8 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
         string("format", "Image format (default jpeg)", enum = listOf("jpeg", "png"))
     },
     timeoutMs = 30_000,
-    unavailable = { Accessibility.unavailableReason() },
-) { args, _ ->
+    unavailable = { UiAutomation.unavailableReason() },
+) { args, ctx ->
     val maxDimension = (args.optInt("max_dimension") ?: ScreenshotMath.DEFAULT_MAX_DIMENSION)
         .coerceIn(ScreenshotMath.MIN_MAX_DIMENSION, ScreenshotMath.MAX_MAX_DIMENSION)
     val png = when (args.optString("format")?.trim()?.lowercase()) {
@@ -54,16 +56,17 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
     if (!DeviceState.isScreenOn(context)) {
         throw ToolException("The phone's screen is off, so a screenshot would be black. Ask the user to turn it on, or use screen_read.")
     }
-    requireNoOwnWindow(context, service)
+    val access = ScreenAccess.of(context, ctx)
+    requireShareable(context, service, access)
     val app = UiAutomation.foregroundPackage(service)
     val bitmap = try {
         service.takeScreenshotBitmap()
     } catch (e: ScreenshotException) {
         throw ToolException(e.message ?: "Screenshot failed.")
     }
-    // Re-check: a PhoneBridge screen (e.g. an approval prompt) may have appeared meanwhile.
+    // Re-check: a PhoneBridge screen (e.g. an approval prompt) or a blocked app may have appeared meanwhile.
     try {
-        requireNoOwnWindow(context, service)
+        requireShareable(context, service, access)
     } catch (e: ToolException) {
         bitmap.recycle()
         throw e
@@ -86,10 +89,32 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
     ToolResult.image(Base64.encodeToString(encoded.bytes, Base64.NO_WRAP), if (png) "image/png" else "image/jpeg", caption)
 }
 
-private suspend fun requireNoOwnWindow(context: Context, service: BridgeAccessibilityService) {
-    val own = withContext(Dispatchers.IO) { service.rootNodes().any { it.packageName == context.packageName } }
-    if (own) throw ToolException(SelfProtection.OWN_SCREEN + " A PhoneBridge screen is visible right now; try again after it closes.")
+/**
+ * Throws unless the screen may be shared as pixels: no PhoneBridge window, and, for agents with app restrictions,
+ * no window or element of a blocked app and no system screen that shows other apps' content
+ * ([SystemOverlays]). Pixels can't be filtered per app the way screen_read filters nodes.
+ */
+private suspend fun requireShareable(context: Context, service: BridgeAccessibilityService, access: ScreenAccess) {
+    withContext(Dispatchers.IO) {
+        if (!access.restricted) {
+            val own = service.rootNodesOrStuck().any { it.packageName == context.packageName }
+            if (own) throw ToolException(OWN_WINDOW_VISIBLE)
+            return@withContext
+        }
+        val state = ScreenCapture.captureEverything(context, service)
+        if (state.windows.any { it.hidden }) throw ToolException(OWN_WINDOW_VISIBLE)
+        val windowPackages = state.windows.map { it.packageName }
+        val primary = state.windows.firstOrNull { it.primary }?.packageName
+        access.visibility.blockedForeground(primary, BridgeAccessibilityService.foregroundPackage, windowPackages)
+            ?.let { access.refuse(it, "Can't take a screenshot.") }
+        access.visibility.firstBlocked(state.windows)
+            ?.let { access.refuse(it, "Can't take a screenshot: a window or notification of a blocked app is visible.") }
+        SystemOverlays.detect(state.windows, state.locked, state.activity)
+            ?.let { throw ToolException(ScreenAccess.overlayRefusal(it)) }
+    }
 }
+
+private const val OWN_WINDOW_VISIBLE = SelfProtection.OWN_SCREEN + " A PhoneBridge screen is visible right now; try again after it closes."
 
 private class Encoded(
     val bytes: ByteArray,

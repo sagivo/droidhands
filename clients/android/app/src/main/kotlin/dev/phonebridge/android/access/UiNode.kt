@@ -111,6 +111,18 @@ class UiNode(
     /** Parent, grand-parent, ... up to the window root. */
     fun ancestors(): Sequence<UiNode> = generateSequence(parent) { it.parent }
 
+    /**
+     * A copy of this node (same [handle], so the same [key]) with [children] instead. The given children are
+     * re-parented to the copy, so only use it while rebuilding a tree that replaces this one.
+     */
+    fun withChildren(children: List<UiNode>): UiNode = UiNode(
+        text = text, description = description, hint = hint, stateDescription = stateDescription, viewId = viewId,
+        className = className, packageName = packageName, bounds = bounds, visible = visible, clickable = clickable,
+        longClickable = longClickable, editable = editable, scrollable = scrollable, checkable = checkable,
+        checked = checked, selected = selected, focused = focused, enabled = enabled, password = password,
+        actions = actions, children = children, handle = handle,
+    )
+
     override fun toString(): String = "UiNode($simpleClassName text=$text desc=$description id=$viewId ${bounds.compact()})"
 }
 
