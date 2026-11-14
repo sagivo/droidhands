@@ -73,6 +73,7 @@ private fun whatsAppSendTool(context: Context): Tool = tool(
     val business = args.optBool("business") ?: false
     val pkg = choosePackage(context, ctx, business)
     val target = WhatsAppTargets.resolve(context, args.optString("to"), args.optString("contact"))
+    ctx.reportActivity("Sending WhatsApp to ${target.displayName}")
     // Don't ask the user to approve something that cannot run anyway.
     if (BridgeAccessibilityService.instance != null) {
         BridgeAccessibilityService.healthCached()?.let { throw ToolException("$it Nothing was sent.") }

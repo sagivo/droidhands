@@ -72,6 +72,7 @@ private fun emailSendTool(context: Context): Tool = tool(
     val pkg = withContext(Dispatchers.IO) { EmailLauncher.chooseApp(context, args.optString("app")) }
     val label = withContext(Dispatchers.IO) { AppLabels.of(context, pkg) }
     ctx.appAccess.require(pkg, label)
+    ctx.reportActivity(draft.activityLabel())
     // Don't ask the user to approve something that cannot run anyway.
     if (BridgeAccessibilityService.instance != null) {
         BridgeAccessibilityService.healthCached()?.let { throw ToolException("$it Nothing was sent.") }

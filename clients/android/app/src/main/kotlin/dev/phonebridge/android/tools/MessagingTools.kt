@@ -140,6 +140,7 @@ private fun smsSend(context: Context): Tool = tool(
         )
     }
     val label = CommsArgs.label(recipient)
+    ctx.reportActivity("Sending SMS to $label")
     ctx.requireConfirmation("Send SMS to $label: \"$message\"")
     when (val outcome = sender.send(recipient.number, message)) {
         is SmsSender.Outcome.Sent -> ToolResult.json {
@@ -181,6 +182,7 @@ private fun phoneCall(context: Context): Tool = tool(
 ) { args, ctx ->
     Perms.require(context, Manifest.permission.CALL_PHONE)
     val recipient = resolveRecipient(context, args)
+    ctx.reportActivity("Calling ${CommsArgs.label(recipient)}")
     ctx.requireConfirmation("Call ${CommsArgs.label(recipient)}")
     withContext(Dispatchers.IO) { TelephonySupport.placeCall(context, recipient.number) }
     ToolResult.json {

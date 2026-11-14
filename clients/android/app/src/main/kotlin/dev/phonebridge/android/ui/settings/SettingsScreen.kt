@@ -152,6 +152,18 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                     )
                 }
             }
+            item(key = "activity-notification") {
+                SettingsCard {
+                    SwitchRow(
+                        title = "Show when agents are working",
+                        subtitle = "While an agent's action runs, a notification says which agent and what it is doing, " +
+                            "with Stop and Pause all. On Android 16 it also shows in the status bar. Message text and " +
+                            "codes are never shown in it.",
+                        checked = current.showAgentActivity,
+                        onCheckedChange = vm::setShowAgentActivity,
+                    )
+                }
+            }
             item(key = "permissions-header") { SectionHeader("Permissions & access") }
             item(key = "permissions") { PermissionsRow(setup, actions.onOpenPermissions) }
             item(key = "security-header") { SectionHeader("Security") }

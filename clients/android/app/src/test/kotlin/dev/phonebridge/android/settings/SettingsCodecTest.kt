@@ -50,6 +50,7 @@ class SettingsCodecTest {
         assertFalse(fresh.defaultRelayDecided)
         assertFalse(fresh.relayFromDefault)
         assertTrue("update checks are on by default", fresh.checkForUpdates)
+        assertTrue("the activity notification is on by default", fresh.showAgentActivity)
     }
 
     @Test
@@ -88,8 +89,9 @@ class SettingsCodecTest {
         // Written by this version on a fresh install before the UI decided (e.g. by the security defaults).
         val undecided = SettingsCodec.decode(mapOf(SettingsCodec.KEY_SECURITY_DEFAULTS_APPLIED to true, SettingsCodec.KEY_DEFAULT_RELAY_DECIDED to false))
         assertFalse(undecided.defaultRelayDecided)
-        val off = SettingsCodec.decode(mapOf(SettingsCodec.KEY_CHECK_FOR_UPDATES to false))
+        val off = SettingsCodec.decode(mapOf(SettingsCodec.KEY_CHECK_FOR_UPDATES to false, SettingsCodec.KEY_SHOW_AGENT_ACTIVITY to false))
         assertFalse(off.checkForUpdates)
+        assertFalse(off.showAgentActivity)
     }
 
     @Test
@@ -124,9 +126,10 @@ class SettingsCodecTest {
             defaultRelayDecided = true,
             relayFromDefault = true,
             checkForUpdates = false,
+            showAgentActivity = false,
         )
         val encoded = SettingsCodec.encode(settings)
-        assertEquals(16, encoded.size)
+        assertEquals(17, encoded.size)
         assertEquals(settings, SettingsCodec.decode(encoded))
         // Fresh-install values survive a save too (the store is no longer empty afterwards).
         val fresh = BridgeSettings(securityDefaultsApplied = true)

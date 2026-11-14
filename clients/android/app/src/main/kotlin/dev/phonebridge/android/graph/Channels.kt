@@ -24,6 +24,9 @@ object Channels {
     /** "Unlock your phone to let <agent> …" prompts (high importance, heads-up). */
     const val UNLOCK = "bridge_unlock"
 
+    /** "<agent> is using your phone" while tool calls run (low importance, silent; a Live Update on Android 16). */
+    const val ACTIVITY = "bridge_activity"
+
     /** Creates (or updates the names of) all channels. Idempotent; cheap enough for Application.onCreate. */
     fun createAll(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -51,7 +54,14 @@ object Channels {
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
             setShowBadge(false)
         }
-        manager.createNotificationChannels(listOf(status, confirm, pairing, unlock))
+        val activity = NotificationChannel(ACTIVITY, "Agent activity", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "Shows which agent is using your phone and what it is doing, with Stop and Pause all."
+            setShowBadge(false)
+            enableVibration(false)
+            setSound(null, null)
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        }
+        manager.createNotificationChannels(listOf(status, confirm, pairing, unlock, activity))
     }
 
     /**
@@ -82,6 +92,9 @@ object NotificationIds {
     /** The BridgeService foreground notification. */
     const val STATUS = 1
 
+    /** The agent activity notification (one for all agents). */
+    const val ACTIVITY = 2
+
     /** First id used for confirmation prompts; prompts use [CONFIRM_BASE] until [CONFIRM_BASE] + [CONFIRM_RANGE]. */
     const val CONFIRM_BASE = 10_000
     const val CONFIRM_RANGE = 100_000
@@ -103,6 +116,8 @@ object NotificationIds {
  */
 object NotificationGroups {
     const val STATUS = "phonebridge.status"
+
+    const val ACTIVITY = "phonebridge.activity"
 
     fun confirmation(notificationId: Int): String = "phonebridge.confirm.$notificationId"
 

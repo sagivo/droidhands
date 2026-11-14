@@ -182,6 +182,21 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Settings > "Show when agents are working" (saved immediately; the notification follows at once). */
+    fun setShowAgentActivity(on: Boolean) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { graph.settings.update { it.copy(showAgentActivity = on) } }
+                graph.agentActivity.settingChanged()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Changing the activity notification failed: ${e.javaClass.name}")
+                _messages.send("Couldn't change the setting: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
+    }
+
     /** Loads the app list and the sensitive-app suggestions (PackageManager, on IO). */
     fun loadApps() {
         viewModelScope.launch {

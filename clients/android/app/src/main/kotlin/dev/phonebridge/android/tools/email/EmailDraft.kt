@@ -27,10 +27,13 @@ data class EmailDraft(
     }
 
     /** Short phrase for the unlock prompt: "send an email to Tania Cohen" / "… to 3 people". */
-    fun unlockAction(): String {
-        val who = if (to.size == 1) (to.single().name ?: to.single().address) else "${to.size} people"
-        return "send an email to $who"
-    }
+    fun unlockAction(): String = "send an email to $recipientsShort"
+
+    /** For the activity notification (no subject or body): "Sending an email to Tania Cohen" / "… to 3 people". */
+    fun activityLabel(): String = "Sending an email to $recipientsShort"
+
+    private val recipientsShort: String
+        get() = if (to.size == 1) (to.single().name ?: to.single().address) else "${to.size} people"
 
     companion object {
         const val BODY_PREVIEW_CHARS = 120

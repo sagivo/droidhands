@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.confirm.NotificationConfirmationProvider
+import dev.phonebridge.android.live.AgentActivityTracker
 import dev.phonebridge.android.notify.BridgeNotificationListener
 import dev.phonebridge.android.pairing.PairingCoordinator
 import dev.phonebridge.android.pairing.PairingNotifications
@@ -138,6 +139,9 @@ class BridgeGraph private constructor(val app: Application) {
 
     val confirmations: NotificationConfirmationProvider by lazy { NotificationConfirmationProvider(app) }
 
+    /** The live "<agent> is using your phone" notification, fed by [mcpServer] (Settings > "Show when agents are working"). */
+    val agentActivity: AgentActivityTracker by lazy { AgentActivityTracker(app, enabled = { settings.state.value.showAgentActivity }) }
+
     /** Daily "is there a newer release?" check against the build's GitHub repository (if it names one). */
     val updates: UpdateChecker by lazy { UpdateChecker(app, BuildConfig.GITHUB_REPO, BuildConfig.VERSION_NAME) }
 
@@ -184,6 +188,7 @@ class BridgeGraph private constructor(val app: Application) {
             isAccessEnabled = { settings.state.value.accessEnabled },
             confirmationTimeoutMs = NotificationConfirmationProvider.DEFAULT_TIMEOUT_MS,
             globalSecurity = ::globalSecurity,
+            activity = agentActivity,
         )
     }
 
@@ -378,6 +383,16 @@ class BridgeGraph private constructor(val app: Application) {
             cancelCalls(tokenId = null)
             confirmations.denyAll()
         }
+    }
+
+    /**
+     * The activity notification's Stop: ends the running tool calls of [tokenIds] (their open approval prompts
+     * are withdrawn), audited CANCELLED as stopped by the user. The agents keep their access. Non-blocking.
+     */
+    fun stopAgentCalls(tokenIds: Collection<String>) {
+        if (!mcpServerLazy.isInitialized()) return
+        val stopped = tokenIds.distinct().sumOf { mcpServer.stopCalls(it) }
+        if (stopped > 0) Log.i(TAG, "Stopped $stopped running tool call(s) from the activity notification")
     }
 
     /** Stops [tokenId]'s running tool calls (all calls when null). No server yet means no calls to stop. */

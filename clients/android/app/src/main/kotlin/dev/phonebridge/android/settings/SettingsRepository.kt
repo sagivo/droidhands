@@ -55,6 +55,8 @@ data class BridgeSettings(
     val relayFromDefault: Boolean = false,
     /** Ask GitHub once a day whether a newer release exists (only in builds that name a repository). */
     val checkForUpdates: Boolean = true,
+    /** Settings > "Show when agents are working": the live activity notification while tool calls run. */
+    val showAgentActivity: Boolean = true,
 ) {
     /** Never print the access key (e.g. in crash logs or debug output). */
     override fun toString(): String =
@@ -62,7 +64,8 @@ data class BridgeSettings(
             "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBind=$localServerBind, " +
             "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot, neverAllowApps=${neverAllowApps.size} apps, " +
             "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied, " +
-            "localPluginsEnabled=$localPluginsEnabled, defaultRelayDecided=$defaultRelayDecided, relayFromDefault=$relayFromDefault, checkForUpdates=$checkForUpdates)"
+            "localPluginsEnabled=$localPluginsEnabled, defaultRelayDecided=$defaultRelayDecided, relayFromDefault=$relayFromDefault, " +
+            "checkForUpdates=$checkForUpdates, showAgentActivity=$showAgentActivity)"
 }
 
 /**

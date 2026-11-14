@@ -24,6 +24,7 @@ object SettingsCodec {
     internal const val KEY_DEFAULT_RELAY_DECIDED = "default_relay_decided"
     internal const val KEY_RELAY_FROM_DEFAULT = "relay_from_default"
     internal const val KEY_CHECK_FOR_UPDATES = "check_for_updates"
+    internal const val KEY_SHOW_AGENT_ACTIVITY = "show_agent_activity"
 
     /** Java/Android package name: at least two dot-separated segments, each starting with a letter. */
     private val PACKAGE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
@@ -87,6 +88,7 @@ object SettingsCodec {
                 defaultRelayDecided = bool(KEY_DEFAULT_RELAY_DECIDED, values.isNotEmpty()),
                 relayFromDefault = bool(KEY_RELAY_FROM_DEFAULT, defaults.relayFromDefault),
                 checkForUpdates = bool(KEY_CHECK_FOR_UPDATES, defaults.checkForUpdates),
+                showAgentActivity = bool(KEY_SHOW_AGENT_ACTIVITY, defaults.showAgentActivity),
             ),
         )
     }
@@ -112,6 +114,7 @@ object SettingsCodec {
         KEY_DEFAULT_RELAY_DECIDED to settings.defaultRelayDecided,
         KEY_RELAY_FROM_DEFAULT to settings.relayFromDefault,
         KEY_CHECK_FOR_UPDATES to settings.checkForUpdates,
+        KEY_SHOW_AGENT_ACTIVITY to settings.showAgentActivity,
     )
 
     /** Android's limit is far lower in practice; this only bounds pathological stored values. */
