@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.SectionHeader
+import dev.phonebridge.android.ui.setup.RestrictedSettings
 import dev.phonebridge.android.ui.setup.RestrictedSettingsGuide
 import dev.phonebridge.android.ui.setup.RestrictedSettingsHelp
 import dev.phonebridge.android.ui.setup.SetupActions
@@ -66,14 +67,21 @@ internal fun PermissionsStep(setup: SetupViewModel) {
         CircularProgressIndicator(Modifier.padding(16.dp))
         return
     }
+    val restricted = state.restrictedSettings
     WithSetupActions(setup) { actions ->
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            RuntimeCard(state.items, actions)
+            // Installed from the web on Android 13+: SMS (Android 15), notification access and accessibility need
+            // "Allow restricted settings" first, so the steps come before anything Android would refuse.
+            if (restricted.guideFirst) {
+                val accessibility = state.items.firstOrNull { it.id == SetupLogic.ACCESSIBILITY }
+                RestrictedSettingsCard(actions.openAppInfo, restricted.unlocks, accessibility?.let { { actions.onAction(it) } })
+            }
+            RuntimeCard(state.items, restricted, actions)
             val next = OnboardingFlow.nextSpecialAccess(state.items, skipped.toSet())
             if (next != null) {
-                // Installed from the web on Android 13+: accessibility needs "Allow restricted settings" first.
-                if (next.restrictedSettingsGuide) RestrictedSettingsCard(actions.openAppInfo)
-                NextAccessCard(next, actions, onSkip = { skipped = skipped + next.id })
+                // Restricted settings not shown above yet: accessibility needs them first.
+                if (next.restrictedSettingsGuide && !restricted.guideFirst) RestrictedSettingsCard(actions.openAppInfo)
+                NextAccessCard(next, actions, restricted.guideFirst, onSkip = { skipped = skipped + next.id })
             } else {
                 val (done, total) = OnboardingFlow.specialProgress(state.items)
                 DoneLine(if (done == total) "All special accesses granted" else "Special accesses: $done of $total granted")
@@ -87,7 +95,7 @@ internal fun PermissionsStep(setup: SetupViewModel) {
 }
 
 @Composable
-private fun RuntimeCard(items: List<SetupItem>, actions: SetupActions) {
+private fun RuntimeCard(items: List<SetupItem>, restricted: RestrictedSettings.Advice, actions: SetupActions) {
     val toRequest = OnboardingFlow.runtimeToRequest(items)
     val blocked = OnboardingFlow.blockedRuntime(items)
     OutlinedCard(Modifier.fillMaxWidth()) {
@@ -104,10 +112,7 @@ private fun RuntimeCard(items: List<SetupItem>, actions: SetupActions) {
                     Text("Grant all")
                 }
                 blocked.isNotEmpty() -> {
-                    Notice(
-                        "Android won't ask again for: ${blocked.joinToString { it.title }}. Allow them in App info > Permissions.",
-                        kind = NoticeKind.WARNING,
-                    )
+                    Notice(RestrictedSettings.blockedNotice(blocked, restricted), kind = NoticeKind.WARNING)
                     OutlinedButton(onClick = actions.openAppInfo) { Text("Open App info") }
                 }
                 else -> DoneLine("App permissions granted")
@@ -117,7 +122,7 @@ private fun RuntimeCard(items: List<SetupItem>, actions: SetupActions) {
 }
 
 @Composable
-private fun NextAccessCard(item: SetupItem, actions: SetupActions, onSkip: () -> Unit) {
+private fun NextAccessCard(item: SetupItem, actions: SetupActions, restrictedGuideShown: Boolean, onSkip: () -> Unit) {
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         modifier = Modifier
@@ -151,7 +156,9 @@ private fun NextAccessCard(item: SetupItem, actions: SetupActions, onSkip: () ->
                 )
             }
             // The guided card above already covers it.
-            if (item.restrictedSettingsHelp && !item.restrictedSettingsGuide) RestrictedSettingsHelp(actions.openAppInfo)
+            if (item.restrictedSettingsHelp && !item.restrictedSettingsGuide && !restrictedGuideShown) {
+                RestrictedSettingsHelp(actions.openAppInfo)
+            }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 TextButton(onClick = onSkip) { Text("Skip") }
                 Button(onClick = { actions.onAction(item) }) { Text(SetupLogic.actionLabel(item) ?: "Open settings") }
@@ -160,16 +167,19 @@ private fun NextAccessCard(item: SetupItem, actions: SetupActions, onSkip: () ->
     }
 }
 
-/** The "Allow restricted settings" steps, as their own card right above the accessibility card. */
+/**
+ * The "Allow restricted settings" steps as their own card: first on the step ([onOpenAccessibility] set, for step 1),
+ * or right above the accessibility card.
+ */
 @Composable
-private fun RestrictedSettingsCard(onOpenAppInfo: () -> Unit) {
+private fun RestrictedSettingsCard(onOpenAppInfo: () -> Unit, unlocks: String = "accessibility", onOpenAccessibility: (() -> Unit)? = null) {
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
         modifier = Modifier
             .fillMaxWidth()
             .semantics { liveRegion = LiveRegionMode.Polite },
     ) {
-        RestrictedSettingsGuide(onOpenAppInfo, Modifier.padding(16.dp))
+        RestrictedSettingsGuide(onOpenAppInfo, Modifier.padding(16.dp), unlocks, onOpenAccessibility)
     }
 }
 

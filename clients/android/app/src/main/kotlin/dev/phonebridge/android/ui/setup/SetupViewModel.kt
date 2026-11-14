@@ -22,7 +22,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Snapshot of the Setup checklist. */
-data class SetupUiState(val loaded: Boolean = false, val items: List<SetupItem> = emptyList()) {
+data class SetupUiState(
+    val loaded: Boolean = false,
+    val items: List<SetupItem> = emptyList(),
+    /** For the onboarding Permissions step: installed from the web and restricted settings not allowed yet. */
+    val restrictedSettings: RestrictedSettings.Advice = RestrictedSettings.Advice(),
+) {
     val progress: SetupProgress = SetupLogic.progress(items)
 }
 
@@ -62,8 +67,11 @@ class SetupViewModel(app: Application) : AndroidViewModel(app) {
             askedLoaded.await()
             val askedNow = asked.value
             try {
-                val items = withContext(Dispatchers.IO) { SetupChecks.read(getApplication(), askedNow, showRationale) }
-                _state.value = SetupUiState(loaded = true, items = items)
+                val (items, restricted) = withContext(Dispatchers.IO) {
+                    SetupChecks.read(getApplication(), askedNow, showRationale) to SetupChecks.installRestricted(getApplication())
+                }
+                val advice = RestrictedSettings.advice(restricted, Build.VERSION.SDK_INT, items)
+                _state.value = SetupUiState(loaded = true, items = items, restrictedSettings = advice)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

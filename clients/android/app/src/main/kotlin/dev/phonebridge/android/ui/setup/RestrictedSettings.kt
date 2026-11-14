@@ -14,7 +14,8 @@ data class InstallSource(
  * Android 13+ "restricted settings" (pure, unit-tested). An app installed from an APK file (a
  * browser download or a file manager) can't turn on accessibility or notification access: the
  * switch is greyed out ("Restricted setting") until the user opens App info > ⋮ > Allow restricted
- * settings. Android only adds that menu item after the user tried to turn the setting on once, so
+ * settings. Android 15 also refuses SMS permissions for it ("App was denied access to SMS") until
+ * then. Android only adds that menu item after the user tried to turn the setting on once, so
  * the guide starts with that attempt.
  */
 object RestrictedSettings {
@@ -27,6 +28,12 @@ object RestrictedSettings {
     const val SOURCE_STORE = 2
     const val SOURCE_LOCAL_FILE = 3
     const val SOURCE_DOWNLOADED_FILE = 4
+
+    /** First Android version that also restricts SMS permissions for such installs (Android 15). */
+    const val SMS_SDK = 35
+
+    /** The runtime permission row Android 15 restricts (PermissionCatalog's SMS group). */
+    const val SMS_ID = "sms"
 
     /** `adb install` (the developer setup over USB, scripts/setup-phone.sh): never restricted. */
     const val SHELL = "com.android.shell"
@@ -53,6 +60,55 @@ object RestrictedSettings {
         source.packageSource == SOURCE_LOCAL_FILE || source.packageSource == SOURCE_DOWNLOADED_FILE -> true
         source.installer in SYSTEM_INSTALLERS -> true
         else -> source.installer.isNullOrBlank()
+    }
+
+    /**
+     * True when restricted settings are known to be allowed already, from what Android let the user grant: only an
+     * allowed app can turn on accessibility (even if not connected yet) or notification access, or, on Android 15+,
+     * hold an SMS permission. There is no public API to ask directly.
+     */
+    fun likelyAllowed(items: List<SetupItem>, sdkInt: Int): Boolean = items.any {
+        when (it.id) {
+            SetupLogic.ACCESSIBILITY -> it.status == SetupStatus.DONE || it.status == SetupStatus.PENDING
+            SetupLogic.NOTIFICATION_ACCESS -> it.status == SetupStatus.DONE
+            SMS_ID -> sdkInt >= SMS_SDK && (it.status == SetupStatus.DONE || it.status == SetupStatus.PARTIAL)
+            else -> false
+        }
+    }
+
+    /** What the onboarding Permissions step shows about restricted settings. */
+    data class Advice(
+        /** Show the guide first, above "App permissions": the install is restricted and nothing shows it was allowed. */
+        val guideFirst: Boolean = false,
+        /** Android 15+: SMS is restricted too, so a refused SMS permission needs the guide before App info. */
+        val coversSms: Boolean = false,
+    ) {
+        /** What allowing restricted settings unlocks, e.g. "SMS, notification access and accessibility". */
+        val unlocks: String get() = if (coversSms) "SMS, notification access and accessibility" else "notification access and accessibility"
+    }
+
+    /** [Advice] for an install that is [restricted] ([likelyRestricted]), given the current [items]. */
+    fun advice(restricted: Boolean, sdkInt: Int, items: List<SetupItem>): Advice {
+        if (!restricted || likelyAllowed(items, sdkInt)) return Advice()
+        return Advice(guideFirst = true, coversSms = sdkInt >= SMS_SDK)
+    }
+
+    /**
+     * The warning for runtime rows Android won't ask about again ([blocked]). A refused SMS permission on a
+     * restricted Android 15 install can only be allowed after the guide's steps, so it says that instead.
+     */
+    fun blockedNotice(blocked: List<SetupItem>, advice: Advice): String {
+        val sms = blocked.filter { advice.coversSms && it.id == SMS_ID }
+        val others = blocked - sms.toSet()
+        return listOfNotNull(
+            others.takeIf { it.isNotEmpty() }?.let { list ->
+                "Android won't ask again for: ${list.joinToString { it.title }}. Allow them in App info > Permissions."
+            },
+            sms.takeIf { it.isNotEmpty() }?.let {
+                "Android blocks SMS for apps installed from the web. Do the \"Allow restricted settings\" steps above first, " +
+                    "then allow SMS in App info > Permissions."
+            },
+        ).joinToString(" ")
     }
 
     /**
