@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: facebook
+name: Facebook
+description: Meta's social network.
+category: social
+homepage: https://www.facebook.com
+status: experimental
+android:
+  packages: [com.facebook.katana]
+
+actions:
+  - id: open_profile
+    title: Open a profile or Page
+    description: >-
+      Opens a Facebook profile or Page by the name in its link, e.g. NASA for facebook.com/NASA (or a numeric
+      profile id). Nothing else happens: no friend request, like or message.
+    keywords: [profile, page, account, person, friend, open]
+    risk: action
+    params:
+      username:
+        description: The name from the profile or Page link, e.g. NASA for facebook.com/NASA
+        required: true
+        pattern: "^[A-Za-z0-9.-]{1,100}$"
+    completes: true
+    android:
+      url: "https://www.facebook.com/{{username}}"
+    examples:
+      - params: {username: NASA}
+        expect: {url: "https://www.facebook.com/NASA"}
+      - params: {username: "facebook.com/NASA"}
+        expect: {error: username}
+
+  - id: share_text
+    title: Share a link
+    description: >-
+      Opens Facebook's share screen with a link. Facebook only keeps the link: any other text is dropped, because
+      Facebook does not let apps prefill what the user writes. Nothing is published until the user taps Post.
+    keywords: [share, link, url, feed, story]
+    risk: action
+    params:
+      text:
+        description: The link to share, e.g. https://example.com/article
+        required: true
+        max_length: 2000
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.SEND
+        type: text/plain
+        extras:
+          android.intent.extra.TEXT: "{{text}}"
+    examples:
+      - params: {text: "https://example.com/article"}
+        expect:
+          intent:
+            action: android.intent.action.SEND
+            package: com.facebook.katana
+            type: text/plain
+            extras: {android.intent.extra.TEXT: "https://example.com/article"}
+      - params: {}
+        expect: {error: text}

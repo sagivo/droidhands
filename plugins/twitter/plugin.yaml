@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: twitter
+name: X (Twitter)
+description: The X social network, formerly Twitter.
+category: social
+homepage: https://x.com
+status: experimental
+android:
+  packages: [com.twitter.android]
+
+actions:
+  - id: compose
+    title: Compose a tweet
+    description: >-
+      Opens X's composer with the text filled in, using X's "post" web intent link. Nothing is published until
+      the user (or you, with screen_read and ui_tap) taps Post, so make sure the user wants it public first. Links
+      and hashtags can go in the text.
+    keywords: [tweet, post, publish, write, status, update, share, x]
+    risk: action
+    params:
+      text:
+        description: The text of the post (X allows 280 characters on most accounts)
+        required: true
+        max_length: 4000
+    completes: false
+    android:
+      url: "https://twitter.com/intent/tweet?text={{text}}"
+    examples:
+      - params: {text: "Shipping v2 today #launch"}
+        expect: {url: "https://twitter.com/intent/tweet?text=Shipping%20v2%20today%20%23launch"}
+      - params: {}
+        expect: {error: text}
+
+  - id: open_profile
+    title: Open a profile
+    description: Opens an X account's profile by its handle, e.g. NASA for @NASA. Nothing else happens.
+    keywords: [profile, account, user, handle, follow, timeline]
+    risk: action
+    params:
+      username:
+        description: The handle without the @, e.g. NASA
+        required: true
+        pattern: "^[A-Za-z0-9_]{1,15}$"
+    completes: true
+    android:
+      url: "https://twitter.com/{{username}}"
+    examples:
+      - params: {username: NASA}
+        expect: {url: "https://twitter.com/NASA"}
+      - params: {username: "@NASA"}
+        expect: {error: username}
