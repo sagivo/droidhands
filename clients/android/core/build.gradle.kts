@@ -38,6 +38,8 @@ tasks.test {
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
     systemProperty("phonebridge.pluginsDir", pluginsDir.absolutePath)
     inputs.dir(pluginsDir).withPropertyName("plugins").withPathSensitivity(PathSensitivity.RELATIVE)
+    // PluginScaffoldScriptTest runs it.
+    inputs.file(repoRoot.resolve("scripts/plugin-scaffold.sh")).withPropertyName("scaffoldScript").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Validates plugins and runs their examples, without a phone: all of plugins/, or -Ppath=plugins/<id>
