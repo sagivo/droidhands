@@ -23,6 +23,7 @@
 | Wire protocols, token format, tool catalog | `docs/PROTOCOL.md`, `docs/TOOLS.md` | No. This is the contract for all platforms. |
 | Relay | `relay/` (TypeScript, Node ≥ 20, `ws`) | No. It tunnels opaque HTTP to any device. |
 | Bridge core: MCP server, tokens, device identity, policy, rate limits, audit, confirmations API, relay client, local HTTP server | `clients/android/core` (pure Kotlin/JVM; no Android imports) | No. Designed to become a Kotlin Multiplatform module for iOS. An iOS app could also re-implement it from the docs. |
+| App plugins: format, validator, templates, rendering, catalog, `app_actions_list` / `app_action_run` | `plugins/` (YAML, one folder per app) and `clients/android/core/.../plugins` | No. Each plugin has an `android:` section today; the platform only runs rendered recipes. |
 | Android app: services, permissions UI, tool implementations | `clients/android/app` | Yes |
 
 Adding a platform means implementing the tools from `docs/TOOLS.md` with that platform's APIs,
@@ -41,6 +42,19 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
    * `internal`-confirm tools (`confirmsInternally = true`): the tool resolves its targets and then
      calls `ctx.requireConfirmation(summary)`, which prompts only if policy requires it and throws
      `ToolException` on deny or timeout.
+
+   Tools with `alwaysConfirm` (actions of unreviewed local plugins) are always confirmed, whatever the
+   rule and policy say.
+
+   **Dispatch.** A `DispatchTool` (`app_action_run`) stands for other tools. After its own scope check,
+   the kill switch, the security settings and its own BLOCK rule, risk cap and active hours
+   (`PolicyEngine.precheck`), its `resolve()` picks the tool that really runs: the app action's
+   virtual tool `<package>/<action id>`, or a built-in tool such as `whatsapp_send` for `tool` recipes.
+   Resolution checks app access (a blocked app is audited `DENIED_APP`) and the parameters, and has no
+   side effects. The resolved tool then goes through everything above under its own name: its scope,
+   `PolicyEngine.evaluate` (rules keyed by its name, rate limits counted once), confirmation by its
+   risk, its timeout and stop checks (which also require the dispatching tool to stay allowed). Its
+   audit entry has its name and arguments and notes "via app_action_run". Dispatch never nests.
 4. The tool runs with a timeout (`tool.timeoutMs`). `ToolException` and other errors become
    `isError` results.
 5. `AuditLog.record()` is called for every call (allowed, denied or failed) and every auth failure.
@@ -53,6 +67,20 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
    `TrackingAuditLog` also feeds `UsageTracker`, which holds the per-agent counters behind the usage
    screens. `CallContext` carries the call's `appAccess` and `redactOneTimeCodes`, which every
    app-facing tool enforces.
+
+## App actions and plugins
+
+Every installed app gets a menu of actions ([PLUGINS.md](PLUGINS.md)). The plugin engine lives in
+core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
+
+| Piece | Does |
+|---|---|
+| `PluginYaml` | Safe YAML 1.2 loading (snakeyaml-engine: Core schema only, no custom tags, alias and size limits). |
+| `PluginParser`, `PluginValidator`, `PluginExamples`, `PluginLoader` | Turn a `plugin.yaml` into an `AppPlugin`, enforce every rule of PLUGINS.md §3-§9 with path-precise errors, and run its examples. `:core:test` and `:core:checkPlugins` run them over `plugins/`. |
+| `Template`, `ParamValues`, `ParamSchemas`, `RecipeRenderer` | `{{param}}` templates (URL encoding, typed values), parameter checks and JSON Schemas, and rendering into `RenderedIntent` / `RenderedUrl` / `RenderedSteps` / `RenderedToolCall`, pinned to the installed package. |
+| `PluginCatalog` | Bundled plugins plus local ones (which replace bundled plugins with the same id), by id and by package. |
+| `AppActionsPlatform` (interface) | What the platform provides: installed apps, app-name resolution under app access, discovered actions (§8), availability, and running a rendered recipe. The Android app implements it. |
+| `AppActionCatalog`, `appActionTools()` | Per app: plugin actions plus discovered ones; each action's tool; `app_actions_list` and `app_action_run` (a `DispatchTool`). |
 
 ## Android components
 

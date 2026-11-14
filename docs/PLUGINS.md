@@ -42,7 +42,10 @@ Every `plugin.yaml` starts with
 completion and inline errors.
 
 `./scripts/plugin-check.sh` (which runs `./gradlew :core:checkPlugins`) validates every plugin and
-runs its examples (§7) on your computer, with no phone needed. CI runs it on every pull request.
+runs its examples (§7) on your computer, with no phone needed. It needs a JDK 17 but no Android SDK.
+`./gradlew :core:test` runs the same checks, and CI runs it on every pull request. Errors name the
+plugin and the field, e.g. `spotify: actions[1].android.intent.extras.count: …`, and unknown keys
+suggest the closest known one.
 
 ## 2. A complete example
 
@@ -114,7 +117,9 @@ actions:
 | `ios.bundle_ids` | no | Reserved for the iOS client. |
 | `actions` | yes | 1 to 30 actions (§4). |
 
-Unknown keys are errors, so typos are caught. `ios` sections are kept but not checked yet.
+Unknown keys are errors, so typos are caught. `ios` sections are kept but not checked yet. A `stable`
+plugin needs at least one `tested` record and examples for every action. Package names starting with
+`dev.phonebridge` (PhoneBridge itself, any build) are refused.
 
 ## 4. Action fields
 
@@ -123,16 +128,18 @@ Unknown keys are errors, so typos are caught. `ios` sections are kept but not ch
 | `id` | yes | `^[a-z][a-z0-9_]{0,39}$`, unique within the plugin. Avoid the discovered ids (§8) unless you mean to replace them. |
 | `title` | yes | Short imperative title, e.g. "Play music" (≤ 60 chars). |
 | `description` | yes | For the agent: what it does, what it does *not* do, and caveats (≤ 600 chars). |
-| `keywords` | no | Extra words for `app_actions_list(query=…)` search. |
+| `keywords` | no | Extra words for `app_actions_list(query=…)` search (at most 20, each ≤ 40 chars). |
 | `risk` | yes** | `read`, `action` (local, reversible: opens or plays something) or `sensitive` (reaches other people, spends money, or is hard to undo). Drives on-phone approval. See §9 for the floors the validator enforces. |
 | `scope` | no | The token scope required (default `apps`). Allowed: `apps`, `device`, `contacts.read`, `messages.read`, `messages.send`, `calls`, `notifications.read`, `calendar.read`, `calendar.write`, `location`, `screen.read`. |
 | `params` | no | Ordered map of parameter name to spec (§5). Names match `^[a-z][a-z0-9_]{0,39}$`, at most 10. |
-| `confirm` | no | Template for the approval prompt, e.g. `Send "{{text}}" to {{contact}} on Telegram`. Defaults to `<App>: <title>` plus the parameters. |
+| `confirm` | no | Template for the approval prompt (≤ 300 chars), e.g. `Send "{{text}}" to {{contact}} on Telegram`. Defaults to `<App>: <title> (name=value, …)`. For local plugins the prompt also shows what the recipe will really do (e.g. the link it opens). |
 | `completes` | no | `true` if the action finishes the task by itself (plays music, sends a message), `false` if it opens a screen where someone still has to act (a filled-in compose screen, ride options). Defaults to `true` for `tool` and `steps`, `false` for `intent` and `url`. Agents are told what to do next when it is `false`. |
 | `android` | yes* | Exactly one recipe: `intent`, `url`, `steps` or `tool` (§6). |
-| `examples` | no | Test cases (§7). Strongly encouraged; required for `status: stable`. |
+| `examples` | no | Test cases (§7), at most 20. Strongly encouraged; required for `status: stable`. |
+| `ios` | no | Reserved for the iOS client: kept, not checked yet. |
 
-\* An action without an `android` recipe is skipped on Android (for iOS-only actions later).
+\* An action without an `android` recipe is skipped on Android (for iOS-only actions later). It needs
+an `android` or an `ios` section.
 \** Omit `risk` and `scope` for `tool` recipes. They come from the built-in tool.
 
 ## 5. Parameters
@@ -150,16 +157,18 @@ params:
 | Field | Meaning |
 |---|---|
 | `type` | `string` (default), `integer`, `number` or `boolean`. |
-| `description` | Required. Shown to the agent. |
-| `required` | Default `false`. |
-| `enum` | Allowed values (strings or numbers). |
+| `description` | Required (≤ 300 chars). Shown to the agent. |
+| `required` | Default `false`. A required parameter can't have a `default`. |
+| `enum` | Allowed values (strings or numbers, matching `type`; not for booleans). |
 | `default` | Used when the agent leaves the parameter out. |
 | `min_length` / `max_length` | Strings. `max_length` defaults to 2000 and may not exceed 10000. |
 | `minimum` / `maximum` | Numbers. |
-| `pattern` | A regular expression the whole string must match, e.g. `^\+?[0-9]{6,15}$`. |
+| `pattern` | A regular expression the whole string must match, e.g. `^\+?[0-9]{6,15}$` (≤ 300 chars). |
 
 PhoneBridge turns `params` into the JSON Schema the agent sees, and checks every call against it
-before anything runs. Unknown parameters are refused.
+before anything runs (and before any approval prompt). Unknown parameters are refused. Like the
+built-in tools, it accepts `"5"` for an integer, `"true"` for a boolean and a number for a string, and
+treats `null` (and an empty string for a required parameter) as missing.
 
 ## 6. Android recipes
 
@@ -241,21 +250,24 @@ android:
 | `wait_for: <selector>` | Waits until a matching element is on screen. |
 | `tap: <selector>` / `long_press: <selector>` | Waits for the element, then clicks it (or its clickable parent). |
 | `type: {into: <selector>, text: "<template>", clear: true, submit: false}` | Sets the text of a field (`into` defaults to the focused field). `submit` presses the keyboard's action key. |
-| `scroll: {direction: down, in: <selector>, until: <selector>, max: 5}` | Scrolls a list (all keys except `direction` optional). |
+| `scroll: {direction: down, in: <selector>, until: <selector>, max: 5}` | Scrolls a list (all keys except `direction` optional; `max` ≤ 20). |
 | `back: true` | Presses Back. |
 | `sleep: 500` | Waits (≤ 3000 ms). |
-| `expect: <selector>` + `fail: "<message>"` | Fails the action with the message if the element doesn't show up. |
+| `expect: <selector>` + `fail: "<message>"` | Fails the action with the message if the element doesn't show up. Without `fail`, the agent gets a generic message. |
 | `if_present: <selector>` + `then: [steps]` | Runs the nested steps only if the element is on screen now (one level deep). |
 
 Every step may also carry `optional: true` (failure is ignored) and `timeout_ms` (default 5000,
-max 15000).
+max 15000). For `wait_for`, `tap`, `long_press`, `expect` and `if_present` they may also go inside the
+selector's map, as in `wait_for: {text_contains: "{{query}}", timeout_ms: 8000}`.
 
 **Selectors** match elements in the plugin's app only:
-`{id, text, text_contains, desc, desc_contains, class, clickable, index}`. `id` may be short
-(`search_src_text`, which gets the app's package prefixed) or full (`com.spotify.music:id/search_src_text`).
-`class` matches the simple class name (`EditText`). Text matches ignore case. `index` picks the nth
-match (default 0). A plain string (`tap: Send`) matches an element whose text or description equals it.
-Templates are allowed in `text`, `text_contains`, `desc` and `desc_contains`.
+`{id, text, text_contains, desc, desc_contains, class, clickable, index}`, at least one of them other
+than `index`. `id` may be short (`search_src_text`, which gets the app's package prefixed) or full
+(`com.spotify.music:id/search_src_text`); a full id must belong to one of the plugin's packages or to
+`android` (framework ids such as `android:id/button1`). `class` matches the simple class name
+(`EditText`). Text matches ignore case. `index` picks the nth match (default 0, max 50). A plain string
+(`tap: Send`) matches an element whose text or description equals it. Templates are allowed in
+`text`, `text_contains`, `desc` and `desc_contains`.
 
 **Confinement:** before every tap, long-press, type or scroll, PhoneBridge checks that the plugin's
 app is in the foreground. If another app is, the action stops with an error naming it. Recipes can't
@@ -281,6 +293,10 @@ press Home, open the notification shade, or touch other apps or PhoneBridge itse
 The call runs exactly as if the agent had called `whatsapp_send` itself, with that tool's scope, risk,
 approval, rules and audit entry. This is how app-centric menus reuse the tested built-in tools
 (`whatsapp_send`, `email_send`, `sms_send`, `phone_call`, `calendar_event_create`, `alarm_set`, …).
+A BLOCK rule on the action's own name (`com.whatsapp/send_message`) refuses it too, and the audit entry
+notes it. `args` values are templates, numbers, booleans or lists of those. Recipes can't use
+`intent_start`, the screen tools (`screen_*`, `ui_*`) or the tools that list or run actions
+(`bridge_capabilities`, `apps_list`, `app_actions_list`, `app_action_run`).
 
 ## 7. Examples (tests that run without a phone)
 
@@ -295,11 +311,16 @@ examples:
 `expect` holds exactly one of these:
 
 * `intent`: `{action, package, data, type, categories, class, extras}`. `package` is the first entry
-  of `android.packages`. Only the keys you list are compared.
+  of `android.packages`. Only the keys you list are compared, and within `extras` only the extras you
+  list; `null` means the extra must be absent. Values must match in type: `count: 5` is an int extra,
+  `count: "5"` a string. `class` may be written relative (`.Main`).
 * `url`: the full rendered URL.
-* `tool`: `{name, args}`.
-* `steps`: a list of the rendered steps (optional, compared in order).
-* `error`: a substring of the validation error.
+* `tool`: `{name, args}`. `args` must match all rendered arguments.
+* `steps`: the full list of rendered steps, in recipe syntax with the parameters filled in (short ids
+  are fine), compared in order.
+* `error`: a substring of the validation error (case does not matter).
+
+Examples run only when the plugin has no other problems.
 
 ## 8. Discovered actions (no plugin needed)
 
@@ -317,7 +338,10 @@ updated or removed.
 | `shortcut_<id>` | each static launcher shortcut whose target is exported and not a call action | none | action |
 | `<capability>` | each App Actions capability in the app's `shortcuts.xml` (e.g. `actions.intent.GET_THING` → `get_thing`), with its parameters | per capability | action; `sensitive` for messaging, calling, ordering, booking and payment capabilities |
 
-When a plugin defines an action with the same id, the plugin's version wins.
+When a plugin defines an action with the same id, the plugin's version wins. A plugin applies to the
+first of its `android.packages` that is installed; other installed packages it lists get discovered
+actions only. Discovered actions are not validated like plugins, but the run-time checks below (and
+the refusal of call actions and forbidden URL schemes) apply to them too.
 
 ## 9. Security rules
 
@@ -326,12 +350,19 @@ The validator, at build time and when a local plugin is imported, rejects:
 * risk below `sensitive` for scope `messages.send` or `calls`, and for any action whose `confirm`, `title`
   or `id` says it sends, posts, pays, buys, orders, books, calls, deletes or transfers;
 * risk `read` for any `steps` recipe that taps, types or scrolls;
-* `risk` or `scope` on a `tool` recipe, or a `tool` name that doesn't exist (or is `intent_start` or a
-  `ui_*` / `screen_*` tool);
+* `risk` or `scope` on a `tool` recipe, or a `tool` name that doesn't exist (or is `intent_start`, a
+  `ui_*` / `screen_*` tool, or one of the tools that list or run actions);
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,
   `type`, `categories`, `class` or extra keys;
 * URL templates whose scheme isn't literal;
 * `android.packages` containing PhoneBridge itself.
+
+The word check matches whole words, ignoring case, in the `id` (split at `_`), the `title` and the
+`confirm` text (placeholders ignored): the verbs *send, post, pay, buy, purchase, checkout, order,
+book, call, dial, delete, transfer*, their *-ing* forms and the third-person forms that are rarely
+nouns (*sends, pays, buys, purchases, dials, deletes, transfers*). Nouns such as *orders*, *posts* or
+*calls*, and past forms such as *sent* or *booked*, are not matched. If the check flags a word used
+as a noun ("Track order"), rephrase the title ("Track a delivery") or mark the action `sensitive`.
 
 At run time:
 
@@ -340,12 +371,16 @@ At run time:
 * **Policy applies per action.** Each action is checked as its own tool, named
   `<package>/<action id>` (e.g. `com.spotify.music/play`), against the agent's scopes, risk cap
   and per-tool rules. It is approved according to its `risk`, rate-limited, and audited under that
-  name.
+  name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
+  Read-only agent can't run app actions). Parameters are checked, and the recipe rendered, before
+  any approval prompt.
 * **Pinned and confined:** intents and links are pinned to the app's package, and recipes act only
   while that app is in the foreground.
 * **Local plugins** (imported on the phone for testing, §10) are off unless the user turns on
-  *Settings → Developer → Local plugins*. Their actions **always** need approval on the phone, and
-  the prompt is marked "unreviewed plugin".
+  *Settings → Developer → Local plugins*. Their actions **always** need approval on the phone (even
+  with an ALLOW rule or the "never ask" policy, and for `tool` recipes too), and the prompt is marked
+  "unreviewed plugin" and shows what the recipe will do. A local plugin with the id of a bundled one
+  replaces it; one whose action ids clash with another plugin for the same package is refused.
 
 ## 10. Developing and testing a plugin
 
