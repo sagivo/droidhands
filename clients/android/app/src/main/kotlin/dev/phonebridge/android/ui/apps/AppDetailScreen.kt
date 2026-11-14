@@ -1,6 +1,5 @@
 package dev.phonebridge.android.ui.apps
 
-import android.content.ActivityNotFoundException
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -179,8 +178,8 @@ private fun AppDetailContent(
                         vm.createDraft(app.packageName) { intent ->
                             try {
                                 context.startActivity(intent)
-                            } catch (_: ActivityNotFoundException) {
-                                // No app can receive text: nothing to share to.
+                            } catch (_: RuntimeException) {
+                                // No app can receive text, or the screen is gone: nothing to share to.
                             }
                         }
                     },

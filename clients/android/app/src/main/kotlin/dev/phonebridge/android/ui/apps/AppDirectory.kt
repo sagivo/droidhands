@@ -41,6 +41,14 @@ class AppDirectory(
         scope.launch { reload(force) }
     }
 
+    /**
+     * Marks the list as stale, so the next [refresh] reloads it (after the plugins changed: a local plugin
+     * was imported or removed, or local plugins were turned on or off). Loads nothing by itself.
+     */
+    fun invalidate() {
+        loadedAt = 0L
+    }
+
     /** [refresh], waiting for the result. */
     suspend fun reload(force: Boolean = false) {
         mutex.withLock {

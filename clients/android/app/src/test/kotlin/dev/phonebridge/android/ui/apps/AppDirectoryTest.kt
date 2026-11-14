@@ -1,6 +1,7 @@
 package dev.phonebridge.android.ui.apps
 
 import dev.phonebridge.android.ui.apps.AppTestData.listing
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -9,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppDirectoryTest {
     private var now = 1_000_000L
     private var loads = 0
@@ -40,6 +42,11 @@ class AppDirectoryTest {
         assertEquals(3, loads)
         assertEquals("App 3", directory.apps.value!!.single().label)
         assertFalse(directory.loading.value)
+        // After the plugins change, the next refresh reloads at once.
+        directory.invalidate()
+        assertEquals(3, loads)
+        directory.reload()
+        assertEquals(4, loads)
     }
 
     @Test
