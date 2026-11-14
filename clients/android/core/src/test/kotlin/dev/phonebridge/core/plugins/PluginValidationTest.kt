@@ -116,6 +116,9 @@ class PluginValidationTest {
         assertProblem(doc().replace("[com.demo.app, com.demo.lite]", "[com.demo.app, com.demo.app]"), "'com.demo.app' is listed twice")
         assertProblem(doc().replace("[com.demo.app, com.demo.lite]", "[com.demo.app, dev.phonebridge.android]"), "android.packages[1]: plugins can't target PhoneBridge itself")
         assertProblem(doc().replace("[com.demo.app, com.demo.lite]", "[dev.phonebridge.android.debug]"), "can't target PhoneBridge itself")
+        assertProblem(doc().replace("[com.demo.app, com.demo.lite]", "[dev.phonebridge]"), "can't target PhoneBridge itself")
+        // The emulator-only E2E fixture apps are not PhoneBridge: test plugins may target them.
+        assertValid(doc().replace("[com.demo.app, com.demo.lite]", "[dev.phonebridge.fixture.mail]"))
         assertProblem(doc().replace("android:\n  packages: [com.demo.app, com.demo.lite]", "android:\n  package: com.demo.app"), "android.package: unknown field (did you mean 'packages'?)")
     }
 
