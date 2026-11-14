@@ -45,7 +45,7 @@ Numbers as of late 2026; Cloudflare changes them now and then, so check
 | 100,000 Worker requests per day | Every MCP call, every phone (re)connection, every pairing page load and poll (one every 1.5 s while the page is open). |
 | 100,000 Durable Object requests per day | Every MCP call (one), pairing steps, phone connections. Messages from the phone count as 1/20 of a request each. |
 | 13,000 GB-s of Durable Object time per day | An object counts as 128 MB while it is awake: that is about 28 hours of "awake" per day across all phones. An MCP call keeps the phone's object awake while the phone works on it (seconds, or up to a minute while you confirm on the phone), plus about 10 s before it hibernates again. |
-| 10 ms CPU per request | Plenty: the relay only routes and copies JSON. Waiting for the phone is not CPU time. |
+| 10 ms CPU per request | Plenty for normal calls: the relay only routes and copies JSON, and waiting for the phone is not CPU time. Copying very large answers (several MiB, such as big screenshots) costs more and may hit this limit; `wrangler dev` does not enforce it, so this is untested. |
 | 5 GB storage, 100,000 rows written per day | A few small writes per pairing. Nothing is stored for normal MCP traffic. |
 
 What that means:
@@ -102,6 +102,11 @@ them); secrets are set with `npx wrangler secret put <NAME>`. The variables are 
 `MAX_PENDING_HANDSHAKES[_PER_IP]`, `RATE_LIMIT_*`, `ALLOW_TOKEN_IN_URL`, `LOG_LEVEL` and
 `RELAY_ACCESS_KEY` work as on the Node relay. `TRUST_PROXY`, `DATA_DIR`, `PUBLIC_DIR` and
 `ALLOW_IMPLICIT_DEVICE` do not apply and are ignored (with a warning in the logs).
+`MAX_PENDING_HANDSHAKES[_PER_IP]` count per phone here (see below).
+
+Leave `ALLOW_TOKEN_IN_URL` off on Cloudflare unless you also turn off invocation logs: Cloudflare
+logs every request's URL, and with that setting the agent's token is part of the URL path. (Query
+strings, which carry pairing page tokens, are already kept out of the logs by `wrangler.toml`.)
 
 ### Custom domain
 
@@ -137,7 +142,10 @@ is skipped. Set `RELAY_SECRET` once with `wrangler secret put` as above; deploys
   Cloudflare that means your Cloudflare account and Cloudflare itself. Tokens are never stored except
   a freshly paired token for at most 120 s (encrypted; storage history alone does not reveal it), and
   logs contain no tokens, codes, secrets or bodies. Workers Logs are enabled in `wrangler.toml`
-  (`[observability]`); turn them off there if you prefer.
+  (`[observability]`, with query strings redacted from the URLs Cloudflare records); turn them off
+  there if you prefer. A phone's object keeps pairing state (including client addresses for the
+  hourly pairing limits) for at most about an hour after its last pairing, then deletes it; requests
+  that name a phone which never paired store nothing.
 * Updating the relay (a new deploy) restarts the objects: phones reconnect by themselves, and a call
   that was in progress fails with the usual "the phone may already have performed the action" error.
 
@@ -162,6 +170,21 @@ Clients see the same behavior; the conformance suite checks it. Operational diff
 * Before its hello a socket is limited per frame (16 KiB), not per byte as it arrives. Locally,
   `wrangler dev` keeps the TCP connection of a socket that never sent anything open after closing it
   with `4008`; devices act on the close frame, so this only shows up in tools that wait for TCP.
+* A Worker cannot cut a connection off: a refused socket whose client never answers the close frame
+  stays open until the client goes away. Until then it keeps counting toward the limits on sockets
+  waiting for their hello (16 per client address and 512 per phone by default), as a socket does on
+  the Node relay until its TCP connection ends.
+
+### Running a shared public relay
+
+The per-phone limits above bound what any one client can do to one phone, and requests that name
+phones which never connected cost a request but store nothing. The daily Free plan quotas, though,
+are shared by everyone using the relay, and the per-IP limits are per Worker instance: someone
+determined (many addresses, or their own app identity sending a stream of frames) can use up a day's
+free requests. For a relay that strangers' phones use, add a
+[rate limiting rule](https://developers.cloudflare.com/waf/rate-limiting-rules/) in the Cloudflare
+dashboard (for example on `/v1/device` and `/mcp`) and watch the usage graphs. On the Workers Paid
+plan such abuse costs money instead of stopping the relay until the daily reset.
 
 ## Develop and test locally
 

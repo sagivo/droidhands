@@ -47,6 +47,8 @@ jobs:
 
   deploy:
     needs: test
+    # A manual run on another branch tests it but never deploys it.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Secrets cannot be tested in a job-level `if`; the first step decides.

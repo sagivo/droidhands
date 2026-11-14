@@ -37,6 +37,12 @@ SETUP_BANNER = "false"
 
 [observability]
 enabled = true
+# Cloudflare records each request's URL in Workers Logs. Pairing page URLs carry a page token in
+# the query (and authorize URLs the client's state), so keep query strings out of the logs. The relay
+# logs its own events (status, device tag, client address) without URLs, tokens or bodies.
+# With ALLOW_TOKEN_IN_URL=true the agent token is in the URL *path* (/mcp/<token>), which this does
+# not redact: leave that setting off here, or set `logs = { invocation_logs = false }`.
+redact_query_string = true
 
 # A custom domain instead of *.workers.dev (the zone must be on your Cloudflare account):
 # routes = [{ pattern = "relay.example.com", custom_domain = true }]
