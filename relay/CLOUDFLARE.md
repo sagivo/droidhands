@@ -80,6 +80,15 @@ npm run cf:deploy
 it with `curl https://…/healthz` (`{"ok":true}`; a `500` names a missing or invalid setting), then
 open `https://…/setup` on the phone (with `#key=<RELAY_ACCESS_KEY>` appended if you set one).
 
+To check a deploy end to end without a phone, connect the demo device and drive it like an AI app:
+
+```sh
+cd clients/android && DEMO_RELAY_URL=https://… DEMO_PAIR=approve DEMO_CONFIRM=approve ./gradlew :core:runDemoDevice -q
+# prints DEMO_TOKEN=… and RELAY_STATUS=Connected(…, connectUrl=https://…/d/<id>/mcp); in another shell:
+PB_TOKEN=<DEMO_TOKEN> IDLE_MS=100000 node scripts/e2e/relay-interop.mjs <connectUrl>   # MCP calls, large bodies, heartbeat idle
+node scripts/e2e/pairing.mjs <connectUrl>                                              # the OAuth pairing flow
+```
+
 `RELAY_SECRET` signs the OAuth client ids of connected AI apps. Keep it: changing it makes every AI
 app reconnect (pair again). The relay refuses to serve until it is set. Never put secrets in
 `wrangler.toml`.
