@@ -47,6 +47,21 @@ class StoresTest {
     }
 
     @Test
+    fun toolRulesForAppActionsRoundTrip() {
+        // App actions are ruled by their virtual name, <package>/<action id> (docs/PLUGINS.md §9).
+        val rules = mapOf("com.spotify.music/play" to ToolRule.BLOCK, "com.whatsapp/send_message" to ToolRule.ASK, "sms_send" to ToolRule.ALLOW)
+        val file = File(tmp.root, "tokens.json")
+        FileTokenStore(file).save(listOf(sample[1].copy(toolRules = rules)))
+        assertEquals(rules, FileTokenStore(file).load().single().toolRules)
+
+        val manager = TokenManager(FileTokenStore(file), DeviceIdentity(ByteArray(32) { it.toByte() }).deviceId)
+        val id = manager.tokens.value.single().id
+        val updated = manager.update(id) { it.copy(toolRules = it.toolRules + ("com.google.android.apps.maps/navigate" to ToolRule.BLOCK)) }
+        assertEquals(ToolRule.BLOCK, updated.toolRules["com.google.android.apps.maps/navigate"])
+        assertEquals(updated.toolRules, FileTokenStore(file).load().single().toolRules)
+    }
+
+    @Test
     fun saveLeavesNoTempFiles() {
         val file = File(tmp.root, "tokens.json")
         val store = FileTokenStore(file)

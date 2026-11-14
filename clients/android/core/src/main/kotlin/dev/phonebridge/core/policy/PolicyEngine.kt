@@ -35,7 +35,8 @@ sealed interface PolicyDecision {
  * 3. the token's [TokenRecord.activeHours], evaluated at [clock] in [zone] (phone-local time) → Deny
  *    outside the window (overnight windows such as 22:00-06:00 work);
  * 4. per-token sliding-window rate limits (recording the call when allowed);
- * 5. confirmation: rule ASK → RequireConfirmation (even for `READ` tools), rule ALLOW → Allow,
+ * 5. confirmation: a tool with [Tool.alwaysConfirm] → RequireConfirmation, whatever the rule and policy;
+ *    otherwise rule ASK → RequireConfirmation (even for `READ` tools), rule ALLOW → Allow,
  *    no rule → the token's ConfirmPolicy vs the tool's Risk.
  *
  * Every call counts toward the token's total limit; `SENSITIVE` calls also count toward the
@@ -61,10 +62,8 @@ class PolicyEngine(
     }
 
     fun evaluate(token: TokenRecord, tool: Tool): PolicyDecision {
+        precheck(token, tool)?.let { return it }
         val rule = token.toolRules[tool.name]
-        if (rule == ToolRule.BLOCK) return PolicyDecision.Deny(blockedMessage(tool.name))
-        token.maxRisk?.let { cap -> if (exceedsMaxRisk(cap, tool.risk)) return PolicyDecision.Deny(aboveMaxRiskMessage(tool.name, cap)) }
-        token.activeHours?.let { hours -> outsideActiveHours(hours, clock())?.let { return it } }
 
         val sensitive = tool.risk == Risk.SENSITIVE
         synchronized(lock) {
@@ -82,7 +81,20 @@ class PolicyEngine(
             w.all.addLast(now)
             if (sensitive) w.sensitive.addLast(now)
         }
-        return if (requiresConfirmation(token.confirmPolicy, tool.risk, rule)) PolicyDecision.RequireConfirmation else PolicyDecision.Allow
+        val confirm = tool.alwaysConfirm || requiresConfirmation(token.confirmPolicy, tool.risk, rule)
+        return if (confirm) PolicyDecision.RequireConfirmation else PolicyDecision.Allow
+    }
+
+    /**
+     * Steps 1-3 of [evaluate] (BLOCK rule, risk cap, active hours) without counting a call toward the rate
+     * limits: the denial, or null if the token's rules let it use [tool] now. For a
+     * [dev.phonebridge.core.tools.DispatchTool], whose resolved tool then goes through [evaluate].
+     */
+    fun precheck(token: TokenRecord, tool: Tool): PolicyDecision.Deny? {
+        if (token.toolRules[tool.name] == ToolRule.BLOCK) return PolicyDecision.Deny(blockedMessage(tool.name))
+        token.maxRisk?.let { cap -> if (exceedsMaxRisk(cap, tool.risk)) return PolicyDecision.Deny(aboveMaxRiskMessage(tool.name, cap)) }
+        token.activeHours?.let { hours -> outsideActiveHours(hours, clock())?.let { return it } }
+        return null
     }
 
     /** Null when [now] is inside [hours]; otherwise the denial explaining the window. */

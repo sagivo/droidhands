@@ -3,6 +3,7 @@ package dev.phonebridge.core.mcp
 import dev.phonebridge.core.audit.AuditEntry
 import dev.phonebridge.core.audit.AuditOutcome
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.confirm.ConfirmationProvider
 import dev.phonebridge.core.confirm.ConfirmationRequest
 import dev.phonebridge.core.confirm.ConfirmationResult
@@ -12,6 +13,8 @@ import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.AppAccess
 import dev.phonebridge.core.tools.AppBlockedException
 import dev.phonebridge.core.tools.CallContext
+import dev.phonebridge.core.tools.Dispatch
+import dev.phonebridge.core.tools.DispatchTool
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
 import dev.phonebridge.core.tools.ToolContent
@@ -64,9 +67,18 @@ import kotlin.coroutines.cancellation.CancellationException
  * and before each side effect. A call stopped that way, or cancelled through [InFlightCalls.cancel], is
  * audited CANCELLED with the reason and whether the tool had started.
  *
+ * Dispatch: a [DispatchTool] (`app_action_run`) passes its own scope check, then the kill switch, the
+ * security settings and its own BLOCK rule, risk cap and active hours ([PolicyEngine.precheck]); then
+ * [DispatchTool.resolve] picks the tool that really runs (a blocked app is audited DENIED_APP, an
+ * unresolvable call TOOL_ERROR, both as refusals). From there the resolved tool goes through the
+ * pipeline above exactly as if it had been called by name: its scope, policy and rate limits, rules
+ * (also on [Dispatch.alias]), confirmation by its risk, its timeout and stop checks (which also require
+ * the dispatching tool to stay allowed). Its audit entry carries the resolved tool's name and arguments
+ * and notes "via <dispatching tool>".
+ *
  * Every call ends with exactly one audit entry, cancelled ones included. Requests refused before
  * anything ran (missing name, bad arguments, unknown tool, missing scope, paused, policy and rate-limit
- * refusals) go through [AuditThrottle.recordRefusal], so they cannot flood the log.
+ * refusals, unresolvable dispatches) go through [AuditThrottle.recordRefusal], so they cannot flood the log.
  */
 internal class ToolCalls(
     private val registry: ToolRegistry,
@@ -145,22 +157,116 @@ internal class ToolCalls(
             )
         }
 
+        // What actually runs, and what the audit entry is about: the named tool, or what a DispatchTool resolved to.
+        var target = Target(tool, args)
         val outcome = try {
-            run(tool, args, token, transport, handle)
+            if (tool is DispatchTool) {
+                when (val resolution = resolve(tool, args, token, transport, handle)) {
+                    is Resolution.Refused -> resolution.outcome
+                    is Resolution.Ready -> {
+                        target = resolution.target
+                        val inner = target.tool
+                        if (Scopes.allows(token.scopes, inner.scope)) {
+                            run(target, token, transport, handle)
+                        } else {
+                            Outcome(
+                                ToolResult.error(
+                                    "'${inner.name}' is not available to this token: it needs the '${inner.scope}' scope. " +
+                                        "Ask the user to grant it to this token in the PhoneBridge app.",
+                                ),
+                                AuditOutcome.DENIED_SCOPE, "missing scope ${inner.scope}", refused = true,
+                            )
+                        }
+                    }
+                }
+            } else {
+                run(target, token, transport, handle)
+            }
         } catch (e: CancellationException) {
             // Cancelled through InFlightCalls.cancel (pause, revoke, delete): still exactly one entry.
-            record(AuditOutcome.CANCELLED, name, args, stoppedDetail(handle.stopReason ?: StopReason.STOPPED, handle.toolStarted))
+            val detail = stoppedDetail(handle.stopReason ?: StopReason.STOPPED, handle.toolStarted)
+            record(AuditOutcome.CANCELLED, target.tool.name, target.args, joinDetails(detail, target.note))
             throw e
         } catch (e: Exception) {
             // A bug in the pipeline itself (tool failures are handled inside run()).
             Outcome(ToolResult.error("Internal error: ${ToolText.describe(e)}"), AuditOutcome.EXCEPTION, ToolText.describe(e))
         }
-        if (outcome.refused) refuse(outcome.audit, name, args, outcome.detail) else record(outcome.audit, name, args, outcome.detail)
+        val detail = joinDetails(outcome.detail, target.note)
+        if (outcome.refused) {
+            refuse(outcome.audit, target.tool.name, target.args, detail)
+        } else {
+            record(outcome.audit, target.tool.name, target.args, detail)
+        }
         return JsonRpc.result(id, encodeResult(outcome.result))
     }
 
     /** [refused]: refused before anything ran (throttled in the audit log). */
     private class Outcome(val result: ToolResult, val audit: AuditOutcome, val detail: String? = null, val refused: Boolean = false)
+
+    /**
+     * The tool a call runs, with its arguments. For a [DispatchTool] call: the resolved tool, [via] the
+     * dispatching tool and [alias] the resolution's other name (see [Dispatch]).
+     */
+    private class Target(val tool: Tool, val args: JsonObject, val via: DispatchTool? = null, val alias: String? = null) {
+        /** Audit note for a dispatched call, e.g. "via app_action_run (com.whatsapp/send_message)". */
+        val note: String?
+            get() = via?.let { v -> "via ${v.name}" + (alias?.takeIf { it != tool.name }?.let { " ($it)" } ?: "") }
+    }
+
+    private sealed interface Resolution {
+        class Ready(val target: Target) : Resolution
+
+        /** Nothing ran; audited under the dispatching tool's name. */
+        class Refused(val outcome: Outcome) : Resolution
+    }
+
+    /**
+     * Resolves a [DispatchTool] call: kill switch, security settings, the dispatching tool's own policy
+     * (BLOCK rule, risk cap, active hours; rate limits are counted once, for the resolved tool), then
+     * [DispatchTool.resolve] with the call's app access. Never nests.
+     */
+    private suspend fun resolve(tool: DispatchTool, args: JsonObject, token: TokenRecord, transport: String, handle: InFlightCall): Resolution {
+        if (!accessEnabled()) return Resolution.Refused(Outcome(ToolResult.error(PAUSED_MESSAGE), AuditOutcome.PAUSED, refused = true))
+        val security = try {
+            globalSecurity()
+        } catch (e: Exception) {
+            return Resolution.Refused(
+                Outcome(ToolResult.error(SECURITY_UNAVAILABLE_MESSAGE), AuditOutcome.EXCEPTION, "security settings: ${ToolText.describe(e)}"),
+            )
+        }
+        policy.precheck(token, tool)?.let { deny ->
+            return Resolution.Refused(Outcome(ToolResult.error(deny.reason), AuditOutcome.DENIED_POLICY, deny.reason, refused = true))
+        }
+        val outer = Target(tool, args)
+        val ctx = callContext(token, transport, security, stillAllowed = {
+            currentCoroutineContext().ensureActive()
+            stopReason(handle, token, outer)?.let { throw CallStoppedException(it) }
+        }) { throw ToolException("'${tool.name}' can't ask for approval while choosing what to run.") }
+        val dispatch = try {
+            withTimeoutOrNull(tool.timeoutMs) { tool.resolve(args, ctx) }
+                ?: return Resolution.Refused(
+                    Outcome(ToolResult.error(timeoutMessage(tool)), AuditOutcome.TIMEOUT, "resolving timed out after ${ToolText.shortSeconds(tool.timeoutMs)}"),
+                )
+        } catch (e: CallStoppedException) {
+            return Resolution.Refused(stopped(e.reason))
+        } catch (e: AppBlockedException) {
+            val message = e.message?.takeIf { it.isNotBlank() } ?: "${tool.title} was refused: the app is blocked for this agent."
+            return Resolution.Refused(Outcome(ToolResult.error(message), AuditOutcome.DENIED_APP, "blocked app ${e.packageName}", refused = true))
+        } catch (e: ToolException) {
+            val message = e.message?.takeIf { it.isNotBlank() } ?: "${tool.title} failed."
+            return Resolution.Refused(Outcome(ToolResult.error(message), AuditOutcome.TOOL_ERROR, message, refused = true))
+        } catch (e: CancellationException) {
+            currentCoroutineContext().ensureActive() // The call was cancelled: propagate.
+            return Resolution.Refused(Outcome(ToolResult.error("Internal error: ${ToolText.describe(e)}"), AuditOutcome.EXCEPTION, ToolText.describe(e)))
+        } catch (e: Exception) {
+            return Resolution.Refused(Outcome(ToolResult.error("Internal error: ${ToolText.describe(e)}"), AuditOutcome.EXCEPTION, ToolText.describe(e)))
+        }
+        if (dispatch.tool is DispatchTool) {
+            val detail = "'${tool.name}' resolved to '${dispatch.tool.name}', which also dispatches; nested dispatch is refused"
+            return Resolution.Refused(Outcome(ToolResult.error("Internal error: $detail."), AuditOutcome.EXCEPTION, detail))
+        }
+        return Resolution.Ready(Target(dispatch.tool, dispatch.args, via = tool, alias = dispatch.alias))
+    }
 
     private fun accessEnabled(): Boolean = try {
         isAccessEnabled()
@@ -168,8 +274,11 @@ internal class ToolCalls(
         false // Fail closed.
     }
 
-    /** Null while [handle] may go on; otherwise why it must stop (see the class KDoc). */
-    private fun stopReason(handle: InFlightCall, token: TokenRecord, tool: Tool): StopReason? {
+    /**
+     * Null while [handle] may go on; otherwise why it must stop (see the class KDoc). A dispatched call
+     * stops when the agent loses either tool, or gets a BLOCK rule on the [Target.alias].
+     */
+    private fun stopReason(handle: InFlightCall, token: TokenRecord, target: Target): StopReason? {
         handle.stopReason?.let { return it }
         if (!accessEnabled()) return StopReason.PAUSED
         val current = try {
@@ -180,14 +289,40 @@ internal class ToolCalls(
         if (current.revoked) return StopReason.REVOKED
         val expiresAt = current.expiresAt
         if (expiresAt != null && clock() >= expiresAt) return StopReason.EXPIRED
-        if (!McpServer.isVisible(current, tool)) return StopReason.TOOL_WITHDRAWN
+        if (!McpServer.isVisible(current, target.tool)) return StopReason.TOOL_WITHDRAWN
+        target.via?.let { if (!McpServer.isVisible(current, it)) return StopReason.TOOL_WITHDRAWN }
+        target.alias?.let { if (current.toolRules[it] == ToolRule.BLOCK) return StopReason.TOOL_WITHDRAWN }
         return null
     }
 
     private fun stopped(reason: StopReason) =
         Outcome(ToolResult.error(reason.message), AuditOutcome.CANCELLED, stoppedDetail(reason, toolStarted = false))
 
-    private suspend fun run(tool: Tool, args: JsonObject, token: TokenRecord, transport: String, handle: InFlightCall): Outcome {
+    /** The [CallContext] for one call of [token]; [stillAllowed] and [confirmer] as described there. */
+    private fun callContext(
+        token: TokenRecord,
+        transport: String,
+        security: GlobalSecurity,
+        stillAllowed: suspend () -> Unit,
+        confirmer: suspend (String) -> Unit,
+    ) = CallContext(
+        tokenId = token.id,
+        tokenName = token.name,
+        scopes = token.scopes,
+        transport = transport,
+        requestId = newId(10),
+        appAccess = AppAccess.of(token.appPolicy, security.neverAllowApps),
+        redactOneTimeCodes = security.redactOneTimeCodes,
+        toolRules = token.toolRules,
+        activeHours = token.activeHours,
+        maxRisk = token.maxRisk,
+        stillAllowed = stillAllowed,
+        confirmer = confirmer,
+    )
+
+    private suspend fun run(target: Target, token: TokenRecord, transport: String, handle: InFlightCall): Outcome {
+        val tool = target.tool
+        val args = target.args
         if (!accessEnabled()) return Outcome(ToolResult.error(PAUSED_MESSAGE), AuditOutcome.PAUSED, refused = true)
 
         val security = try {
@@ -197,6 +332,12 @@ internal class ToolCalls(
             return Outcome(ToolResult.error(SECURITY_UNAVAILABLE_MESSAGE), AuditOutcome.EXCEPTION, "security settings: ${ToolText.describe(e)}")
         }
 
+        target.alias?.let { alias ->
+            if (token.toolRules[alias] == ToolRule.BLOCK) {
+                val reason = PolicyEngine.blockedMessage(alias)
+                return Outcome(ToolResult.error(reason), AuditOutcome.DENIED_POLICY, reason, refused = true)
+            }
+        }
         val decision = policy.evaluate(token, tool)
         if (decision is PolicyDecision.Deny) {
             val audit = if (decision.rateLimited) AuditOutcome.RATE_LIMITED else AuditOutcome.DENIED_POLICY
@@ -207,7 +348,7 @@ internal class ToolCalls(
         val state = CallState()
 
         /** Null while the call may go on; otherwise why not (the first reason is kept for the audit entry). */
-        fun checkStop(): StopReason? = stopReason(handle, token, tool)?.also { state.stop.compareAndSet(null, it) }
+        fun checkStop(): StopReason? = stopReason(handle, token, target)?.also { state.stop.compareAndSet(null, it) }
 
         if (needsConfirmation && !tool.confirmsInternally) {
             checkStop()?.let { return stopped(it) }
@@ -247,20 +388,7 @@ internal class ToolCalls(
                 throw ToolException(answer.message)
             }
         }
-        val ctx = CallContext(
-            tokenId = token.id,
-            tokenName = token.name,
-            scopes = token.scopes,
-            transport = transport,
-            requestId = newId(10),
-            appAccess = AppAccess.of(token.appPolicy, security.neverAllowApps),
-            redactOneTimeCodes = security.redactOneTimeCodes,
-            toolRules = token.toolRules,
-            activeHours = token.activeHours,
-            maxRisk = token.maxRisk,
-            stillAllowed = stillAllowed,
-            confirmer = confirmer,
-        )
+        val ctx = callContext(token, transport, security, stillAllowed, confirmer)
 
         handle.toolStarted = true
         val execution = execute(tool, args, ctx, deadline)
@@ -464,5 +592,7 @@ internal class ToolCalls(
 
         private fun firstText(result: ToolResult): String? =
             result.content.firstNotNullOfOrNull { (it as? ToolContent.Text)?.text }
+
+        private fun joinDetails(vararg parts: String?): String? = parts.filterNotNull().joinToString("; ").ifEmpty { null }
     }
 }
