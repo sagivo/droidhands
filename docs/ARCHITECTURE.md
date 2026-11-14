@@ -93,7 +93,9 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 | `NotificationConfirmationProvider` | Shows Allow/Deny prompts, plus `ConfirmationActivity` for full details. |
 | `PairingCoordinator` / `PairingActivity` | One-tap pairing: shows the agent's name, origin and code, lets the user choose the access level, and issues the token (`origin = "pairing"`). |
 | `UnlockPrompt` | "Unlock to continue": asks the user to unlock when a screen-based action arrives while the phone is locked. |
-| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, access level, app access, tool rules, active hours, revoke); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all). Handles `phonebridge://configure` links. |
+| `PluginRepository` (`plugins/`) | App plugins: the repository's `plugins/<id>/plugin.yaml`, bundled at build time as `assets/plugins/<id>.yaml` and loaded lazily, plus local plugins (`files/local-plugins/<id>.yaml`, imported in Settings or pushed with `scripts/plugin-push.sh`) while *Settings → Developer → Local plugins* is on. |
+| `AndroidAppActions` (`tools/actions/`) | Core's `AppActionsPlatform`: `AppScanner` discovers what apps declare (standard intents, `shortcuts.xml` shortcuts and App Actions capabilities; cached per app version, rescanned when packages change); `ActionIntents` starts intent and link recipes in an exported activity of the app itself, after app-access checks; `StepRunner` runs screen recipes on the screen tools' safety checks, confined to the app. |
+| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, access level, app access, tool rules, active hours, revoke); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `phonebridge://configure` links. |
 
 ## Concurrency
 
