@@ -35,6 +35,11 @@ data class SetupItem(
     val blocked: Boolean = false,
     /** Show the Android 13+ "Restricted setting" help (sideloaded app, access not granted yet). */
     val restrictedSettingsHelp: Boolean = false,
+    /**
+     * Show the step-by-step "Allow restricted settings" card instead ([RestrictedSettings.showGuide]):
+     * the accessibility row of an app installed from an APK file, accessibility still off.
+     */
+    val restrictedSettingsGuide: Boolean = false,
 )
 
 data class SetupProgress(val done: Int, val total: Int, val essentialMissing: List<SetupItem>) {
