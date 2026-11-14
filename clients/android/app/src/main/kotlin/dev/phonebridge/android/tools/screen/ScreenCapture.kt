@@ -87,7 +87,8 @@ object ScreenCapture {
         // Blocked windows are dropped before capturing, so their apps get no IPC at all.
         val allowed = readable.filter { it.packageName == context.packageName || visibility.allows(it.packageName) }
         val captured = snapshots(context, allowed)
-        val withoutOwn = captured.mapNotNull { w -> hideOwnContent(w, context.packageName) }
+        val ownTexts = ownNotificationTexts(context)
+        val withoutOwn = captured.mapNotNull { w -> hideOwnContent(w, context.packageName, ownTexts) }
         val filtered = visibility.filter(withoutOwn)
         val shown = if (redactor == null) filtered.windows else filtered.windows.map { redact(it, redactor) }
         val activity = if (pkg != null && pkg == tracked) service.currentActivity() else null
@@ -111,15 +112,39 @@ object ScreenCapture {
      * [w] without PhoneBridge's notification content ([SelfProtection.hideOwnContent]); null when nothing of the window
      * is left. [w] itself when there is nothing to hide (always for our own, already hidden, windows).
      */
-    private fun hideOwnContent(w: WindowSnapshot, ownPackage: String): WindowSnapshot? {
+    private fun hideOwnContent(w: WindowSnapshot, ownPackage: String, ownTexts: Set<String>): WindowSnapshot? {
         val root = w.root ?: return w
-        val kept = SelfProtection.hideOwnContent(root, ownPackage)
+        val kept = SelfProtection.hideOwnContent(root, ownPackage, ownTexts)
         return when {
             kept === root -> w
             kept == null -> null
             else -> w.copy(root = kept)
         }
     }
+
+    /**
+     * Titles and bodies of PhoneBridge's currently posted notifications (approval, pairing and unlock prompts,
+     * status), used to hide them from screen output even when System UI renders them as heads-up views.
+     * Short generic strings are ignored so ordinary app text is never hidden by accident. No permission needed.
+     */
+    private fun ownNotificationTexts(context: Context): Set<String> = try {
+        context.getSystemService(android.app.NotificationManager::class.java)?.activeNotifications.orEmpty()
+            .flatMap { sbn ->
+                val extras = sbn.notification.extras
+                listOfNotNull(
+                    extras.getCharSequence(android.app.Notification.EXTRA_TITLE),
+                    extras.getCharSequence(android.app.Notification.EXTRA_TEXT),
+                    extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT),
+                )
+            }
+            .map { it.toString().trim() }
+            .filter { it.length >= MIN_OWN_TEXT_LENGTH }
+            .toSet()
+    } catch (e: RuntimeException) {
+        emptySet()
+    }
+
+    private const val MIN_OWN_TEXT_LENGTH = 12
 
     /** [w] with [redactor] applied to its title and node texts; [w] itself when nothing changed. */
     private fun redact(w: WindowSnapshot, redactor: (String) -> String): WindowSnapshot {

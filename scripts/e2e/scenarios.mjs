@@ -109,18 +109,19 @@ await step('USE CASE: reply to an email in the mail app (Gmail-style: Reply open
 });
 
 await step('USE CASE: make a phone call to "Bob"', async () => {
-  // dumpsys redacts numbers, so count Telecom's SET_DIALING events before/after.
-  const dialings = () => (shell('dumpsys telecom').match(/SET_DIALING/g) || []).length;
-  const before = dialings();
+  const startedAt = Date.now() - 5000; // device/host clock skew allowance
   const r = ok(await c.call('phone_call', { contact: 'Bob' }), 'phone_call');
   assert(r.json?.to === '+16505550100', r.text);
-  await waitFor(() => dialings() > before, { what: 'Telecom SET_DIALING', timeoutMs: 15000 });
-  shell('input keyevent KEYCODE_ENDCALL');
-  await sleep(1000);
-  // ENDCALL with no call in progress (the emulator modem may already have dropped it) turns the screen off.
+  // The platform call log records the outgoing call (Telecom's own event log is a ring buffer).
+  const entry = await waitFor(async () => {
+    const res = ok(await c.call('call_log_list', { type: 'outgoing', limit: 3 }), 'call_log_list');
+    return res.json?.find((x) => (x.number || '').includes('6505550100') && Date.parse(x.time) >= startedAt);
+  }, { what: 'outgoing call in the call log', timeoutMs: 20000 });
+  await sleep(1500);
+  await c.call('call_end', {}); // best effort: the emulator modem often drops the call itself
+  await sleep(1500);
   shell('input keyevent KEYCODE_WAKEUP');
-  shell('wm dismiss-keyguard');
-  return `${r.text}\n Telecom: outgoing call reached DIALING`;
+  return `${r.text}\n call log: ${JSON.stringify(entry)}`;
 });
 
 await step('call_log_list shows the call to Bob', async () => {

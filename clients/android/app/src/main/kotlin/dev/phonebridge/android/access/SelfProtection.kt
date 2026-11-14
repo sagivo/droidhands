@@ -92,11 +92,11 @@ object SelfProtection {
      * notifications nor get refs to open them. Null when nothing is left; [root] itself (same instance) when there is
      * nothing to hide.
      */
-    fun hideOwnContent(root: UiNode, ownPackage: String): UiNode? {
+    fun hideOwnContent(root: UiNode, ownPackage: String, ownTexts: Set<String> = emptySet()): UiNode? {
         // The kept node (null if removed), and how many levels it is above own content whose host is still to be
         // removed (-1: none).
         fun visit(node: UiNode): Pair<UiNode?, Int> {
-            if (isOwnPackage(node.packageName, ownPackage)) return null to 0
+            if (isOwnPackage(node.packageName, ownPackage) || isOwnText(node, ownTexts)) return null to 0
             var pending = -1
             var changed = false
             val kept = ArrayList<UiNode>(node.children.size)
@@ -111,5 +111,16 @@ object SelfProtection {
             return (if (changed) node.withChildren(kept) else node) to pending
         }
         return visit(root).first
+    }
+
+    /**
+     * Heads-up notifications are rendered by System UI and report its package, so PhoneBridge's own prompts are
+     * also recognised by text: a node whose text exactly equals the title or body of one of PhoneBridge's currently
+     * posted notifications (e.g. "E2E auto wants to: Send SMS"). Its notification row is then removed with it.
+     */
+    internal fun isOwnText(node: UiNode, ownTexts: Set<String>): Boolean {
+        if (ownTexts.isEmpty()) return false
+        val text = node.text?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        return text in ownTexts
     }
 }

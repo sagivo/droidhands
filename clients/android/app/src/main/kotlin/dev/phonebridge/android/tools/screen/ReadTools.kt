@@ -1,5 +1,7 @@
 package dev.phonebridge.android.tools.screen
 
+import dev.phonebridge.android.access.WindowKind
+
 import android.content.Context
 import android.os.SystemClock
 import dev.phonebridge.android.access.BridgeAccessibilityService
@@ -55,10 +57,24 @@ internal fun screenReadTool(context: Context): Tool = tool(
     val includeAll = args.optBool("include_all") ?: false
     val maxNodes = (args.optInt("max_nodes") ?: DEFAULT_MAX_NODES).coerceIn(1, MAX_MAX_NODES)
     val access = ScreenAccess.of(context, ctx)
-    val state = ScreenCapture.capture(context, service, access, includeAll)
+    // Right after an app switch the new window often has no accessibility content yet (transition in progress):
+    // when the screen is on but nothing readable came out, wait briefly and read again instead of reporting an
+    // empty screen.
+    var state = ScreenCapture.capture(context, service, access, includeAll)
     state.blockedForeground?.let { access.refuse(it) }
-    val body = ScreenSession.refs(access).newSnapshot { register ->
+    var body = ScreenSession.refs(access).newSnapshot { register ->
         TreeSerializer.serialize(state.windows, SerializeOptions(includeAll = includeAll, maxNodes = maxNodes), register)
+    }
+    var attempt = 1
+    while (state.screenOn && attempt < SETTLE_ATTEMPTS && (body.text.isEmpty() || ScreenSettling.appWindowMissing(state))) {
+        kotlinx.coroutines.delay(SETTLE_DELAY_MS)
+        attempt++
+        state = ScreenCapture.capture(context, service, access, includeAll)
+        state.blockedForeground?.let { access.refuse(it) }
+        val retryState = state
+        body = ScreenSession.refs(access).newSnapshot { register ->
+            TreeSerializer.serialize(retryState.windows, SerializeOptions(includeAll = includeAll, maxNodes = maxNodes), register)
+        }
     }
     ToolResult.text(
         buildString {
@@ -211,4 +227,26 @@ private suspend fun probe(context: Context, service: BridgeAccessibilityService,
     val ref = ScreenSession.refs(access).register(node)
     val line = TreeSerializer.formatNode(node, ref)
     return Probe(state.packageName, ref, line, codesHidden = state.codesHidden && line.contains(OneTimeCodes.MASK))
+}
+
+
+private const val SETTLE_ATTEMPTS = 4
+private const val SETTLE_DELAY_MS = 350L
+
+/** Pure checks for screen_read's settle-and-retry. */
+internal object ScreenSettling {
+    private const val SYSTEM_UI = "com.android.systemui"
+
+    /**
+     * True when an ordinary app is in the foreground but no application window was captured — typically mid
+     * activity transition, when only System UI (status bar) windows are listed. Reading then would show status-bar
+     * noise instead of the app.
+     */
+    fun appWindowMissing(state: ScreenState): Boolean {
+        val tracked = BridgeAccessibilityService.foregroundPackage ?: return false
+        return appWindowMissing(tracked, state.windows.map { it.kind })
+    }
+
+    fun appWindowMissing(trackedForeground: String, capturedKinds: List<WindowKind>): Boolean =
+        trackedForeground != SYSTEM_UI && capturedKinds.none { it == WindowKind.APPLICATION }
 }
