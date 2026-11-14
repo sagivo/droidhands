@@ -11,8 +11,9 @@ The agent calls `contacts_search("Tania")`, then
 
 PhoneBridge is an Android app (iOS later) that exposes the phone's capabilities as an
 [MCP](https://modelcontextprotocol.io) server. Agents reach it through a small relay (the one the
-app comes with, or your own self-hosted one; works over LTE and behind NAT) or directly (USB / LAN /
-Tailscale).
+app comes with, or your own self-hosted one; works over LTE and behind NAT) or directly over
+Tailscale, privately and without a relay (also USB / LAN). Routes combine; see
+[docs/CONNECTING.md](docs/CONNECTING.md).
 
 ```
 AI agent ──MCP over HTTPS──► relay (yours) ◄──WebSocket── PhoneBridge app ──► WhatsApp, SMS, contacts,
@@ -84,10 +85,11 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
 | Path | What |
 |---|---|
-| `docs/` | Platform-neutral contracts: [PROTOCOL.md](docs/PROTOCOL.md), [TOOLS.md](docs/TOOLS.md), [PLUGINS.md](docs/PLUGINS.md), [SECURITY.md](docs/SECURITY.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| `docs/` | Platform-neutral contracts: [PROTOCOL.md](docs/PROTOCOL.md), [TOOLS.md](docs/TOOLS.md), [PLUGINS.md](docs/PLUGINS.md), [SECURITY.md](docs/SECURITY.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md); how agents reach the phone: [CONNECTING.md](docs/CONNECTING.md) |
 | `plugins/` | App plugins, one folder per app, bundled into the app ([plugins/README.md](plugins/README.md) lists them). `scripts/plugin-check.sh`, `plugin-scaffold.sh`, `plugin-push.sh` and `plugin-table.sh` help write them ([CONTRIBUTING.md](CONTRIBUTING.md)). |
 | `relay/` | The relay (TypeScript / Node; deps: `ws`, `qrcode`), including one-tap OAuth pairing. [relay/README.md](relay/README.md) |
 | `scripts/setup-phone.sh` | One-command USB setup: install, grant every permission and special access, connect to the relay |
+| `scripts/relay-tailscale.sh` | Run your own relay on your computer, published over Tailscale (tailnet only, or `--public` with Funnel) |
 | `scripts/make-release-key.sh`, `.github/workflows/` | Release signing key, CI (tests and builds on every push) and releases (signed APK and relay image for every `v*` tag). [docs/RELEASING.md](docs/RELEASING.md) |
 | `scripts/e2e/` | End-to-end scenarios (real MCP calls through the relay to a device/emulator) and the pairing flow test |
 | `clients/android/fixtures` | Emulator-only stand-ins for WhatsApp and a mail app used by the E2E tests |
@@ -108,7 +110,9 @@ No computer needed:
    client, check that the code matches, and tap **Allow**.
 
 Details, **self-hosting the relay** (the most private option) and the **developer setup over USB**
-are in **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. Publishing your own builds:
+are in **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. Other ways to connect (Tailscale
+without a relay, your own relay on your computer) are compared in
+**[docs/CONNECTING.md](docs/CONNECTING.md)**. Publishing your own builds:
 [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Contributing
