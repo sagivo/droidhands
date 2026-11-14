@@ -140,7 +140,7 @@ class PluginValidationTest {
         assertProblem(doc(action("$ok\nkeywords: [${"k".repeat(41)}]")), "actions[0].keywords[0]: keywords must be at most 40 characters")
         assertProblem(doc(action("android: {url: \"https://x\"}")), "actions[0].risk: required: read, action or sensitive")
         assertProblem(doc(action("$ok\nscope: screen.control")), "actions[0].scope: 'screen.control' is not allowed")
-        assertValid(doc(action("risk: read\nscope: location\nandroid: {url: \"https://x\"}")))
+        assertValid(doc(action("risk: action\nscope: location\nandroid: {url: \"https://x\"}")))
         assertProblem(doc(action("$ok\nconfirm: ${"x".repeat(301)}")), "actions[0].confirm: is 301 characters long; the limit is 300")
         assertProblem(doc(action("$ok\ncompletes: yes")), "actions[0].completes: must be true or false, found text \"yes\"")
         assertProblem(doc(action("risk: action")), "actions[0]: has no recipe: add an 'android' section")
@@ -339,6 +339,8 @@ class PluginValidationTest {
         assertProblem(doc(action("risk: read\n$tap")), "actions[0].risk: can't be read: the steps tap, type or scroll")
         assertProblem(doc(action("risk: read\nandroid:\n  steps:\n    - if_present: x\n      then: [{scroll: {direction: down}}]")), "can't be read")
         assertValid(doc(action("risk: read\nandroid:\n  steps:\n    - launch: true\n    - wait_for: Inbox")))
+        assertProblem(doc(action("risk: read\n$url")), "actions[0].risk: can't be read: url recipes open the app, which is at least an action")
+        assertProblem(doc(action("risk: read\nandroid: {intent: {action: a.VIEW}}")), "can't be read: intent recipes open the app")
     }
 
     @Test

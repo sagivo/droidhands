@@ -91,6 +91,9 @@ object PluginValidator {
             if (risk == Risk.READ && recipe is StepsRecipe && touches(recipe.steps)) {
                 problem("$path.risk", "can't be read: the steps tap, type or scroll")
             }
+            if (risk == Risk.READ && (recipe is IntentRecipe || recipe is UrlRecipe)) {
+                problem("$path.risk", "can't be read: ${recipe.kind} recipes open the app, which is at least an action")
+            }
         }
 
         private fun touches(steps: List<Step>): Boolean = steps.any { s ->

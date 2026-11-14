@@ -68,7 +68,8 @@ private fun appActionsList(catalog: AppActionCatalog): Tool = tool(
 
 private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query: String?, limit: Int, ctx: CallContext): ToolResult {
     val app = catalog.resolveApp(appName, ctx.appAccess)
-    val all = catalog.actions(app)
+    val installed = catalog.installedPackages()
+    val all = catalog.actions(app, installed)
     val runner = AppActionCatalog.mayRunActions(ctx)
     val runnable = if (runner) all.filter { catalog.mayRun(it, ctx) } else emptyList()
     val hidden = all.size - runnable.size
@@ -76,7 +77,6 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
     val ranked = if (queryWords.isEmpty()) runnable else ActionSearch.rank(queryWords, runnable)
     val unmatched = queryWords.isNotEmpty() && ranked.isEmpty()
     val shown = (if (unmatched) runnable else ranked).take(limit)
-    val installed = catalog.platform.installedApps().mapTo(HashSet()) { it.packageName }
     val plugins = catalog.applicablePlugins(app.packageName, installed)
     val integration = catalog.integration(plugins)
     val footer = buildList {
@@ -110,11 +110,12 @@ private suspend fun search(catalog: AppActionCatalog, query: String, limit: Int,
         )
     }
     val installed = catalog.platform.installedApps()
+    val packages = installed.mapTo(HashSet()) { it.packageName }
     val visible = installed.filter { ctx.appAccess.isAllowed(it.packageName) }
     var hidden = 0
     val candidates = ArrayList<AppAction>()
     for (app in visible) {
-        for (action in catalog.actions(app)) {
+        for (action in catalog.actions(app, packages)) {
             if (catalog.mayRun(action, ctx)) candidates += action else if (ActionSearch.score(words, action) > 0) hidden++
         }
     }

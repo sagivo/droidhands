@@ -105,8 +105,10 @@ class AppActionCatalog(
      * is, docs/PLUGINS.md §3), in catalog order, then the discovered actions whose ids no plugin action uses.
      * Plugin actions without an Android recipe are left out.
      */
-    suspend fun actions(app: InstalledApp): List<AppAction> {
-        val installed = platform.installedApps().mapTo(HashSet()) { it.packageName }
+    suspend fun actions(app: InstalledApp): List<AppAction> = actions(app, installedPackages())
+
+    /** [actions] given the [installed] package names (to list many apps with one platform query). */
+    suspend fun actions(app: InstalledApp, installed: Set<String>): List<AppAction> {
         val applicable = applicablePlugins(app.packageName, installed)
         val fromPlugins = applicable.flatMap { p -> p.actions.filter { it.android != null }.map { AppAction(app, it, p) } }
         val taken = fromPlugins.mapTo(HashSet()) { it.action.id }
@@ -131,6 +133,9 @@ class AppActionCatalog(
         return actions(app).firstOrNull { it.action.id == wanted }
     }
 
+    /** Package names of the installed apps. */
+    suspend fun installedPackages(): Set<String> = platform.installedApps().mapTo(HashSet()) { it.packageName }
+
     /** The plugins that apply to [packageName]: those for which it is the first installed of their packages. */
     fun applicablePlugins(packageName: String, installed: Set<String>): List<AppPlugin> =
         plugins().pluginsFor(packageName).filter { p -> p.androidPackages.firstOrNull { it in installed } == packageName }
@@ -144,11 +149,11 @@ class AppActionCatalog(
 
     /** For `apps_list`: each of [apps]' integration and the action ids the agent behind [ctx] may run. */
     suspend fun summarize(apps: List<InstalledApp>, ctx: CallContext): Map<String, AppSummary> {
-        val installed = platform.installedApps().mapTo(HashSet()) { it.packageName }
+        val installed = installedPackages()
         val runner = mayRunActions(ctx)
         return apps.associate { app ->
             val applicable = applicablePlugins(app.packageName, installed)
-            val ids = if (runner) actions(app).filter { mayRun(it, ctx) }.map { it.action.id } else emptyList()
+            val ids = if (runner) actions(app, installed).filter { mayRun(it, ctx) }.map { it.action.id } else emptyList()
             app.packageName to AppSummary(integration(applicable), ids, applicable.firstOrNull()?.status)
         }
     }
