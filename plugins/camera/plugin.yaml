@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: camera
+name: Camera
+description: The phone's built-in camera app (Pixel, Samsung, Xiaomi, OPPO, OnePlus, Motorola and other makers).
+category: photos
+status: experimental
+android:
+  # The first installed one is used, so maker-specific cameras come before the generic AOSP/MediaTek/Qualcomm ones.
+  packages:
+    - com.google.android.GoogleCamera       # Pixel Camera
+    - com.sec.android.app.camera            # Samsung
+    - com.android.camera                    # Xiaomi, Redmi, POCO
+    - com.oplus.camera                      # OPPO, OnePlus (ColorOS / OxygenOS 12+)
+    - com.oneplus.camera                    # OnePlus (older OxygenOS)
+    - com.oppo.camera                       # realme, older OPPO
+    - com.motorola.camera3                  # Motorola
+    - com.hihonor.camera                    # HONOR
+    - com.nothing.camera                    # Nothing
+    - com.hmdglobal.app.camera              # Nokia (HMD)
+    - com.transsion.camera                  # Infinix, Tecno
+    - com.google.android.apps.cameralite    # Camera Go
+    - com.mediatek.camera                   # MediaTek reference camera
+    - org.codeaurora.snapcam                # Qualcomm reference camera
+    - com.android.camera2                   # AOSP camera (emulators, some phones)
+
+actions:
+  - id: photo_mode
+    title: Open the camera for a photo
+    description: >-
+      Opens the camera app ready to take a photo. It does NOT take a picture: nothing is captured until someone
+      presses the shutter. Photos stay in the camera app and gallery; PhoneBridge does not receive them.
+    keywords: [camera, photo, picture, selfie, snapshot, shoot, capture]
+    risk: action
+    android:
+      intent:
+        action: android.media.action.STILL_IMAGE_CAMERA
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.media.action.STILL_IMAGE_CAMERA, package: com.google.android.GoogleCamera}
+
+  - id: video_mode
+    title: Open the camera for a video
+    description: >-
+      Opens the camera app ready to record a video. It does NOT start recording: nothing is captured until someone
+      presses the record button. Videos stay in the camera app and gallery; PhoneBridge does not receive them.
+    keywords: [camera, video, record, recording, film, clip, capture]
+    risk: action
+    android:
+      intent:
+        action: android.media.action.VIDEO_CAMERA
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.media.action.VIDEO_CAMERA, package: com.google.android.GoogleCamera}

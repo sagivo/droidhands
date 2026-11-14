@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: clock
+name: Clock
+description: The phone's clock app for alarms and timers.
+category: system
+status: experimental
+android:
+  packages: [com.google.android.deskclock, com.android.deskclock]
+
+actions:
+  - id: set_alarm
+    title: Set an alarm
+    description: >-
+      Creates a one-time alarm without opening the clock app; it rings at the next occurrence of that time. Same as
+      the alarm_set tool, which uses the phone's default clock app. For a repeating alarm, call alarm_set with days.
+    keywords: [alarm, wake up, wake me, morning, reminder, ring]
+    params:
+      hour: {type: integer, description: Hour on the 24-hour clock (0-23), required: true, minimum: 0, maximum: 23}
+      minute: {type: integer, description: Minute (0-59), required: true, minimum: 0, maximum: 59}
+      label: {description: 'Optional alarm label, e.g. "Gym"', max_length: 100}
+    android:
+      tool:
+        name: alarm_set
+        args: {hour: "{{hour}}", minute: "{{minute}}", label: "{{label}}"}
+    examples:
+      - params: {hour: 7, minute: 30}
+        expect:
+          tool: {name: alarm_set, args: {hour: 7, minute: 30}}
+      - params: {hour: 6, minute: 0, label: Gym}
+        expect:
+          tool: {name: alarm_set, args: {hour: 6, minute: 0, label: Gym}}
+      - params: {hour: 24, minute: 0}
+        expect: {error: hour}
+      - params: {hour: 7}
+        expect: {error: minute}
+
+  - id: set_timer
+    title: Start a timer
+    description: >-
+      Starts a countdown timer (1 second to 24 hours) without opening the clock app. Same as the timer_set tool,
+      which uses the phone's default clock app.
+    keywords: [timer, countdown, minutes, cooking, kitchen, remind me]
+    params:
+      seconds:
+        type: integer
+        description: Timer length in seconds, e.g. 600 for 10 minutes (1-86400).
+        required: true
+        minimum: 1
+        maximum: 86400
+      label: {description: 'Optional timer label, e.g. "Pasta"', max_length: 100}
+    android:
+      tool:
+        name: timer_set
+        args: {seconds: "{{seconds}}", label: "{{label}}"}
+    examples:
+      - params: {seconds: 600, label: Pasta}
+        expect:
+          tool: {name: timer_set, args: {seconds: 600, label: Pasta}}
+      - params: {seconds: 0}
+        expect: {error: seconds}
+
+  - id: show_alarms
+    title: Show alarms
+    description: >-
+      Opens the clock app's list of alarms, for example to check which alarms are set or to change one with the
+      screen tools. It changes nothing by itself.
+    keywords: [alarms, alarm list, wake up, check alarms, next alarm]
+    risk: action
+    android:
+      intent:
+        action: android.intent.action.SHOW_ALARMS
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.intent.action.SHOW_ALARMS, package: com.google.android.deskclock}
+
+  - id: show_timers
+    title: Show timers
+    description: >-
+      Opens the clock app's timers screen, for example to see how much time is left. It changes nothing by itself.
+      Needs Android 8 or later.
+    keywords: [timers, timer, countdown, time left, remaining]
+    risk: action
+    android:
+      intent:
+        action: android.intent.action.SHOW_TIMERS
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.intent.action.SHOW_TIMERS, package: com.google.android.deskclock}
