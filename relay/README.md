@@ -157,7 +157,8 @@ want the key.
   registration and token endpoints allow any origin without credentials (browser-based MCP clients
   need that). Pages use a strict CSP (no external assets, nonce-only scripts, no framing),
   `Referrer-Policy: no-referrer`, and escape everything. Per-IP limits on requests and
-  authentication failures; bodies are capped; at most 32 requests in flight per device. Device
+  authentication failures; bodies are capped; at most 32 requests in flight per device and
+  `MAX_DEVICES` (1000) connected phones. Device
   sockets that have not completed their `hello` are capped (16 per IP, 512 in total), may send at
   most 16 KiB before it (the 16 MiB frame limit applies only afterwards), and are dropped 2 s after
   a failed handshake's close frame. Secrets are compared in constant time. Logs never contain
