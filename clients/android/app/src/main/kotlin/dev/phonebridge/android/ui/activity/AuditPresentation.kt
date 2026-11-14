@@ -1,5 +1,7 @@
 package dev.phonebridge.android.ui.activity
 
+import dev.phonebridge.android.ui.apps.ActionNames
+import dev.phonebridge.android.ui.apps.ToolName
 import dev.phonebridge.core.audit.AuditEntry
 import dev.phonebridge.core.audit.AuditOutcome
 
@@ -66,6 +68,10 @@ object AuditPresentation {
 
     /** Tool name for tool calls, otherwise the JSON-RPC method. */
     fun title(entry: AuditEntry): String = entry.tool?.takeIf { it.isNotBlank() } ?: entry.method
+
+    /** [title] as people read it: app actions become "Spotify – Play music" ([ActionNames]). */
+    fun displayTitle(entry: AuditEntry, names: ActionNames.Index = ActionNames.Index.EMPTY): ToolName =
+        ActionNames.display(title(entry), names)
 
     fun tokenLabel(entry: AuditEntry): String = entry.tokenName?.takeIf { it.isNotBlank() }
         ?: entry.tokenId?.let { "Token $it" }

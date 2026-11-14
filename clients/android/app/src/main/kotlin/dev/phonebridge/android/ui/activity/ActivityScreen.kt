@@ -24,6 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +57,9 @@ import java.time.ZoneId
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ActivityScreen(vm: MainViewModel) {
+    LaunchedEffect(Unit) { vm.loadAppActions() }
     val entries by vm.auditEntries.collectAsStateWithLifecycle()
+    val names by vm.actionNames.collectAsStateWithLifecycle()
     val tokens by vm.tokens.collectAsStateWithLifecycle()
     val now by rememberNow()
     val formatTime = rememberTimeOfDayFormatter()
@@ -69,9 +72,9 @@ fun ActivityScreen(vm: MainViewModel) {
 
     val options = remember(entries, tokens) { ActivityFilters.agentOptions(entries, tokens) }
     // Outcome counts honor the other filters, so each chip says what tapping it would show.
-    val forCounts = remember(entries, query.agent, query.search) { ActivityFilters.apply(entries, query.copy(outcome = AuditFilter.ALL)) }
+    val forCounts = remember(entries, query.agent, query.search, names) { ActivityFilters.apply(entries, query.copy(outcome = AuditFilter.ALL), names) }
     val counts = remember(forCounts) { AuditPresentation.counts(forCounts) }
-    val visible = remember(entries, query) { ActivityFilters.apply(entries, query) }
+    val visible = remember(entries, query, names) { ActivityFilters.apply(entries, query, names) }
     val rows = remember(visible, zone) { ActivityFilters.rows(visible, zone) }
     val summary = remember(visible) { ActivityFilters.summaryText(ActivityFilters.summary(visible)) }
     val colors = statusColors()
@@ -90,7 +93,7 @@ fun ActivityScreen(vm: MainViewModel) {
                     OutlinedTextField(
                         value = query.search,
                         onValueChange = { vm.activityQuery = query.copy(search = it) },
-                        placeholder = { Text("Search by tool, e.g. whatsapp") },
+                        placeholder = { Text("Search by tool or app, e.g. whatsapp") },
                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                         trailingIcon = {
                             if (query.search.isNotEmpty()) {
@@ -162,6 +165,7 @@ fun ActivityScreen(vm: MainViewModel) {
                             colors = colors,
                             expanded = expanded[row.key] == true,
                             onToggle = { expanded[row.key] = expanded[row.key] != true },
+                            names = names,
                         )
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     }

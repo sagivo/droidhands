@@ -33,6 +33,33 @@ About 40 tools (full list: [docs/TOOLS.md](docs/TOOLS.md)):
 * **Apps and device**: list and open apps and URLs, battery, network, volume, ringer, flashlight,
   media keys, clipboard, text-to-speech, alarms, timers.
 * **Calendar** (list and create), **location**, raw Android **intents** (advanced).
+* **Ready-made actions for every app**: see below.
+
+## Apps and plugins
+
+Agents don't have to drive every app by tapping. PhoneBridge gives **every installed app** a menu of
+actions, and the agent picks the app, then the action:
+
+```
+apps_list                          → Spotify (com.spotify.music): play, search, share_text, open, …
+app_actions_list(app="Spotify")    → play(query), search(query), …  with JSON Schemas
+app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
+```
+
+* **Discovered actions, for every app**: PhoneBridge scans what each app declares (sharing text, its
+  launcher shortcuts and App Actions, media and web search, maps links), so even apps nobody wrote
+  anything for get `open` plus whatever they support.
+* **Plugins**: one small YAML file per app in [`plugins/`](plugins), written by the community and
+  reviewed in pull requests, adds the actions written for that app (deep links, intents and, if needed,
+  screen recipes). They ship inside the app.
+* **Same security as any tool**: each action is checked, approved (by its risk), rate-limited and
+  audited as `<package>/<action>`; it is pinned to its app, and you can block an app or a single action
+  for every agent or for one. The **Apps** tab shows every app and what agents can do in it.
+
+**Add an app in 5 minutes, no code:** copy `plugins/_template`, fill it in, run
+`./scripts/plugin-check.sh`, try it on your phone, open a pull request. See
+[CONTRIBUTING.md](CONTRIBUTING.md#add-an-app-in-5-minutes) and the format reference,
+[docs/PLUGINS.md](docs/PLUGINS.md).
 
 ## Security
 
@@ -57,7 +84,8 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
 | Path | What |
 |---|---|
-| `docs/` | Platform-neutral contracts: [PROTOCOL.md](docs/PROTOCOL.md), [TOOLS.md](docs/TOOLS.md), [SECURITY.md](docs/SECURITY.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| `docs/` | Platform-neutral contracts: [PROTOCOL.md](docs/PROTOCOL.md), [TOOLS.md](docs/TOOLS.md), [PLUGINS.md](docs/PLUGINS.md), [SECURITY.md](docs/SECURITY.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| `plugins/` | App plugins, one folder per app, bundled into the app ([plugins/README.md](plugins/README.md) lists them). `scripts/plugin-check.sh`, `plugin-scaffold.sh`, `plugin-push.sh` and `plugin-table.sh` help write them ([CONTRIBUTING.md](CONTRIBUTING.md)). |
 | `relay/` | The relay (TypeScript / Node; deps: `ws`, `qrcode`), including one-tap OAuth pairing. [relay/README.md](relay/README.md) |
 | `scripts/setup-phone.sh` | One-command USB setup: install, grant every permission and special access, connect to the relay |
 | `scripts/make-release-key.sh`, `.github/workflows/` | Release signing key, CI (tests and builds on every push) and releases (signed APK and relay image for every `v*` tag). [docs/RELEASING.md](docs/RELEASING.md) |
@@ -82,3 +110,8 @@ No computer needed:
 Details, **self-hosting the relay** (the most private option) and the **developer setup over USB**
 are in **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. Publishing your own builds:
 [docs/RELEASING.md](docs/RELEASING.md).
+
+## Contributing
+
+App plugins and code are both welcome: [CONTRIBUTING.md](CONTRIBUTING.md). Please report security problems
+privately ([docs/SECURITY.md](docs/SECURITY.md#reporting-a-vulnerability)).

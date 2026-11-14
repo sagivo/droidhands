@@ -38,6 +38,8 @@ tasks.test {
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
     systemProperty("phonebridge.pluginsDir", pluginsDir.absolutePath)
     inputs.dir(pluginsDir).withPropertyName("plugins").withPathSensitivity(PathSensitivity.RELATIVE)
+    // PluginScaffoldScriptTest runs it.
+    inputs.file(repoRoot.resolve("scripts/plugin-scaffold.sh")).withPropertyName("scaffoldScript").withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Validates plugins and runs their examples, without a phone: all of plugins/, or -Ppath=plugins/<id>
@@ -51,6 +53,17 @@ tasks.register<JavaExec>("checkPlugins") {
         ?.let { p -> File(p).let { if (it.isAbsolute) it else repoRoot.resolve(p) } }
         ?: pluginsDir
     args(target.normalize().absolutePath, repoRoot.absolutePath)
+}
+
+// Rewrites the table of bundled plugins in plugins/README.md from the plugin files (-Pcheck=true only checks it).
+// Wrapped by scripts/plugin-table.sh; PluginTableTest fails :core:test when the table is out of date.
+tasks.register<JavaExec>("pluginTable") {
+    group = "documentation"
+    description = "Updates the plugin table in plugins/README.md (docs/PLUGINS.md). -Pcheck=true fails instead when it is stale."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.phonebridge.core.plugins.PluginTableKt")
+    val check = providers.gradleProperty("check").orNull?.toBoolean() == true
+    args(listOfNotNull(pluginsDir.absolutePath, if (check) "--check" else null))
 }
 
 // Headless demo device for cross-language E2E tests (src/test/kotlin/dev/phonebridge/core/demo/DemoDevice.kt).

@@ -26,6 +26,11 @@ sealed interface Screen {
         override val route = "permissions"
     }
 
+    /** Apps > one app: its actions, "Block for all agents", and ways to improve its integration. */
+    data class AppDetail(val packageName: String) : Screen {
+        override val route get() = "app/$packageName"
+    }
+
     /** Settings > Security > Never-allow apps. */
     data object NeverAllowApps : Screen {
         override val route = "never-allow"
@@ -38,6 +43,7 @@ sealed interface Screen {
             route == NeverAllowApps.route -> NeverAllowApps
             route.startsWith("agent/") -> route.removePrefix("agent/").takeIf { it.isNotEmpty() }?.let(::AgentDetail)
             route.startsWith("agent-apps/") -> route.removePrefix("agent-apps/").takeIf { it.isNotEmpty() }?.let(::AgentApps)
+            route.startsWith("app/") -> route.removePrefix("app/").takeIf { it.isNotEmpty() }?.let(::AppDetail)
             else -> null
         }
     }

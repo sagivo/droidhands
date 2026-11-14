@@ -59,8 +59,8 @@ These are set per agent (token) in **Agents > (agent) > Advanced**, except where
 | Control | Effect | Enforced in |
 |---|---|---|
 | **App access** | `ALL` (default), `ALLOWLIST` (only the selected apps), or `BLOCKLIST` (every app except the selected ones). | Tools, through `CallContext.appAccess` (see below) |
-| **Never-allow apps** (*global*) | Apps no agent can touch, whatever its own app-access setting. First run pre-selects installed banking, payments, password-manager and authenticator apps (heuristics plus a known-package list). PhoneBridge itself is always blocked. | Same as app access |
-| **Per-tool rules** | Each tool can be set to `ALLOW` (never ask, though still rate-limited), `ASK` (always confirm on the phone) or `BLOCK` (hidden from `tools/list` and refused). These override the confirmation policy. | `PolicyEngine` and `McpServer` (core) |
+| **Never-allow apps** (*global*) | Apps no agent can touch, whatever its own app-access setting. First run pre-selects installed banking, payments, password-manager and authenticator apps (heuristics plus a known-package list). PhoneBridge itself is always blocked. Edited in Settings > Security > Never-allow apps, or per app with **Apps > (app) > Block for all agents** (turning that off asks first). | Same as app access |
+| **Per-tool rules** | Each tool can be set to `ALLOW` (never ask, though still rate-limited), `ASK` (always confirm on the phone) or `BLOCK` (hidden from `tools/list` and refused). These override the confirmation policy. The same rules apply to single app actions (`<package>/<action>`, listed per app under *App action rules*); an action that runs a built-in tool offers only `BLOCK`, because that tool's own rule decides its approval. | `PolicyEngine` and `McpServer` (core) |
 | **Active hours** | The agent may act only within a daily local-time window, for example 08:00–23:00 (an overnight window like 22:00–06:00 also works). Outside it, calls are refused with an explanation. | `PolicyEngine` (core) |
 | **Hide one-time codes** (*global*, default ON) | Verification and 2FA codes are masked as `[code hidden]` in SMS and notification text before agents see them. | Tools, through `CallContext.redactOneTimeCodes`, using the core `OneTimeCodes.redact()` |
 
@@ -153,3 +153,15 @@ refused with an `isError` result and are audit-logged.
   optimization. Grant the exemption in the setup screen. Push wakeups (FCM) are future work.
 * Accessibility gives the app broad power over every app. That is how "control any app" works,
   and also why scopes and confirmation exist.
+
+## Reporting a vulnerability
+
+Please report security problems privately, not in a public issue: use **Security → Report a vulnerability**
+on the project's GitHub page (GitHub's private vulnerability reporting), with what is affected (app, core,
+relay or a plugin), how to reproduce it and what an attacker could do. You'll get an answer as soon as a
+maintainer can look at it, and credit in the release notes if you want it. Please give us a reasonable time to
+ship a fix before you publish details.
+
+Unreviewed local plugins are trusted by whoever imports them, and the Android platform limits above are
+known; reports that show a way around them (an agent approving its own request, reaching a blocked app,
+escaping a plugin's app, acting while paused or after a revoke) are very welcome.

@@ -21,9 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.phonebridge.android.ui.apps.ActionNames
+import dev.phonebridge.android.ui.apps.ToolName
 import dev.phonebridge.android.ui.components.CodeBlock
 import dev.phonebridge.android.ui.components.StatusPill
 import dev.phonebridge.android.ui.format.TimeFormat
@@ -33,6 +36,7 @@ import dev.phonebridge.core.audit.AuditEntry
 /**
  * One audit entry: outcome, tool, agent, time. When [onToggle] is set the row expands to show the
  * detail, arguments preview, duration and transport; otherwise [onClick] (if any) handles taps.
+ * App actions read as "Spotify – Play music" ([names]); the details show the logged tool name.
  */
 @Composable
 internal fun AuditRow(
@@ -45,7 +49,9 @@ internal fun AuditRow(
     onClick: (() -> Unit)? = null,
     showAgent: Boolean = true,
     horizontalPadding: Dp = 16.dp,
+    names: ActionNames.Index = ActionNames.Index.EMPTY,
 ) {
+    val title = AuditPresentation.displayTitle(entry, names)
     val outcomeColor = outcomeColor(AuditPresentation.category(entry.outcome), colors)
     val clickModifier = when {
         onToggle != null -> Modifier
@@ -66,7 +72,7 @@ internal fun AuditRow(
             StatusPill(AuditPresentation.label(entry.outcome), outcomeColor)
             Spacer(Modifier.width(8.dp))
             Text(
-                AuditPresentation.title(entry),
+                title.title,
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -90,13 +96,21 @@ internal fun AuditRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (expanded) AuditDetails(entry)
+        if (expanded) AuditDetails(entry, title)
     }
 }
 
 @Composable
-private fun AuditDetails(entry: AuditEntry) {
+private fun AuditDetails(entry: AuditEntry, title: ToolName) {
     Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (title.isAppAction) {
+            Text(
+                "App action ${title.raw}",
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         entry.detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         entry.argsPreview?.let {
             Text("Arguments", style = MaterialTheme.typography.labelMedium)

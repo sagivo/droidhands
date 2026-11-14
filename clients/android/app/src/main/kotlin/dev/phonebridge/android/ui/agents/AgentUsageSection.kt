@@ -18,14 +18,18 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.phonebridge.android.ui.apps.ActionNames
 import dev.phonebridge.android.ui.components.StatusDot
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.core.audit.TokenUsage
 import java.time.LocalDate
 
-/** Usage card: calls per day (14 days), totals by outcome, and the most-used tools. */
+/**
+ * Usage card: calls per day (14 days), totals by outcome, and the most-used tools. App actions read as
+ * "Spotify – Play music" ([names]) with their raw tool name underneath.
+ */
 @Composable
-internal fun AgentUsageCard(usage: TokenUsage?, today: LocalDate, formatDay: (LocalDate) -> String) {
+internal fun AgentUsageCard(usage: TokenUsage?, today: LocalDate, formatDay: (LocalDate) -> String, names: ActionNames.Index = ActionNames.Index.EMPTY) {
     val days = remember(usage, today) { UsageStats.lastDays(usage?.perDay.orEmpty(), today) }
     val top = remember(usage) { UsageStats.topTools(usage?.perTool.orEmpty()) }
     val colors = statusColors()
@@ -51,15 +55,30 @@ internal fun AgentUsageCard(usage: TokenUsage?, today: LocalDate, formatDay: (Lo
                 HorizontalDivider()
                 Text("Most used tools", style = MaterialTheme.typography.titleSmall)
                 top.forEach { item ->
+                    val name = ActionNames.display(item.tool, names)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            item.tool,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        if (name.isAppAction) {
+                            Column(Modifier.weight(1f)) {
+                                Text(name.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    name.raw,
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        } else {
+                            Text(
+                                item.tool,
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                         Text(
                             "${UsageStats.compact(item.count)} · ${UsageStats.percent(item.count, usage.totalCalls)}%",
                             style = MaterialTheme.typography.bodyMedium,

@@ -184,6 +184,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     fun setLocalPluginsEnabled(on: Boolean) {
         val success = if (on) "Local plugins on: their actions always ask for your approval." else "Local plugins off."
         saveSecurity("Couldn't change the setting", success) { it.copy(localPluginsEnabled = on) }
+        graph.appDirectory.invalidate()
         refreshLocalPlugins()
     }
 
@@ -218,6 +219,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 importErrors = listOf("Couldn't read the file: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 importing = false
+                graph.appDirectory.invalidate()
                 refreshLocalPlugins()
             }
         }
@@ -227,6 +229,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val removed = withContext(Dispatchers.IO) { runCatching { graph.plugins.local.remove(id) }.getOrDefault(false) }
             _messages.send(if (removed) "Removed the local plugin $id." else "Couldn't remove the local plugin $id.")
+            graph.appDirectory.invalidate()
             refreshLocalPlugins()
         }
     }

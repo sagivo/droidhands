@@ -78,8 +78,12 @@ Now ask your agent: *"Send a WhatsApp to Tania saying I'm running 10 minutes lat
   Claude …" and continue as soon as you unlock. Replies to notifications work while locked.
 * **Agents.** Each connected agent shows when it was last active, its calls today, a 14-day
   usage chart and its most-used tools. You can change its access level, choose which apps it may
-  touch, set per-tool Allow / Ask / Block rules and active hours, or **Revoke** it. Revoking
-  takes effect immediately.
+  touch, set per-tool Allow / Ask / Block rules (also for single app actions, grouped by app) and
+  active hours, or **Revoke** it. Revoking takes effect immediately.
+* **Apps.** Every app on the phone with what agents can do in it: *Integration* (a community
+  plugin), *Local plugin* or *Basic* (what PhoneBridge found by itself), each action with its risk.
+  Tap an app to **Block it for all agents**, request a better integration, or create a plugin
+  draft to write one yourself ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 * **Activity.** The full log of every request, filterable by agent and outcome.
 * **Pause.** One switch in the app, or *Pause* in the PhoneBridge notification, stops all agents.
 * **Security.** Settings → Security covers the global **never-allow apps** list (banking,

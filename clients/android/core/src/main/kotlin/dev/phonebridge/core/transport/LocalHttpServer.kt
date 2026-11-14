@@ -97,7 +97,8 @@ class LocalHttpServer(
             current
         }
         closeQuietly(state.socket)
-        for (socket in connections.toList()) closeQuietly(socket)
+        // A snapshot array: Kotlin's toList() reads the size first and can fail when a connection ends meanwhile.
+        for (socket in connections.toTypedArray()) closeQuietly(socket)
         connections.clear()
         state.scope.cancel()
     }

@@ -81,6 +81,7 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 | `PluginCatalog` | Bundled plugins plus local ones (which replace bundled plugins with the same id), by id and by package. |
 | `AppActionsPlatform` (interface) | What the platform provides: installed apps, app-name resolution under app access, discovered actions (§8), availability, and running a rendered recipe. The Android app implements it. |
 | `AppActionCatalog`, `appActionTools()` | Per app: plugin actions plus discovered ones; each action's tool; `app_actions_list` and `app_action_run` (a `DispatchTool`). |
+| `PluginDraft` | A `plugin.yaml` skeleton from an app's discovered actions, with TODO markers and examples computed by rendering each recipe (*Apps → (app) → Create plugin draft*). |
 
 ## Android components
 
@@ -95,7 +96,8 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 | `UnlockPrompt` | "Unlock to continue": asks the user to unlock when a screen-based action arrives while the phone is locked. |
 | `PluginRepository` (`plugins/`) | App plugins: the repository's `plugins/<id>/plugin.yaml`, bundled at build time as `assets/plugins/<id>.yaml` and loaded lazily, plus local plugins (`files/local-plugins/<id>.yaml`, imported in Settings or pushed with `scripts/plugin-push.sh`) while *Settings → Developer → Local plugins* is on. |
 | `AndroidAppActions` (`tools/actions/`) | Core's `AppActionsPlatform`: `AppScanner` discovers what apps declare (standard intents, `shortcuts.xml` shortcuts and App Actions capabilities; cached per app version, rescanned when packages change); `ActionIntents` starts intent and link recipes in an exported activity of the app itself, after app-access checks; `StepRunner` runs screen recipes on the screen tools' safety checks, confined to the app. |
-| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, access level, app access, tool rules, active hours, revoke); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `phonebridge://configure` links. |
+| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, access level, app access, tool rules, app action rules grouped by app, active hours, revoke); Apps (every app with its integration and actions; per app: risks and parameters, *Block for all agents*, *Request a better integration*, *Create plugin draft*); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `phonebridge://configure` links. |
+| `AppDirectory` (`ui/apps/`) | The installed apps and their actions as the UI shows them (`AppListings`, built from `AppActionCatalog`), loaded once in the background and shared by the Apps tab, the app action rules and the readable names in the activity log and usage ("Spotify – Play music" for `com.spotify.music/play`). Never reachable by agents. |
 
 ## Concurrency
 

@@ -29,6 +29,8 @@ import dev.phonebridge.android.tools.AndroidToolCatalog
 import dev.phonebridge.android.tools.actions.AndroidAppActions
 import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.android.tools.support.DeviceState
+import dev.phonebridge.android.ui.apps.AppDirectory
+import dev.phonebridge.android.ui.apps.AppListings
 import dev.phonebridge.android.update.UpdateChecker
 import dev.phonebridge.core.audit.AuditLog
 import dev.phonebridge.core.audit.FileAuditLog
@@ -119,6 +121,14 @@ class BridgeGraph private constructor(val app: Application) {
     /** Every installed app's actions (plugins plus what apps declare): behind apps_list, app_actions_list and app_action_run. */
     val appActions: AppActionCatalog by lazy {
         AppActionCatalog(plugins::catalog, actionsPlatform, builtInTool = { name -> registry.get(name) })
+    }
+
+    /**
+     * The installed apps and their actions as the UI shows them (Apps tab, per-action rules, activity names).
+     * Loaded in the background on demand; nothing here is reachable by agents.
+     */
+    val appDirectory: AppDirectory by lazy {
+        AppDirectory(load = { AppListings.load(appActions) }, scope = appScope, log = { message, error -> Log.w(TAG, message, error) })
     }
 
     val confirmations: NotificationConfirmationProvider by lazy { NotificationConfirmationProvider(app) }

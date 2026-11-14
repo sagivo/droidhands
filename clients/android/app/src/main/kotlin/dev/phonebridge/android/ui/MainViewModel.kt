@@ -16,6 +16,7 @@ import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.settings.BridgeSettings
 import dev.phonebridge.android.ui.activity.ActivityQuery
 import dev.phonebridge.android.ui.agents.AgentPresentation
+import dev.phonebridge.android.ui.apps.ActionNames
 import dev.phonebridge.android.ui.deeplink.ConfigureRequest
 import dev.phonebridge.android.ui.home.StatusPresentation
 import dev.phonebridge.android.ui.onboarding.OnboardingFlow
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -59,6 +61,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val auditEntries: StateFlow<List<AuditEntry>> = graph.audit.entries
     val usage: StateFlow<Map<String, TokenUsage>> = GraphAdapters.usage(graph)
     val deviceId: String = graph.identity.deviceId
+
+    /** Readable names of app actions ("Spotify – Play music") for the Activity tab; see [loadAppActions]. */
+    val actionNames: StateFlow<ActionNames.Index> = graph.appDirectory.apps
+        .map { ActionNames.Index(it.orEmpty()) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ActionNames.Index(graph.appDirectory.apps.value.orEmpty()))
 
     /** One-off user-facing messages (snackbar). */
     val messages: Flow<String> = _messages.receiveAsFlow()
@@ -112,6 +119,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.useDefaultRelay()
         _messages.send("Connecting…")
     }
+
+    /** Loads the installed apps' actions in the background, for [actionNames] (a no-op when loaded moments ago). */
+    fun loadAppActions() = graph.appDirectory.refresh()
 
     /** Hides the update card for [version] (a later release shows it again). */
     fun dismissUpdate(version: String) = io("Couldn't save that") { graph.updates.dismiss(version) }

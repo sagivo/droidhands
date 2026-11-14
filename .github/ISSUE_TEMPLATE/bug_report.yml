@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in the PhoneBridge app, an app plugin or the relay doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Found a security problem?** Please don't open an issue: report it privately as
+        described in [docs/SECURITY.md](../blob/HEAD/docs/SECURITY.md#reporting-a-vulnerability).
+
+        Never paste tokens (`pb1.…`), relay access keys, setup links or personal data (names, numbers, messages).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you or your agent did, and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Ask the agent to "play lofi beats on Spotify"
+        2. Approve on the phone
+        3. ...
+  - type: input
+    id: version
+    attributes:
+      label: PhoneBridge version
+      description: Settings → About in the app.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Phone and Android version
+      placeholder: Pixel 8, Android 15
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: AI agent / MCP client
+      placeholder: Claude.ai, Claude Code, ChatGPT, ...
+  - type: dropdown
+    id: connection
+    attributes:
+      label: How the agent connects
+      options:
+        - The app's default relay
+        - My own relay
+        - Local (USB, LAN or Tailscale)
+        - Not relevant
+  - type: input
+    id: app
+    attributes:
+      label: App involved (if any)
+      description: For app actions, the app and action as the Activity tab shows them.
+      placeholder: Spotify – Play music (com.spotify.music/play)
+  - type: textarea
+    id: activity
+    attributes:
+      label: Activity log or logs (optional)
+      description: >-
+        The Activity entry (tap it for details), or `adb logcat` lines tagged PhoneBridge. Remove anything personal first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: I removed tokens, access keys and personal data from this report.
+          required: true

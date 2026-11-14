@@ -53,6 +53,9 @@ import dev.phonebridge.android.ui.agents.AgentPresentation
 import dev.phonebridge.android.ui.agents.AgentsScreen
 import dev.phonebridge.android.ui.agents.AgentsViewModel
 import dev.phonebridge.android.ui.agents.RevokeAllDialog
+import dev.phonebridge.android.ui.apps.AppDetailScreen
+import dev.phonebridge.android.ui.apps.AppsScreen
+import dev.phonebridge.android.ui.apps.AppsViewModel
 import dev.phonebridge.android.ui.components.LocalSnackbarHostState
 import dev.phonebridge.android.ui.components.findActivity
 import dev.phonebridge.android.ui.components.rememberNow
@@ -92,7 +95,7 @@ private val NavStateSaver = Saver<NavState, ArrayList<String>>(
 
 /**
  * The app once the graph is warm: the manual token flow (when active) above the onboarding wizard
- * (first run) above pages above the four tabs. Hosts the snackbar, the navigation bar, back
+ * (first run) above pages above the five tabs. Hosts the snackbar, the navigation bar, back
  * handling and the setup-link confirmation.
  */
 @Composable
@@ -108,6 +111,7 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
     val tokens: TokensViewModel = viewModel()
     val settings: SettingsViewModel = viewModel()
     val agents: AgentsViewModel = viewModel()
+    val appsVm: AppsViewModel = viewModel()
 
     val pending by main.pendingApprovals.collectAsStateWithLifecycle()
     val pairings by main.pendingPairings.collectAsStateWithLifecycle()
@@ -149,7 +153,7 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
         })
     }
     LaunchedEffect(Unit) {
-        merge(main.messages, tokens.messages, settings.messages, agents.messages).collect { message ->
+        merge(main.messages, tokens.messages, settings.messages, agents.messages, appsVm.messages).collect { message ->
             launch { snackbar.showSnackbar(message) }
         }
     }
@@ -233,12 +237,12 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
                     Layer.PAGE -> {
                         val screen = nav.top ?: return@Box
                         holder.SaveableStateProvider(screen.route) {
-                            Page(screen, main, setup, settings, agents, tokens, push, pop, onSelectTab = selectTab)
+                            Page(screen, main, setup, settings, agents, appsVm, tokens, push, pop, onSelectTab = selectTab)
                         }
                     }
                     Layer.TAB -> holder.SaveableStateProvider(nav.tab.route) {
                         Tab(
-                            nav.tab, main, setupState, settings, agents, push,
+                            nav.tab, main, setupState, settings, agents, appsVm, push,
                             onSelectTab = selectTab,
                             onRevokeAll = { confirmRevokeAll = true },
                         )
@@ -269,6 +273,7 @@ private fun Tab(
     setupState: SetupUiState,
     settings: SettingsViewModel,
     agents: AgentsViewModel,
+    apps: AppsViewModel,
     push: (Screen) -> Unit,
     onSelectTab: (Destination) -> Unit,
     onRevokeAll: () -> Unit,
@@ -286,6 +291,7 @@ private fun Tab(
             ),
         )
         Destination.AGENTS -> AgentsScreen(agents, onOpenAgent = { push(Screen.AgentDetail(it)) }, onConnect = { push(Screen.ConnectAgent) })
+        Destination.APPS -> AppsScreen(apps, onOpenApp = { push(Screen.AppDetail(it)) })
         Destination.ACTIVITY -> ActivityScreen(main)
         Destination.SETTINGS -> {
             val tokens by main.tokens.collectAsStateWithLifecycle()
@@ -312,6 +318,7 @@ private fun Page(
     setup: SetupViewModel,
     settings: SettingsViewModel,
     agents: AgentsViewModel,
+    apps: AppsViewModel,
     tokens: TokensViewModel,
     push: (Screen) -> Unit,
     pop: () -> Unit,
@@ -345,6 +352,7 @@ private fun Page(
         )
         Screen.Permissions -> SetupScreen(setup, onBack = pop)
         Screen.NeverAllowApps -> NeverAllowScreen(settings, onBack = pop)
+        is Screen.AppDetail -> AppDetailScreen(apps, screen.packageName, onBack = pop)
     }
 }
 

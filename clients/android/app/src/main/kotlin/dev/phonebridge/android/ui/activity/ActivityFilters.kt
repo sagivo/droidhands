@@ -1,5 +1,6 @@
 package dev.phonebridge.android.ui.activity
 
+import dev.phonebridge.android.ui.apps.ActionNames
 import dev.phonebridge.core.audit.AuditEntry
 import dev.phonebridge.core.auth.TokenRecord
 import java.time.Instant
@@ -40,14 +41,24 @@ object ActivityFilters {
     /** [ActivityQuery.agent] value selecting requests that carried no valid token. */
     const val NO_TOKEN = "~no-token"
 
-    fun apply(entries: List<AuditEntry>, query: ActivityQuery): List<AuditEntry> {
+    /**
+     * The entries matching [query]. The search looks at the tool name, the method and, when [names] knows
+     * them, app action names as shown ("Spotify – Play music"), so "play music" finds `com.spotify.music/play`.
+     */
+    fun apply(entries: List<AuditEntry>, query: ActivityQuery, names: ActionNames.Index = ActionNames.Index.EMPTY): List<AuditEntry> {
         if (!query.isFiltered) return entries
         val needle = normalize(query.search)
         return entries.filter { entry ->
             matchesAgent(entry, query.agent) &&
                 AuditPresentation.matches(entry, query.outcome) &&
-                (needle.isEmpty() || normalize(entry.tool.orEmpty()).contains(needle) || normalize(entry.method).contains(needle))
+                (needle.isEmpty() || normalize(entry.tool.orEmpty()).contains(needle) || normalize(entry.method).contains(needle) ||
+                    matchesShownName(entry, needle, names))
         }
+    }
+
+    private fun matchesShownName(entry: AuditEntry, needle: String, names: ActionNames.Index): Boolean {
+        val shown = AuditPresentation.displayTitle(entry, names)
+        return shown.isAppAction && normalize(shown.title).contains(needle)
     }
 
     fun matchesAgent(entry: AuditEntry, agent: String?): Boolean = when (agent) {
