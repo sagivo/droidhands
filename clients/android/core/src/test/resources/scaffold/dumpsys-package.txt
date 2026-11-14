@@ -4,7 +4,7 @@ Activity Resolver Table:
         8e5b2b3 com.example.music/.share.ShareActivity filter 2f1c1e0
           Action: "android.intent.action.SEND"
           Category: "android.intent.category.DEFAULT"
-          Type: "text/plain"
+          StaticType: "text/plain"
         51d0a7c com.example.music/org.lib.translate.TranslateActivity filter 7a6e5d4
           Action: "android.intent.action.PROCESS_TEXT"
           Category: "android.intent.category.DEFAULT"
@@ -15,7 +15,7 @@ Activity Resolver Table:
         8e5b2b3 com.example.music/.share.ShareActivity filter 2f1c1e0
           Action: "android.intent.action.SEND"
           Category: "android.intent.category.DEFAULT"
-          Type: "text/plain"
+          StaticType: "text/plain"
 
   Schemes:
       examplemusic:
@@ -51,7 +51,7 @@ Activity Resolver Table:
         8e5b2b3 com.example.music/.share.ShareActivity filter 2f1c1e0
           Action: "android.intent.action.SEND"
           Category: "android.intent.category.DEFAULT"
-          Type: "text/plain"
+          StaticType: "text/plain"
 
 Receiver Resolver Table:
   Non-Data Actions:
