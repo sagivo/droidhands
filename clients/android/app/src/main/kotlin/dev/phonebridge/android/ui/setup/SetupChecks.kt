@@ -27,7 +27,7 @@ internal object SetupChecks {
      */
     @WorkerThread
     fun read(context: Context, asked: Set<String>, showRationale: (String) -> Boolean): List<SetupItem> = buildList {
-        val source = packageSource(context)
+        val source = installSource(context)
         PermissionCatalog.RUNTIME.forEach { group ->
             add(
                 if (group.id == PermissionCatalog.NOTIFICATIONS.id) {
@@ -174,18 +174,22 @@ internal object SetupChecks {
         )
     }
 
-    private fun SetupItem.withRestrictedHelp(source: Int?): SetupItem =
-        copy(restrictedSettingsHelp = SetupLogic.showsRestrictedSettingsHelp(id, status, Build.VERSION.SDK_INT, source))
+    private fun SetupItem.withRestrictedHelp(source: InstallSource): SetupItem = copy(
+        restrictedSettingsHelp = SetupLogic.showsRestrictedSettingsHelp(id, status, Build.VERSION.SDK_INT, source.packageSource),
+        restrictedSettingsGuide = RestrictedSettings.showGuide(id, status, Build.VERSION.SDK_INT, source),
+    )
 
-    /** How the app was installed (store, downloaded file…) on API 33+, or null if unknown. */
-    private fun packageSource(context: Context): Int? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
-        return try {
-            context.packageManager.getInstallSourceInfo(context.packageName).packageSource
-        } catch (e: Exception) {
-            Log.w(TAG, "Reading the install source failed: ${e.javaClass.name}")
-            null
-        }
+    /** How the app was installed (store, downloaded file, adb…); fields stay null when unknown. */
+    private fun installSource(context: Context): InstallSource = try {
+        val info = context.packageManager.getInstallSourceInfo(context.packageName)
+        InstallSource(
+            packageSource = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) info.packageSource else null,
+            installer = info.installingPackageName,
+            initiator = info.initiatingPackageName,
+        )
+    } catch (e: Exception) {
+        Log.w(TAG, "Reading the install source failed: ${e.javaClass.name}")
+        InstallSource()
     }
 
     /** A failing check (OEM quirk, component not ready) reads as "not granted" instead of crashing the screen. */

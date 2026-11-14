@@ -40,6 +40,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.phonebridge.android.graph.DefaultRelay
 import dev.phonebridge.android.ui.MainViewModel
 import dev.phonebridge.android.ui.components.Clipboard
 import dev.phonebridge.android.ui.components.CodeBlock
@@ -50,6 +51,8 @@ import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.rememberCopier
 import dev.phonebridge.android.ui.components.rememberNow
+import dev.phonebridge.android.ui.deeplink.ConfigureLinks
+import dev.phonebridge.android.ui.onboarding.DEFAULT_RELAY_NOTE
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.transport.RelayStatus
 import kotlinx.coroutines.launch
@@ -82,6 +85,8 @@ internal fun ConnectAgentContent(
     val connected = remember(tokens, baseline) { PairingWatch.newlyPaired(tokens, baseline.toSet()) }
     val connectUrl = (relay as? RelayStatus.Connected)?.connectUrl?.takeIf { it.isNotBlank() }
     val livePairings = pairings.filter { it.expiresAt > now }
+    // No relay yet, but the build comes with one: offer it first.
+    val offerDefault = main.defaultRelayUrl?.takeIf { DefaultRelay.canOffer(settings, it) }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (connected != null) {
@@ -129,6 +134,20 @@ internal fun ConnectAgentContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 RelaySetupForm(settings, onConnect = main::connectRelay)
+            }
+            offerDefault != null -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeader("First, get this phone online")
+                Text(
+                    "Use ${ConfigureLinks.hostOf(offerDefault) ?: offerDefault}, the relay this app comes with. $DEFAULT_RELAY_NOTE",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(onClick = main::useDefaultRelay) { Text("Go online") }
+                Text(
+                    "Or connect to your own relay:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                RelaySetupForm(settings.copy(relayUrl = "", relayAccessKey = ""), onConnect = main::connectRelay)
             }
             else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionHeader("First, connect this phone to your relay")

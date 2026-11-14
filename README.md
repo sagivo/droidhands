@@ -10,8 +10,9 @@ The agent calls `contacts_search("Tania")`, then
 **Allow / Deny**. On Allow, PhoneBridge opens the chat and taps Send.
 
 PhoneBridge is an Android app (iOS later) that exposes the phone's capabilities as an
-[MCP](https://modelcontextprotocol.io) server. Agents reach it through a small self-hosted relay
-(works over LTE and behind NAT) or directly (USB / LAN / Tailscale).
+[MCP](https://modelcontextprotocol.io) server. Agents reach it through a small relay (the one the
+app comes with, or your own self-hosted one; works over LTE and behind NAT) or directly (USB / LAN /
+Tailscale).
 
 ```
 AI agent ──MCP over HTTPS──► relay (yours) ◄──WebSocket── PhoneBridge app ──► WhatsApp, SMS, contacts,
@@ -59,6 +60,7 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 | `docs/` | Platform-neutral contracts: [PROTOCOL.md](docs/PROTOCOL.md), [TOOLS.md](docs/TOOLS.md), [SECURITY.md](docs/SECURITY.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | `relay/` | The relay (TypeScript / Node; deps: `ws`, `qrcode`), including one-tap OAuth pairing. [relay/README.md](relay/README.md) |
 | `scripts/setup-phone.sh` | One-command USB setup: install, grant every permission and special access, connect to the relay |
+| `scripts/make-release-key.sh`, `.github/workflows/` | Release signing key, CI (tests and builds on every push) and releases (signed APK and relay image for every `v*` tag). [docs/RELEASING.md](docs/RELEASING.md) |
 | `scripts/e2e/` | End-to-end scenarios (real MCP calls through the relay to a device/emulator) and the pairing flow test |
 | `clients/android/fixtures` | Emulator-only stand-ins for WhatsApp and a mail app used by the E2E tests |
 | `clients/android/core` | Bridge core in pure Kotlin: MCP server, tokens, policy, audit, relay client, local HTTP server. Platform-neutral. |
@@ -66,4 +68,17 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
 ## Quick start
 
-See **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**.
+No computer needed:
+
+1. **Install.** On your Android phone (11 or newer), download **`PhoneBridge.apk`** from the project
+   site or the [latest GitHub release](../../releases/latest), allow your browser to install apps,
+   and install it.
+2. **Open it.** The setup wizard walks you through the permissions (including Android 13+'s
+   "Allow restricted settings" step for downloaded apps), and the phone goes online by itself
+   through the app's default relay.
+3. **Connect an agent.** Tap **Connect an AI agent**, paste the URL into Claude, ChatGPT or any MCP
+   client, check that the code matches, and tap **Allow**.
+
+Details, **self-hosting the relay** (the most private option) and the **developer setup over USB**
+are in **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. Publishing your own builds:
+[docs/RELEASING.md](docs/RELEASING.md).

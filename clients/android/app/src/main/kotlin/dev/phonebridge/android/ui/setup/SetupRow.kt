@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,7 +89,35 @@ private fun RowNotes(item: SetupItem, onOpenAppInfo: () -> Unit) {
             kind = NoticeKind.WARNING,
         )
     }
-    if (item.restrictedSettingsHelp) RestrictedSettingsHelp(onOpenAppInfo)
+    when {
+        item.restrictedSettingsGuide -> RestrictedSettingsGuide(onOpenAppInfo)
+        item.restrictedSettingsHelp -> RestrictedSettingsHelp(onOpenAppInfo)
+    }
+}
+
+/**
+ * The numbered "Allow restricted settings" steps for an app installed from an APK file on Android
+ * 13+ ([RestrictedSettings.showGuide]), with the Open App info button. The caller places it above
+ * the accessibility row's own "Open Accessibility" button, which step 1 refers to.
+ */
+@Composable
+internal fun RestrictedSettingsGuide(onOpenAppInfo: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Installed from the web? One extra step", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Android blocks accessibility for apps installed outside an app store until you allow it:",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        RestrictedSettings.GUIDE_STEPS.forEachIndexed { index, step ->
+            Row {
+                Text("${index + 1}.", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(24.dp))
+                Text(step, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            OutlinedButton(onClick = onOpenAppInfo) { Text("Open App info") }
+        }
+    }
 }
 
 /**

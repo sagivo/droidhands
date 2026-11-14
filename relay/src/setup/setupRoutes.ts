@@ -31,11 +31,12 @@ export async function handleSetupPage(deps: HttpDeps, req: IncomingMessage, res:
   if (!admit(deps, clientInfo(deps, req)).allowed) return sendText(res, 429, 'Too Many Requests\n');
   const base = relayBase(deps, req);
   const accessKeyRequired = deps.config.accessKey !== null;
-  const apk = await apkFile(deps);
   const prefix = publicPathPrefix(deps.config);
+  // APK_URL (e.g. the latest GitHub release) wins over a file in PUBLIC_DIR.
+  const apkUrl = deps.config.apkUrl ?? ((await apkFile(deps)) === null ? null : `${prefix}${APK_PATH}`);
   sendSetupPage(req, res, {
     base,
-    apkUrl: apk === null ? null : `${prefix}${APK_PATH}`,
+    apkUrl,
     qrEndpoint: `${prefix}${SETUP_QR_PATH}`,
     accessKeyRequired,
     // With an access key the QR must include it, which only the page itself knows (see /setup/qr).
@@ -43,10 +44,17 @@ export async function handleSetupPage(deps: HttpDeps, req: IncomingMessage, res:
   });
 }
 
-/** Streams the operator-provided APK with the Android package content type. */
+/**
+ * Streams the operator-provided APK with the Android package content type, or redirects to
+ * APK_URL when it is set (so links to this path keep working).
+ */
 export async function handleApkDownload(deps: HttpDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!allowMethods(req, res, 'GET, HEAD')) return;
   if (!admit(deps, clientInfo(deps, req)).allowed) return sendText(res, 429, 'Too Many Requests\n');
+  if (deps.config.apkUrl !== null) {
+    res.setHeader('Location', deps.config.apkUrl);
+    return sendText(res, 302, 'Found\n');
+  }
   const apk = await apkFile(deps);
   if (apk === null) return sendText(res, 404, 'Not Found\n');
   res.statusCode = 200;

@@ -31,6 +31,12 @@ export interface RelayConfig {
   readonly requestTimeoutMs: number;
   readonly maxBodyBytes: number;
   readonly maxInflightPerDevice: number;
+  /**
+   * Phones that may be connected at the same time. A new phone beyond it is refused with close
+   * code 4013 (`relay_full`) and retries with backoff; a phone already connected may always
+   * reconnect (its new connection replaces the old one).
+   */
+  readonly maxDevices: number;
   readonly helloTimeoutMs: number;
   /** Device sockets that may wait for their hello at the same time, relay-wide (§3.1). */
   readonly maxPendingHandshakes: number;
@@ -52,6 +58,12 @@ export interface RelayConfig {
   readonly dataDir: string | null;
   /** Directory the operator may put `phonebridge.apk` in, served at `/download/phonebridge.apk`. */
   readonly publicDir: string;
+  /**
+   * Where the setup page's Install button downloads the app, e.g. the latest GitHub release's
+   * `PhoneBridge.apk`. When set it wins over a file in [publicDir], and `/download/phonebridge.apk`
+   * redirects to it.
+   */
+  readonly apkUrl: string | null;
   /** Print the setup URL and a QR code on startup (CLI only). */
   readonly setupBanner: boolean;
   /** How long a pairing waits for the phone's answer (§5.3: 180 s). */
@@ -72,6 +84,7 @@ export const DEFAULT_CONFIG: RelayConfig = Object.freeze({
   requestTimeoutMs: 150_000,
   maxBodyBytes: 1_048_576,
   maxInflightPerDevice: 32,
+  maxDevices: 1000,
   helloTimeoutMs: 10_000,
   maxPendingHandshakes: 512,
   maxPendingHandshakesPerIp: 16,
@@ -82,6 +95,7 @@ export const DEFAULT_CONFIG: RelayConfig = Object.freeze({
   relaySecret: null,
   dataDir: './data',
   publicDir: fileURLToPath(new URL('../public', import.meta.url)),
+  apkUrl: null,
   setupBanner: true,
   pairingTtlMs: 180_000,
   authCodeTtlMs: 120_000,
@@ -106,6 +120,7 @@ const ENV_NAMES: Partial<Record<keyof RelayConfig, string>> = {
   requestTimeoutMs: 'REQUEST_TIMEOUT_MS',
   maxBodyBytes: 'MAX_BODY_BYTES',
   maxInflightPerDevice: 'MAX_INFLIGHT_PER_DEVICE',
+  maxDevices: 'MAX_DEVICES',
   helloTimeoutMs: 'HELLO_TIMEOUT_MS',
   maxPendingHandshakes: 'MAX_PENDING_HANDSHAKES',
   maxPendingHandshakesPerIp: 'MAX_PENDING_HANDSHAKES_PER_IP',
@@ -115,6 +130,7 @@ const ENV_NAMES: Partial<Record<keyof RelayConfig, string>> = {
   relaySecret: 'RELAY_SECRET',
   dataDir: 'DATA_DIR',
   publicDir: 'PUBLIC_DIR',
+  apkUrl: 'APK_URL',
 };
 
 function label(field: keyof RelayConfig): string {
@@ -139,6 +155,7 @@ export function resolveConfig(overrides: Partial<RelayConfig> = {}): RelayConfig
     requestTimeoutMs: checkInt(merged.requestTimeoutMs, label('requestTimeoutMs'), 1, MAX_TIMER_MS),
     maxBodyBytes: checkInt(merged.maxBodyBytes, label('maxBodyBytes'), 1, MAX_BODY_LIMIT),
     maxInflightPerDevice: checkInt(merged.maxInflightPerDevice, label('maxInflightPerDevice'), 1),
+    maxDevices: checkInt(merged.maxDevices, label('maxDevices'), 1),
     helloTimeoutMs: checkInt(merged.helloTimeoutMs, label('helloTimeoutMs'), 1, MAX_TIMER_MS),
     maxPendingHandshakes: checkInt(merged.maxPendingHandshakes, label('maxPendingHandshakes'), 1),
     maxPendingHandshakesPerIp: checkInt(merged.maxPendingHandshakesPerIp, label('maxPendingHandshakesPerIp'), 1),
@@ -149,6 +166,7 @@ export function resolveConfig(overrides: Partial<RelayConfig> = {}): RelayConfig
     relaySecret: checkRelaySecret(merged.relaySecret, label('relaySecret')),
     dataDir: merged.dataDir === '' ? null : merged.dataDir,
     publicDir: checkNonEmpty(merged.publicDir, label('publicDir')),
+    apkUrl: merged.apkUrl === null || merged.apkUrl === '' ? null : checkApkUrl(merged.apkUrl, label('apkUrl')),
     pairingTtlMs: checkInt(merged.pairingTtlMs, label('pairingTtlMs'), 1, MAX_TIMER_MS),
     authCodeTtlMs: checkInt(merged.authCodeTtlMs, label('authCodeTtlMs'), 1, MAX_TIMER_MS),
   });
@@ -191,6 +209,7 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RelayCo
     requestTimeoutMs: int('REQUEST_TIMEOUT_MS'),
     maxBodyBytes: int('MAX_BODY_BYTES'),
     maxInflightPerDevice: int('MAX_INFLIGHT_PER_DEVICE'),
+    maxDevices: int('MAX_DEVICES'),
     helloTimeoutMs: int('HELLO_TIMEOUT_MS'),
     maxPendingHandshakes: int('MAX_PENDING_HANDSHAKES'),
     maxPendingHandshakesPerIp: int('MAX_PENDING_HANDSHAKES_PER_IP'),
@@ -201,6 +220,7 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RelayCo
     relaySecret: env.RELAY_SECRET ? env.RELAY_SECRET : undefined,
     dataDir: str('DATA_DIR'),
     publicDir: str('PUBLIC_DIR'),
+    apkUrl: str('APK_URL'),
     setupBanner: bool('SETUP_BANNER'),
   });
 }
@@ -262,6 +282,23 @@ function checkRelaySecret(value: string | null, name: string): string | null {
     );
   }
   return value;
+}
+
+/** An absolute http(s) URL without credentials or fragment (a query is allowed, e.g. a signed link). */
+function checkApkUrl(value: string, name: string): string {
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    throw new ConfigError(`${name} must be an absolute http(s) URL, got "${value}"`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new ConfigError(`${name} must use http or https, got "${url.protocol}"`);
+  }
+  if (url.username !== '' || url.password !== '' || url.hash !== '') {
+    throw new ConfigError(`${name} must not contain credentials or a fragment`);
+  }
+  return url.toString();
 }
 
 function checkNonEmpty(value: string, name: string): string {

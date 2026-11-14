@@ -94,13 +94,16 @@ constant-time comparison, and checks `accessKey` if the relay is locked down. On
 On failure the relay sends a single `error` frame, then closes:
 
 ```json
-{ "type": "error", "code": "unauthorized" | "bad_request" | "protocol_version" | "access_key", "message": "..." }
+{ "type": "error", "code": "unauthorized" | "bad_request" | "protocol_version" | "access_key" | "relay_full", "message": "..." }
 ```
 
 WebSocket close codes: `4000` bad request, `4001` unauthorized/access key, `4002` unsupported
-protocol version, `4008` hello timeout, `4009` replaced by a newer connection of the same device.
-Devices MUST NOT auto-reconnect after `4001` or `4002` until settings change. They MAY reconnect
-after other codes, with backoff.
+protocol version, `4008` hello timeout, `4009` replaced by a newer connection of the same device,
+`4013` relay full (`relay_full`: the relay's `MAX_DEVICES` other devices are connected; checked
+after authentication, and never for a device that is already connected, whose new connection
+replaces the old one). Devices MUST NOT auto-reconnect after `4001` or `4002` until settings change.
+They MAY reconnect after other codes, with backoff; after `4013` they SHOULD show the error
+`message` to the user.
 
 If a device connects while another connection for the same `deviceId` is live, the relay keeps the
 **new** connection and closes the old one with `4009`. Pending requests on the old connection fail
@@ -335,7 +338,8 @@ the code and sends `pair_abandoned`, so the phone deletes the token.
 
 ### 5.5 Phone setup link
 
-`GET /setup` serves a mobile-friendly page with: (1) "Install PhoneBridge", a link to
+`GET /setup` serves a mobile-friendly page with: (1) "Install PhoneBridge", a link to the relay's
+`APK_URL` (e.g. the latest GitHub release's `PhoneBridge.apk`) if set, otherwise to
 `/download/phonebridge.apk` if the operator put an APK in the relay's `public/` dir; and (2)
 "Open in PhoneBridge", an `intent://configure?relay=<relay>&key=<accessKey>#Intent;scheme=phonebridge;package=dev.phonebridge.android;end`
 link. The access key is read from the page URL **fragment** (`/setup#key=…`), so it never reaches

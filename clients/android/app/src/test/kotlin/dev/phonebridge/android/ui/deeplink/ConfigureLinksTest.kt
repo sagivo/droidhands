@@ -93,6 +93,15 @@ class ConfigureLinksTest {
     }
 
     @Test
+    fun aSetupLinkIsTheUsersOwnRelayChoice() {
+        val onDefault = BridgeSettings(relayEnabled = true, relayUrl = "https://default.example.com", relayFromDefault = true, defaultRelayDecided = true)
+        val applied = ConfigureLinks.applyTo(onDefault, valid("phonebridge://configure?relay=https://mine.example.com&key=k"))
+        assertEquals("https://mine.example.com", applied.relayUrl)
+        assertFalse(applied.relayFromDefault)
+        assertTrue(applied.defaultRelayDecided)
+    }
+
+    @Test
     fun alreadyApplied() {
         val settings = BridgeSettings(relayEnabled = true, relayUrl = "https://r.example.com", relayAccessKey = "k")
         assertTrue(ConfigureLinks.isAlreadyApplied(settings, valid("phonebridge://configure?relay=https://r.example.com&key=k")))

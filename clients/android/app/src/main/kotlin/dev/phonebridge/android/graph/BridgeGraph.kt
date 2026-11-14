@@ -25,6 +25,7 @@ import dev.phonebridge.android.settings.SettingsRepository
 import dev.phonebridge.android.tools.AndroidToolCatalog
 import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.android.tools.support.DeviceState
+import dev.phonebridge.android.update.UpdateChecker
 import dev.phonebridge.core.audit.AuditLog
 import dev.phonebridge.core.audit.FileAuditLog
 import dev.phonebridge.core.audit.TrackingAuditLog
@@ -94,6 +95,9 @@ class BridgeGraph private constructor(val app: Application) {
     }
 
     val confirmations: NotificationConfirmationProvider by lazy { NotificationConfirmationProvider(app) }
+
+    /** Daily "is there a newer release?" check against the build's GitHub repository (if it names one). */
+    val updates: UpdateChecker by lazy { UpdateChecker(app, BuildConfig.GITHUB_REPO, BuildConfig.VERSION_NAME) }
 
     /**
      * One-tap agent pairing (docs/PROTOCOL.md §5): answers the relay's pair requests, shows the
@@ -187,7 +191,29 @@ class BridgeGraph private constructor(val app: Application) {
      * comes from outside the app.
      */
     fun applyConfigureLink(link: ConfigureLink) {
-        settings.update { it.copy(relayEnabled = true, relayUrl = link.relayUrl, relayAccessKey = link.accessKey) }
+        settings.update { it.copy(relayEnabled = true, relayUrl = link.relayUrl, relayAccessKey = link.accessKey, relayFromDefault = false) }
+        applySettings()
+    }
+
+    /**
+     * First run of a build with a default relay (`BuildConfig.DEFAULT_RELAY_URL`): when nothing is
+     * set up yet, turns the relay on with it and connects, so the phone is online without a relay
+     * step. Decided once per install and never replaces a relay the user chose ([DefaultRelay]).
+     * Call from the UI while the activity is visible (Android only lets a visible app start the
+     * foreground service). Blocking (settings I/O).
+     */
+    fun applyDefaultRelayIfNeeded() {
+        if (settings.state.value.defaultRelayDecided) return
+        settings.update { DefaultRelay.applyOnFirstRun(it, BuildConfig.DEFAULT_RELAY_URL) }
+        if (DefaultRelay.inUse(settings.state.value)) {
+            Log.i(TAG, "First run: connecting to the default relay")
+            applySettings()
+        }
+    }
+
+    /** The user asked to go online with the build's default relay. Blocking, like [applyDefaultRelayIfNeeded]. */
+    fun useDefaultRelay() {
+        settings.update { DefaultRelay.use(it, BuildConfig.DEFAULT_RELAY_URL) }
         applySettings()
     }
 

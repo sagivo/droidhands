@@ -16,6 +16,7 @@ test('defaults match the documented values', () => {
   assert.equal(config.requestTimeoutMs, 150_000);
   assert.equal(config.maxBodyBytes, 1_048_576);
   assert.equal(config.maxInflightPerDevice, 32);
+  assert.equal(config.maxDevices, 1000);
   assert.equal(config.helloTimeoutMs, 10_000);
   assert.equal(config.maxPendingHandshakes, 512);
   assert.equal(config.maxPendingHandshakesPerIp, 16);
@@ -25,6 +26,7 @@ test('defaults match the documented values', () => {
   assert.equal(config.relaySecret, null);
   assert.equal(config.dataDir, './data');
   assert.match(config.publicDir, /public$/);
+  assert.equal(config.apkUrl, null);
   assert.equal(config.setupBanner, true);
   assert.equal(config.pairingTtlMs, 180_000);
   assert.equal(config.authCodeTtlMs, 120_000);
@@ -44,6 +46,7 @@ test('reads every variable', () => {
     REQUEST_TIMEOUT_MS: '1000',
     MAX_BODY_BYTES: '2048',
     MAX_INFLIGHT_PER_DEVICE: '4',
+    MAX_DEVICES: '250',
     HELLO_TIMEOUT_MS: '500',
     MAX_PENDING_HANDSHAKES: '64',
     MAX_PENDING_HANDSHAKES_PER_IP: '4',
@@ -53,6 +56,7 @@ test('reads every variable', () => {
     RELAY_SECRET: ' a-relay-secret-that-is-long-enough-1234 ',
     DATA_DIR: '/var/lib/phonebridge',
     PUBLIC_DIR: '/srv/public',
+    APK_URL: ' https://github.com/acme/phonebridge/releases/latest/download/PhoneBridge.apk ',
     SETUP_BANNER: 'off',
   });
   assert.equal(config.port, 9000);
@@ -66,6 +70,7 @@ test('reads every variable', () => {
   assert.equal(config.requestTimeoutMs, 1000);
   assert.equal(config.maxBodyBytes, 2048);
   assert.equal(config.maxInflightPerDevice, 4);
+  assert.equal(config.maxDevices, 250);
   assert.equal(config.helloTimeoutMs, 500);
   assert.equal(config.maxPendingHandshakes, 64);
   assert.equal(config.maxPendingHandshakesPerIp, 4);
@@ -75,6 +80,7 @@ test('reads every variable', () => {
   assert.equal(config.relaySecret, ' a-relay-secret-that-is-long-enough-1234 ', 'relay secret is used verbatim');
   assert.equal(config.dataDir, '/var/lib/phonebridge');
   assert.equal(config.publicDir, '/srv/public');
+  assert.equal(config.apkUrl, 'https://github.com/acme/phonebridge/releases/latest/download/PhoneBridge.apk');
   assert.equal(config.setupBanner, false);
 });
 
@@ -114,6 +120,12 @@ test('invalid values are rejected with the variable name', () => {
     [{ ALLOW_IMPLICIT_DEVICE: 'maybe' }, /ALLOW_IMPLICIT_DEVICE/],
     [{ MAX_PENDING_HANDSHAKES: '0' }, /MAX_PENDING_HANDSHAKES/],
     [{ MAX_PENDING_HANDSHAKES_PER_IP: '0' }, /MAX_PENDING_HANDSHAKES_PER_IP/],
+    [{ MAX_DEVICES: '0' }, /MAX_DEVICES/],
+    [{ MAX_DEVICES: 'many' }, /MAX_DEVICES/],
+    [{ APK_URL: 'phonebridge.apk' }, /APK_URL/],
+    [{ APK_URL: 'ftp://example.com/PhoneBridge.apk' }, /APK_URL/],
+    [{ APK_URL: 'https://user:pw@example.com/PhoneBridge.apk' }, /APK_URL/],
+    [{ APK_URL: 'javascript:alert(1)' }, /APK_URL/],
   ];
   for (const [env, pattern] of cases) {
     assert.throws(() => loadConfigFromEnv(env), (err: unknown) => err instanceof ConfigError && pattern.test(err.message));

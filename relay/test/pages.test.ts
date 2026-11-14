@@ -119,6 +119,33 @@ test('/setup with an APK: install link and download with the Android content typ
   assert.equal((await httpRequest(`${relay.url}/download/..%2Fphonebridge.apk`)).status, 404);
 });
 
+test('APK_URL: the install link points there (over a local APK) and /download redirects to it', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'pb-public-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(join(dir, 'phonebridge.apk'), Buffer.from('PK\u0003\u0004 local apk'));
+  const apkUrl = 'https://github.com/acme/phonebridge/releases/latest/download/PhoneBridge.apk';
+  const relay = await startRelay(t, { publicDir: dir, apkUrl });
+
+  const res = await httpRequest(`${relay.url}/setup`);
+  assert.equal(res.status, 200);
+  assertPageHeaders(res);
+  assert.match(res.body, /<a class="button" href="https:\/\/github\.com\/acme\/phonebridge\/releases\/latest\/download\/PhoneBridge\.apk"/);
+  assert.doesNotMatch(res.body, /href="\/download\/phonebridge\.apk"/);
+
+  for (const method of ['GET', 'HEAD']) {
+    const download = await httpRequest(`${relay.url}/download/phonebridge.apk`, { method });
+    assert.equal(download.status, 302, method);
+    assert.equal(download.headers.location, apkUrl);
+  }
+});
+
+test('APK_URL is HTML-escaped in the setup page', async (t) => {
+  const relay = await startRelay(t, { apkUrl: 'https://example.com/get?app=pb&v="1"<x>' });
+  const res = await httpRequest(`${relay.url}/setup`);
+  assert.doesNotMatch(res.body, /"1"<x>/);
+  assert.match(res.body, /href="https:\/\/example\.com\/get\?app=pb&amp;v=%221%22%3Cx%3E"/);
+});
+
 test('/setup with an access key: no server-side QR; /setup/qr draws one only for the right key', async (t) => {
   const accessKey = 'k+y/=secret-access-key';
   const relay = await startRelay(t, { accessKey, publicUrl: 'https://relay.example.com', rateLimitAuthFailuresPerMin: 100 });
