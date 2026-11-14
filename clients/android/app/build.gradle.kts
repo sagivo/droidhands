@@ -201,6 +201,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // "Scan QR code" for relay setup: Google Play services' scanner UI, so the app needs no camera permission.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")

@@ -32,6 +32,7 @@ import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.StatusDot
 import dev.phonebridge.android.ui.components.forLevel
+import dev.phonebridge.android.ui.deeplink.SetupQrPayload
 import dev.phonebridge.android.ui.home.StatusPresentation
 import dev.phonebridge.android.ui.settings.RelayUrlCheck
 import dev.phonebridge.android.ui.settings.RelayUrls
@@ -40,7 +41,9 @@ import dev.phonebridge.core.transport.RelayStatus
 
 /**
  * "Paste your relay URL": URL and optional access key, validated as you type, then Connect. The
- * access key stays in memory only (never in saved instance state).
+ * access key stays in memory only (never in saved instance state). A setup link pasted into the URL
+ * field (`…/setup#key=…` or `phonebridge://configure…`) goes to the "Connect to relay?" dialog instead,
+ * as does a scanned QR code ([ScanSetupQrButton]).
  */
 @Composable
 internal fun RelaySetupForm(settings: BridgeSettings, onConnect: (url: String, key: String) -> Unit, modifier: Modifier = Modifier) {
@@ -48,7 +51,9 @@ internal fun RelaySetupForm(settings: BridgeSettings, onConnect: (url: String, k
     var key by remember { mutableStateOf(settings.relayAccessKey) }
     var showKey by remember { mutableStateOf(false) }
     val check = remember(url) { RelayUrls.check(url) }
-    val error = (check as? RelayUrlCheck.Invalid)?.message
+    val links = rememberConfigureLinks()
+    val setupLink = remember(url) { links != null && SetupQrPayload.isSetupLink(url) }
+    val error = (check as? RelayUrlCheck.Invalid)?.message?.takeUnless { setupLink }
     val usable = check is RelayUrlCheck.Ok || check is RelayUrlCheck.Insecure
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
@@ -57,7 +62,9 @@ internal fun RelaySetupForm(settings: BridgeSettings, onConnect: (url: String, k
             label = { Text("Relay URL") },
             placeholder = { Text("https://relay.example.com") },
             isError = error != null,
-            supportingText = { Text(error ?: "Printed by your relay when it starts.") },
+            supportingText = {
+                Text(error ?: if (setupLink) "A setup link: tap Connect to review it." else "Printed by your relay when it starts.")
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false, imeAction = ImeAction.Next),
             modifier = Modifier.fillMaxWidth(),
@@ -73,8 +80,12 @@ internal fun RelaySetupForm(settings: BridgeSettings, onConnect: (url: String, k
             trailingIcon = { TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") } },
             modifier = Modifier.fillMaxWidth(),
         )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Button(onClick = { onConnect(url, key) }, enabled = usable) { Text("Connect") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            ScanSetupQrButton()
+            Button(
+                onClick = { if (setupLink) links?.offerScanned(url) else onConnect(url, key) },
+                enabled = usable || setupLink,
+            ) { Text("Connect") }
         }
     }
 }

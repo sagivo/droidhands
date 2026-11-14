@@ -34,6 +34,15 @@ class ConfigureLinkViewModel : ViewModel() {
         return true
     }
 
+    /**
+     * Offers a scanned QR code, or a setup link pasted into the relay form, read by [SetupQrPayload]. Like a
+     * link, it is only applied once the user confirms; an unusable one shows why.
+     */
+    @MainThread
+    fun offerScanned(payload: String?) {
+        _pending.value = SetupQrPayload.parse(payload)
+    }
+
     @MainThread
     fun dismiss() {
         _pending.value = null

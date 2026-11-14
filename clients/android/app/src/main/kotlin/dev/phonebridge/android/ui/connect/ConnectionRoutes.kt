@@ -49,7 +49,7 @@ object ConnectionRoutes {
             "your agents' requests."
     const val OWN_RELAY_SCRIPT =
         "On a computer with Tailscale, scripts/relay-tailscale.sh in the PhoneBridge repository runs one for you and " +
-            "prints its setup link (add --public for claude.ai and ChatGPT)."
+            "prints its setup link and QR code (add --public for claude.ai and ChatGPT)."
 
     /** Shown with every connection URL: one-tap pairing works the same on each route. */
     const val PASTE_HINT = "Paste the URL into your AI agent, then tap Allow on this phone."

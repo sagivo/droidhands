@@ -21,10 +21,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -44,6 +46,8 @@ import dev.phonebridge.android.ui.connect.ConnectionStatusLine
 import dev.phonebridge.android.ui.connect.RelaySetupForm
 import dev.phonebridge.android.ui.connect.RouteKind
 import dev.phonebridge.android.ui.connect.RouteUrl
+import dev.phonebridge.android.ui.connect.QrScanner
+import dev.phonebridge.android.ui.connect.SCAN_LABEL
 import dev.phonebridge.android.ui.connect.TailscaleStatus
 import dev.phonebridge.android.ui.deeplink.ConfigureLinks
 import dev.phonebridge.core.transport.RelayStatus
@@ -143,10 +147,12 @@ private fun TailscaleOption(main: MainViewModel, settings: BridgeSettings, local
 @Composable
 private fun OwnRelayOption(main: MainViewModel, settings: BridgeSettings) {
     OptionCard(title = ConnectionRoutes.OWN_RELAY_TITLE, text = ConnectionRoutes.OWN_RELAY_SUMMARY) {
+        val context = LocalContext.current
+        val scan = if (remember { QrScanner.isAvailable(context) }) "Tap \"$SCAN_LABEL\" and point the camera at the code, or open" else "Open"
         Text(
-            "On this phone, open your relay's setup page (its address ends in /setup; the relay prints it, with a QR " +
-                "code, when it starts) and tap \"Open in PhoneBridge\". PhoneBridge asks you to confirm, then connects. " +
-                "Or type the address yourself:",
+            "Your relay prints its setup link, with a QR code, when it starts. $scan the setup page on this phone (its " +
+                "address ends in /setup) and tap \"Open in PhoneBridge\". PhoneBridge asks you to confirm, then connects. " +
+                "Or paste the setup link or the relay's address here:",
             style = MaterialTheme.typography.bodyMedium,
         )
         RelaySetupForm(settings, onConnect = main::connectRelay)

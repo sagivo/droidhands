@@ -59,6 +59,7 @@ import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
 import dev.phonebridge.android.ui.connect.ActiveRoutesCard
 import dev.phonebridge.android.ui.connect.ConnectionRoutes
+import dev.phonebridge.android.ui.connect.ScanSetupQrButton
 import dev.phonebridge.android.ui.connect.TailscaleStatus
 import dev.phonebridge.android.ui.onboarding.DEFAULT_RELAY_NOTE
 import dev.phonebridge.android.ui.setup.SetupUiState
@@ -247,11 +248,12 @@ private fun RelaySection(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            "${ConnectionRoutes.OWN_RELAY_TITLE}: open its setup link on this phone, or enter its URL above. " +
-                ConnectionRoutes.OWN_RELAY_SCRIPT,
+            "${ConnectionRoutes.OWN_RELAY_TITLE}: scan the QR code it prints, open its setup link on this phone, or " +
+                "enter its URL above. " + ConnectionRoutes.OWN_RELAY_SCRIPT,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        ScanSetupQrButton()
     }
 }
 
