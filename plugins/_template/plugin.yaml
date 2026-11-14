@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../plugin.schema.json
+#
+# Copy this folder to plugins/<your_app_id>/ and edit. Format reference: docs/PLUGINS.md
+# Check it with: ./scripts/plugin-check.sh plugins/<your_app_id>
+id: myapp                       # lowercase, must equal the folder name
+name: My App
+description: One sentence about the app.
+category: other                 # messaging, email, social, music, video, maps, travel, rides, food, shopping,
+                                # productivity, browser, news, photos, health, system, other
+homepage: https://example.com
+status: experimental            # experimental -> beta -> stable (stable = every action tested on a real device)
+maintainers: [your-github-handle]
+android:
+  packages: [com.example.myapp]
+
+actions:
+  # Prefer, in order: a `tool` alias (built-in tools), an `intent`, a `url` deep link, and only then `steps`.
+  - id: search
+    title: Search
+    description: Opens the app's search results for a query. Nothing else happens until someone taps a result.
+    keywords: [find, look up]
+    risk: action                # read | action | sensitive (sends, posts, pays, orders, calls, deletes -> sensitive)
+    params:
+      query:
+        description: What to search for
+        required: true
+        max_length: 200
+    android:
+      url: "https://example.com/search?q={{query}}"
+    examples:
+      - params: {query: hello world}
+        expect: {url: "https://example.com/search?q=hello%20world"}
+      - params: {}
+        expect: {error: query}

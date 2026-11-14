@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: spotify
+name: Spotify
+description: Music and podcast streaming.
+category: music
+homepage: https://www.spotify.com
+status: experimental
+android:
+  packages: [com.spotify.music]
+
+actions:
+  - id: play
+    title: Play music
+    description: >-
+      Searches Spotify and starts playing the best match: a song, artist, album, playlist or podcast.
+      Spotify picks the match; use search first if the user wants to choose.
+    keywords: [music, song, listen, playlist, podcast, artist, album]
+    risk: action
+    params:
+      query:
+        description: What to play, e.g. "Bohemian Rhapsody" or "lofi beats playlist"
+        required: true
+        max_length: 200
+    confirm: Play "{{query}}" on Spotify
+    completes: true
+    android:
+      intent:
+        action: android.media.action.MEDIA_PLAY_FROM_SEARCH
+        extras:
+          query: "{{query}}"
+          android.intent.extra.focus: vnd.android.cursor.item/*
+    examples:
+      - params: {query: lofi beats}
+        expect:
+          intent:
+            action: android.media.action.MEDIA_PLAY_FROM_SEARCH
+            package: com.spotify.music
+            extras: {query: lofi beats, android.intent.extra.focus: vnd.android.cursor.item/*}
+      - params: {}
+        expect: {error: query}
+
+  - id: search
+    title: Search
+    description: Opens Spotify's search results for a query, without playing anything.
+    keywords: [find]
+    risk: action
+    params:
+      query: {description: Search text, required: true, max_length: 200}
+    android:
+      url: "spotify:search:{{query}}"
+    examples:
+      - params: {query: daft punk}
+        expect: {url: "spotify:search:daft%20punk"}
