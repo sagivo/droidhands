@@ -3,10 +3,12 @@ package dev.phonebridge.android.tools.screen
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import dev.phonebridge.android.access.BridgeAccessibilityService
+import dev.phonebridge.android.access.SelfProtection
 import dev.phonebridge.android.access.WindowRoot
 import dev.phonebridge.android.tools.support.Accessibility
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.android.tools.support.UnlockPrompt
+import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -26,15 +28,30 @@ object UiAutomation {
 
     private val mutex = Mutex()
 
-    /** Runs [block] holding the UI mutex; fails clearly if another sequence holds it longer than [waitMs]. */
-    suspend fun <T> exclusive(waitMs: Long = LOCK_WAIT_MS, block: suspend () -> T): T {
+    /**
+     * Runs [block] holding the UI mutex; fails clearly if another sequence holds it longer than [waitMs]. Once the mutex
+     * is held, re-checks that the agent is still allowed to act ([ScreenAccess.ensureStillAllowed]).
+     */
+    suspend fun <T> exclusive(access: ScreenAccess, waitMs: Long = LOCK_WAIT_MS, block: suspend () -> T): T {
         val acquired = withTimeoutOrNull(waitMs) { mutex.lock() } != null
         if (!acquired) throw ToolException("Another screen action is still running on the phone. Wait a moment and retry.")
         try {
+            access.ensureStillAllowed()
             return block()
         } finally {
             mutex.unlock()
         }
+    }
+
+    /**
+     * Call right before every gesture or node action: throws if access was paused or the agent was revoked since the
+     * call began, or while a PhoneBridge approval is pending or shown ([dev.phonebridge.android.tools.support.ApprovalGuard]),
+     * so an agent can never tap an approval prompt, even one Android hides from the accessibility service. The service
+     * and [NodeActions] re-check the approval synchronously right before dispatching.
+     */
+    suspend fun beforeAction(access: ScreenAccess) {
+        access.ensureStillAllowed()
+        SelfProtection.requireNoPendingApproval()
     }
 
     /** The connected accessibility service, or a ToolException telling the agent how to enable it. */
@@ -52,14 +69,16 @@ object UiAutomation {
 
     /**
      * "Unlock to continue": returns at once when the screen is on and unlocked; otherwise asks the user to unlock
-     * (a notification naming [agentName] and [action], e.g. "tap on the screen") and waits up to [UNLOCK_WAIT_MS].
-     * Throws if the phone stayed locked; [nothingDone] is appended (e.g. "Nothing was sent.").
+     * (a notification naming the calling agent and [action], e.g. "tap on the screen") and waits up to [UNLOCK_WAIT_MS].
+     * Throws if the phone stayed locked ([nothingDone] is appended, e.g. "Nothing was sent."), or if access was paused or
+     * the agent revoked during the wait.
      */
-    suspend fun awaitUsable(context: Context, agentName: String, action: String, nothingDone: String? = null) {
+    suspend fun awaitUsable(context: Context, ctx: CallContext, action: String, nothingDone: String? = null) {
         if (isUsable(context)) return
-        if (!UnlockPrompt.awaitUsable(context, agentName, action, UNLOCK_WAIT_MS)) {
+        if (!UnlockPrompt.awaitUsable(context, ctx.tokenName, action, UNLOCK_WAIT_MS)) {
             throw ToolException(listOfNotNull(STAYED_LOCKED, nothingDone).joinToString(" "))
         }
+        ctx.ensureStillAllowed()
     }
 
     /** Screen on and keyguard dismissed. */
@@ -120,6 +139,11 @@ object UiAutomation {
         append(if (wentHome) "PhoneBridge went back to the home screen." else "PhoneBridge tried to go back to the home screen.")
         append(" Don't try to open $label another way; ask the user if it is needed.")
     }
+
+    /** Sentence for the descriptions of the screen-control tools. */
+    const val APPROVAL_PAUSE =
+        "Screen control is paused (refused) while a PhoneBridge approval is waiting for the user; PhoneBridge's own " +
+            "screens and notifications can never be operated."
 
     const val LOCKED_REASON = "The phone is locked. Ask the user to unlock it; screen control does not work on the lock screen."
 

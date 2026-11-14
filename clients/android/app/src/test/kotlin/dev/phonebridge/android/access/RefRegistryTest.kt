@@ -21,10 +21,11 @@ class RefRegistryTest {
         assertNull(RefRegistry.parseRef("n0"))
         assertNull(RefRegistry.parseRef(""))
         assertNull(RefRegistry.parseRef("n1.5"))
+        assertEquals(123_456_789, RefRegistry.parseRef("n123456789")) // Ids keep growing; long refs must parse.
     }
 
     @Test
-    fun `registers in order, reuses refs for the same platform node, resets per snapshot`() {
+    fun `registers in order, reuses refs for the same platform node, never reuses ids across snapshots`() {
         val refs = RefRegistry()
         val a = button("A")
         val b = button("B")
@@ -39,8 +40,33 @@ class RefRegistryTest {
         assertEquals("n3", refs.register(h1))
         assertEquals("n3", refs.register(h1Again))
         assertSame(h1Again, refs.lookup("n3").node)
-        refs.newSnapshot { register -> assertEquals("n1", register(b)) }
+        // A new snapshot gets new numbers: an old ref can never silently point at another element.
+        refs.newSnapshot { register -> assertEquals("n4", register(b)) }
         assertEquals(1, refs.size)
+        val stale = assertThrows(ToolException::class.java) { refs.lookup("n1") }.message!!
+        assertTrue(stale, stale.contains("not from your latest screen_read") && stale.contains("Call screen_read again"))
+        assertSame(b, refs.lookup("n4").node)
+    }
+
+    @Test
+    fun `agents sharing an id source never see each other's refs`() {
+        val ids = RefIds()
+        val agentA = RefRegistry(ids)
+        val agentB = RefRegistry(ids)
+        val row = label("Tania Cohen")
+        val delete = button("Delete chat")
+        val refA = agentA.newSnapshot { register -> register(row) }
+        val refB = agentB.newSnapshot { register -> register(delete) }
+        assertEquals("n1", refA)
+        assertEquals("n2", refB)
+        // A's ref only resolves for A; B's ref (or A's in B's registry) is rejected, never mapped to another element.
+        assertSame(row, agentA.lookup(refA).node)
+        val foreign = assertThrows(ToolException::class.java) { agentA.lookup(refB) }.message!!
+        assertTrue(foreign, foreign.contains("only work for the agent that read them"))
+        assertThrows(ToolException::class.java) { agentB.lookup(refA) }
+        // B reading again doesn't disturb A's refs.
+        agentB.newSnapshot { register -> register(button("Block")) }
+        assertSame(row, agentA.lookup(refA).node)
     }
 
     @Test
@@ -49,8 +75,12 @@ class RefRegistryTest {
         assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n1") }.message!!.contains("screen_read"))
         refs.register(button("A"))
         refs.register(button("B"))
-        assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n9") }.message!!.contains("n1..n2"))
+        assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n9") }.message!!.contains("not from your latest screen_read"))
         assertTrue(assertThrows(ToolException::class.java) { refs.lookup("send") }.message!!.contains("not a valid element ref"))
+        // A read that listed nothing still counts as the latest snapshot.
+        val empty = RefRegistry()
+        empty.newSnapshot { }
+        assertTrue(assertThrows(ToolException::class.java) { empty.lookup("n1") }.message!!.contains("not from your latest"))
     }
 
     @Test

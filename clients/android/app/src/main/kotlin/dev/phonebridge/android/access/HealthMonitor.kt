@@ -37,8 +37,7 @@ internal class HealthMonitor(private val service: AccessibilityService, private 
     fun start(scope: CoroutineScope) {
         active = true
         try {
-            // A protected system broadcast: delivered to non-exported receivers.
-            ContextCompat.registerReceiver(service, unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), ContextCompat.RECEIVER_NOT_EXPORTED)
+            ContextCompat.registerReceiver(service, unlockReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), UNLOCK_RECEIVER_FLAGS)
             registered = true
         } catch (e: RuntimeException) {
             Log.w(TAG, "Could not watch for unlocks: ${e.javaClass.simpleName}")
@@ -110,5 +109,13 @@ internal class HealthMonitor(private val service: AccessibilityService, private 
 
         /** How long missing windows must persist before the service counts as stuck. */
         const val CONFIRM_MS = 1_000L
+
+        /**
+         * Export flag of the unlock receiver. ACTION_USER_PRESENT is sent by System UI, which does not run as the system
+         * uid: Android skips non-exported runtime receivers for it (API 33+), and on API 30-32 ContextCompat would guard a
+         * non-exported receiver with a permission System UI lacks, so the receiver must be exported. That is safe: only
+         * the system may send this protected broadcast.
+         */
+        const val UNLOCK_RECEIVER_FLAGS = ContextCompat.RECEIVER_EXPORTED
     }
 }

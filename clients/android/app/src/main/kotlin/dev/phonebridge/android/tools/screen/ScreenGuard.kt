@@ -8,7 +8,7 @@ import dev.phonebridge.android.access.NodeCapture
 import dev.phonebridge.android.access.NodeQueries
 import dev.phonebridge.android.access.SelfProtection
 import dev.phonebridge.android.access.UiNode
-import dev.phonebridge.android.access.WindowKind
+import dev.phonebridge.android.access.info
 import dev.phonebridge.core.tools.ToolException
 
 /**
@@ -31,24 +31,40 @@ object ScreenGuard {
     }
 
     /**
-     * Throws if a touch at ([x], [y]) would land on a PhoneBridge window or one of its notification buttons, or
-     * on a window or element of an app blocked for this agent.
+     * [checkNode] for the element a click or long-click goes to; also throws if it is a System UI element containing
+     * PhoneBridge content (a notification row of ours: clicking it would open our approval or pairing screen). The
+     * subtree is re-read from the live UI, since snapshots shown to agents leave our content out.
+     */
+    fun checkClick(context: Context, node: UiNode, access: ScreenAccess) {
+        checkNode(context, node, access)
+        if (node.packageName != ForegroundTracker.SYSTEM_UI) return
+        val subtree = node.info?.let { info ->
+            val budget = NodeCapture.Budget()
+            NodeCapture.capture(info, budget).takeUnless { budget.exhausted }
+                ?: throw ToolException(SelfProtection.OWN_NOTIFICATION) // Too large to check: fail closed.
+        } ?: node
+        if (SelfProtection.containsOwnContent(subtree, context.packageName)) throw ToolException(SelfProtection.OWN_NOTIFICATION)
+    }
+
+    /**
+     * Throws if a touch at ([x], [y]) would land on a PhoneBridge window or notification, on a window whose content
+     * Android hides from PhoneBridge (it may be our approval screen), or on a window or element of an app blocked for
+     * this agent.
      */
     fun checkPoint(context: Context, service: BridgeAccessibilityService, x: Int, y: Int, access: ScreenAccess) {
-        val target = service.rootNodes()
-            .sortedBy { it.zIndex }
-            .firstOrNull { it.kind != WindowKind.OVERLAY && it.bounds.contains(x, y) } ?: return
-        if (SelfProtection.isOwnPackage(target.packageName, context.packageName)) throw ToolException(SelfProtection.OWN_SCREEN)
-        target.packageName?.let { if (!access.allows(it)) access.refuse(it, "Refusing to touch ($x,$y): it is on a window of a blocked app.") }
-        if (target.packageName == ForegroundTracker.SYSTEM_UI) {
-            val labels = ownNotificationActionTitles(context)
-            if (labels.isEmpty() && !access.restricted) return
-            val hit = NodeQueries.deepestAt(NodeCapture.capture(target.root), x, y) ?: return
+        val target = SelfProtection.touchedWindow(service.touchWindows(), x, y, { it.kind }, { it.bounds }, { it.root != null }) ?: return
+        val root = target.root ?: return // Unreachable: touchedWindow refuses unreadable windows.
+        val pkg = root.packageName?.toString()
+        if (SelfProtection.isOwnPackage(pkg, context.packageName)) throw ToolException(SelfProtection.OWN_SCREEN)
+        pkg?.let { if (!access.allows(it)) access.refuse(it, "Refusing to touch ($x,$y): it is on a window of a blocked app.") }
+        if (pkg == ForegroundTracker.SYSTEM_UI) {
+            val hit = NodeQueries.deepestAt(NodeCapture.capture(root), x, y) ?: return
             // Notification content in the shade reports the posting app's package.
             (sequenceOf(hit) + hit.ancestors()).firstNotNullOfOrNull { n -> n.packageName?.takeIf { !access.allows(it) } }
                 ?.let { access.refuse(it, "Refusing to touch ($x,$y): it is on a notification of a blocked app.") }
             if (SelfProtection.isOwnPackage(hit.packageName, context.packageName)) throw ToolException(SelfProtection.APPROVAL_BUTTON)
-            if (SelfProtection.isProtectedSystemUiNode(hit, labels)) throw ToolException(SelfProtection.APPROVAL_BUTTON)
+            if (SelfProtection.touchReachesOwnContent(hit, context.packageName)) throw ToolException(SelfProtection.OWN_NOTIFICATION)
+            if (SelfProtection.isProtectedSystemUiNode(hit, ownNotificationActionTitles(context))) throw ToolException(SelfProtection.APPROVAL_BUTTON)
         }
     }
 

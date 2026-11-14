@@ -2,37 +2,58 @@ package dev.phonebridge.android.tools.screen
 
 import android.content.Context
 import dev.phonebridge.android.access.AppVisibility
+import dev.phonebridge.android.access.NodeRedaction
 import dev.phonebridge.android.access.SystemOverlay
 import dev.phonebridge.android.access.SystemSurfaces
+import dev.phonebridge.android.access.UiNode
 import dev.phonebridge.android.notify.AppLabels
-import dev.phonebridge.core.tools.AppAccess
 import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.ToolException
+import dev.phonebridge.core.util.OneTimeCodes
 
 /**
- * The calling agent's app access (docs/SECURITY.md "Advanced controls") as applied by the screen tools: what
- * they may show ([visibility]) and the refusals they raise. Built once per call with [of].
+ * The calling agent's view of the screen (docs/SECURITY.md "Advanced controls") as applied by the screen tools: what
+ * they may show ([visibility]), the refusals they raise, whose element refs they use ([tokenId]) and whether one-time
+ * codes are masked ([redactor]). Built once per call with [of].
  */
 class ScreenAccess private constructor(
     private val context: Context,
-    private val appAccess: AppAccess,
+    private val call: CallContext,
     val visibility: AppVisibility,
 ) {
     /** Whether any app is blocked for this agent (besides PhoneBridge itself). */
     val restricted: Boolean get() = visibility.restricted
 
+    /** The calling token: element refs are kept per agent ([ScreenSession.refs]). */
+    val tokenId: String get() = call.tokenId
+
+    /**
+     * [OneTimeCodes.redact] when the user hides one-time codes ([CallContext.redactOneTimeCodes]), else null. Screen
+     * tools apply it to every node text they show or match ([ScreenCapture.capture], [redact]).
+     */
+    val redactor: ((String) -> String)? = if (call.redactOneTimeCodes) OneTimeCodes::redact else null
+
     fun allows(pkg: String?): Boolean = visibility.allows(pkg)
+
+    /** [node] as this agent may see it: one-time codes masked when the user hides them. For shallow (refreshed) nodes. */
+    fun redact(node: UiNode): UiNode = redactor?.let { NodeRedaction.node(node, it) } ?: node
+
+    /**
+     * Throws if access was paused or this agent was revoked since the call began ([CallContext.ensureStillAllowed]).
+     * Call after every wait and right before each side effect.
+     */
+    suspend fun ensureStillAllowed() = call.ensureStillAllowed()
 
     /** Throws the user's refusal for [pkg] unless it is allowed. Blocking (label lookup): call off the main thread. */
     fun require(pkg: String?) {
         if (pkg != null && !allows(pkg)) refuse(pkg)
     }
 
-    /** Throws the refusal for the blocked [pkg] (worded by [AppAccess.require]), optionally after [prefix]. */
+    /** Throws the refusal for the blocked [pkg] (worded by [dev.phonebridge.core.tools.AppAccess.require]), optionally after [prefix]. */
     fun refuse(pkg: String, prefix: String? = null): Nothing {
         val label = label(pkg)
         try {
-            appAccess.require(pkg, label)
+            call.appAccess.require(pkg, label)
         } catch (e: ToolException) {
             throw if (prefix == null) e else ToolException("$prefix ${e.message}")
         }
@@ -59,7 +80,7 @@ class ScreenAccess private constructor(
                     explicitlyBlocked = AppVisibility.explicitlyBlocked(access.mode, access.packages, access.neverAllow, own),
                 )
             }
-            return ScreenAccess(context.applicationContext, access, visibility)
+            return ScreenAccess(context.applicationContext, ctx, visibility)
         }
 
         private fun blockedText(label: String) =

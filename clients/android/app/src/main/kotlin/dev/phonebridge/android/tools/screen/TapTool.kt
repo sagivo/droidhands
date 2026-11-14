@@ -31,7 +31,7 @@ internal fun uiTapTool(context: Context): Tool = tool(
         "case-insensitive: exact match beats starts-with beats contains; if several elements match equally you get " +
         "the candidates with refs), or x+y screen pixels. long_press=true touches and holds. Returns a short " +
         "confirmation and the foreground app; call screen_read to see the result. If the phone is locked, the user is " +
-        "asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent.",
+        "asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent. ${UiAutomation.APPROVAL_PAUSE}",
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema {
@@ -63,8 +63,8 @@ internal fun uiTapTool(context: Context): Tool = tool(
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
     val action = if (text != null) "tap \"${TextNorm.truncate(text, 40)}\" on the screen" else "tap on the screen"
-    UiAutomation.awaitUsable(context, ctx.tokenName, action)
-    UiAutomation.exclusive {
+    UiAutomation.awaitUsable(context, ctx, action)
+    UiAutomation.exclusive(access) {
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
         val message = when {
@@ -80,17 +80,17 @@ internal fun uiTapTool(context: Context): Tool = tool(
 }
 
 private suspend fun tapText(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, text: String, longPress: Boolean): String {
-    val state = ScreenCapture.capture(context, service, access.visibility)
+    val state = ScreenCapture.capture(context, service, access)
     state.blockedForeground?.let { access.refuse(it) }
     return when (val target = NodeQueries.resolveTapText(state.roots, text)) {
         TextTarget.NotFound -> throw ToolException(
             "No visible element shows text or description matching \"$text\" (app=${state.packageName ?: "unknown"}). " +
                 "Call screen_read to see what is on screen, or ui_scroll to reveal more.",
         )
-        is TextTarget.Ambiguous -> throw ToolException(ambiguity("\"$text\" matches", target.candidates))
+        is TextTarget.Ambiguous -> throw ToolException(ambiguity(access, "\"$text\" matches", target.candidates))
         is TextTarget.Found -> {
-            val ref = ScreenSession.refs.register(target.node)
-            val fresh = withContext(Dispatchers.IO) { NodeActions.refresh(target.node) }
+            val ref = ScreenSession.refs(access).register(target.node)
+            val fresh = withContext(Dispatchers.IO) { ScreenSession.refresh(target.node, access) }
                 ?: throw ToolException("The element \"$text\" disappeared before it could be tapped; call screen_read again.")
             tapNode(context, service, access, ScreenSession.Live(ref, target.node, fresh), longPress)
         }
@@ -99,7 +99,8 @@ private suspend fun tapText(context: Context, service: BridgeAccessibilityServic
 
 /**
  * Clicks [live] (or its nearest clickable container) with an accessibility action; falls back to
- * a real touch gesture at the element's visible center.
+ * a real touch gesture at the element's visible center. Both are checked right before they happen
+ * ([UiAutomation.beforeAction], [ScreenGuard]).
  */
 internal suspend fun tapNode(
     context: Context,
@@ -116,12 +117,13 @@ internal suspend fun tapNode(
     val verb = if (longPress) "Long-pressed" else "Tapped"
     val target = if (longPress) NodeQueries.longClickTarget(live.node) else NodeQueries.clickTarget(live.node)
     if (target != null) {
+        UiAutomation.beforeAction(access)
         val clicked = withContext(Dispatchers.IO) {
             val liveTarget = if (target === live.node) live.fresh else NodeActions.refresh(target)
             if (liveTarget == null) {
                 false
             } else {
-                ScreenGuard.checkNode(context, liveTarget, access)
+                ScreenGuard.checkClick(context, liveTarget, access)
                 if (longPress) NodeActions.longClick(liveTarget) else NodeActions.click(liveTarget)
             }
         }
@@ -147,13 +149,18 @@ private suspend fun tapPoint(context: Context, service: BridgeAccessibilityServi
 
 private suspend fun gestureAt(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, x: Int, y: Int, longPress: Boolean) {
     withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, x, y, access) }
+    UiAutomation.beforeAction(access)
     val ok = if (longPress) service.longPress(x, y) else service.tap(x, y)
     if (!ok) throw ToolException("Android cancelled the touch gesture (another gesture or the user interrupted it). Retry.")
 }
 
-/** Error text listing up to [MAX_CANDIDATES] candidates with refs (registered so the agent can use them). */
-internal fun ambiguity(prefix: String, candidates: List<UiNode>, noun: String = "different elements"): String {
-    val lines = candidates.take(MAX_CANDIDATES).joinToString("\n") { TreeSerializer.formatNode(it, ScreenSession.refs.register(it)) }
+/**
+ * Error text listing up to [MAX_CANDIDATES] candidates with refs (registered among the calling agent's refs so it can
+ * use them).
+ */
+internal fun ambiguity(access: ScreenAccess, prefix: String, candidates: List<UiNode>, noun: String = "different elements"): String {
+    val refs = ScreenSession.refs(access)
+    val lines = candidates.take(MAX_CANDIDATES).joinToString("\n") { TreeSerializer.formatNode(it, refs.register(it)) }
     val more = if (candidates.size > MAX_CANDIDATES) "\n... and ${candidates.size - MAX_CANDIDATES} more" else ""
     return "$prefix ${candidates.size} $noun. Retry with one of these refs:\n$lines$more"
 }

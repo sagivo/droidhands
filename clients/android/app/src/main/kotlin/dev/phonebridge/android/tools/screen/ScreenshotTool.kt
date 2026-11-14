@@ -4,9 +4,12 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
 import dev.phonebridge.android.access.BridgeAccessibilityService
+import dev.phonebridge.android.access.NodeQueries
+import dev.phonebridge.android.access.NodeRedaction
 import dev.phonebridge.android.access.ScreenshotException
 import dev.phonebridge.android.access.SelfProtection
 import dev.phonebridge.android.access.SystemOverlays
+import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
@@ -17,6 +20,7 @@ import dev.phonebridge.core.tools.objectSchema
 import dev.phonebridge.core.tools.optInt
 import dev.phonebridge.core.tools.optString
 import dev.phonebridge.core.tools.tool
+import dev.phonebridge.core.util.OneTimeCodes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -32,7 +36,9 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
         "(banking, DRM video, incognito tabs; Android FLAG_SECURE) appear black: use screen_read for those. " +
         "Prefer screen_read for finding and tapping elements; use screenshots for visual content. If the user blocked " +
         "some apps for this agent, screenshots are refused while any of them is visible, and while the notification " +
-        "shade, Quick Settings, the lock screen or the recent-apps screen is showing (use notifications_list instead).",
+        "shade, Quick Settings, the lock screen or the recent-apps screen is showing (use notifications_list instead). " +
+        "When the user hides one-time codes, screenshots are refused while a verification code is visible (use screen_read, " +
+        "which masks it).",
     scope = Scopes.SCREEN_READ,
     risk = Risk.READ,
     schema = objectSchema {
@@ -90,19 +96,29 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
 }
 
 /**
- * Throws unless the screen may be shared as pixels: no PhoneBridge window, and, for agents with app restrictions,
- * no window or element of a blocked app and no system screen that shows other apps' content
- * ([SystemOverlays]). Pixels can't be filtered per app the way screen_read filters nodes.
+ * Throws unless the screen may be shared as pixels: no PhoneBridge window; no PhoneBridge notification while an
+ * approval is pending ([ApprovalGuard]: it may show another agent's request); when the user hides one-time codes, no
+ * visible text that contains one; and, for agents with app restrictions, no window or element of a blocked app and no
+ * system screen that shows other apps' content ([SystemOverlays]). Pixels can't be filtered or masked the way
+ * screen_read filters nodes.
  */
 private suspend fun requireShareable(context: Context, service: BridgeAccessibilityService, access: ScreenAccess) {
     withContext(Dispatchers.IO) {
-        if (!access.restricted) {
-            val own = service.rootNodesOrStuck().any { it.packageName == context.packageName }
-            if (own) throw ToolException(OWN_WINDOW_VISIBLE)
+        val own = context.packageName
+        if (!access.restricted && access.redactor == null && !ApprovalGuard.isActive) {
+            if (service.rootNodesOrStuck().any { it.packageName == own }) throw ToolException(OWN_WINDOW_VISIBLE)
             return@withContext
         }
         val state = ScreenCapture.captureEverything(context, service)
         if (state.windows.any { it.hidden }) throw ToolException(OWN_WINDOW_VISIBLE)
+        val visible = NodeQueries.visibleNodes(state.roots)
+        if (ApprovalGuard.isActive && visible.any { SelfProtection.isOwnPackage(it.packageName, own) }) {
+            throw ToolException(OWN_NOTIFICATION_VISIBLE)
+        }
+        if (access.redactor != null && NodeRedaction.anyVisibleText(state.roots, OneTimeCodes::containsCode)) {
+            throw ToolException(CODE_VISIBLE)
+        }
+        if (!access.restricted) return@withContext
         val windowPackages = state.windows.map { it.packageName }
         val primary = state.windows.firstOrNull { it.primary }?.packageName
         access.visibility.blockedForeground(primary, BridgeAccessibilityService.foregroundPackage, windowPackages)
@@ -115,6 +131,16 @@ private suspend fun requireShareable(context: Context, service: BridgeAccessibil
 }
 
 private const val OWN_WINDOW_VISIBLE = SelfProtection.OWN_SCREEN + " A PhoneBridge screen is visible right now; try again after it closes."
+
+private const val OWN_NOTIFICATION_VISIBLE =
+    "Can't take a screenshot while a PhoneBridge notification is visible and an approval is waiting for the user: it may " +
+        "show another agent's request, and PhoneBridge does not show its own screens and notifications to agents. Retry " +
+        "after the user has answered, or use screen_read (it leaves them out)."
+
+private const val CODE_VISIBLE =
+    "Can't take a screenshot: the screen shows what looks like a verification (one-time) code, and the user hides those " +
+        "from agents (a screenshot can't be masked). Use screen_read instead (codes appear as \"${OneTimeCodes.MASK}\"), or " +
+        "ask the user to read the code on the phone if it is really needed."
 
 private class Encoded(
     val bytes: ByteArray,

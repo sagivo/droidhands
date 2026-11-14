@@ -54,6 +54,12 @@ class WindowRoot(
 )
 
 /**
+ * An on-screen window as a touch sees it. [root] is null when Android withholds the window's content from this
+ * service (e.g. accessibility-data-sensitive windows on Android 14+, which include PhoneBridge's approval screens).
+ */
+class TouchWindow(val kind: WindowKind, val bounds: Bounds, val root: AccessibilityNodeInfo?)
+
+/**
  * Generic UI automation for any app (docs/TOOLS.md "Screen"): reads window trees, performs
  * gestures, global actions and screenshots. Being bound by the system, it also exempts PhoneBridge
  * from background-activity-launch limits (see `Launcher`). It also watches its own health
@@ -121,20 +127,12 @@ class BridgeAccessibilityService : AccessibilityService() {
      * first, then the rest top-most first. Falls back to [getRootInActiveWindow]. Blocking IPC.
      */
     fun rootNodes(): List<WindowRoot> {
-        val infos: List<AccessibilityWindowInfo> = try {
-            windows.orEmpty()
-        } catch (e: RuntimeException) {
-            emptyList()
-        }
-        val candidates = infos.mapNotNull { w ->
-            val root = try { w.root } catch (e: RuntimeException) { null } ?: return@mapNotNull null
-            val rect = Rect().also(w::getBoundsInScreen)
-            Triple(w, root, WindowFacts(kindOf(w.type), w.isActive, w.isFocused, Bounds(rect.left, rect.top, rect.right, rect.bottom)))
+        val candidates = windowsWithRoots().mapNotNull { (w, root) ->
+            root ?: return@mapNotNull null
+            Triple(w, root, WindowFacts(kindOf(w.type), w.isActive, w.isFocused, boundsOf(w)))
         }
         if (candidates.isEmpty()) {
-            val root = try { rootInActiveWindow } catch (e: RuntimeException) { null } ?: return emptyList()
-            val rect = Rect().also(root::getBoundsInScreen)
-            val bounds = Bounds(rect.left, rect.top, rect.right, rect.bottom)
+            val (root, bounds) = activeRoot() ?: return emptyList()
             return listOf(WindowRoot(root, WindowKind.APPLICATION, null, root.packageName?.toString(), bounds, primary = true, zIndex = 0))
         }
         val primary = WindowSelection.primaryIndex(candidates.map { it.third })
@@ -142,6 +140,38 @@ class BridgeAccessibilityService : AccessibilityService() {
             WindowRoot(root, facts.kind, w.title?.toString(), root.packageName?.toString(), facts.bounds, primary = z == primary, zIndex = z)
         }
         return listOf(all[primary]) + all.filterIndexed { z, _ -> z != primary }
+    }
+
+    /**
+     * Every window on the default display, top-most first, including those whose content Android withholds from this
+     * service (null root), for fail-closed hit-testing. Falls back to [getRootInActiveWindow]. Blocking IPC.
+     */
+    fun touchWindows(): List<TouchWindow> {
+        val all = windowsWithRoots().map { (w, root) -> TouchWindow(kindOf(w.type), boundsOf(w), root) }
+        if (all.isNotEmpty()) return all
+        val (root, bounds) = activeRoot() ?: return emptyList()
+        return listOf(TouchWindow(WindowKind.APPLICATION, bounds, root))
+    }
+
+    /** The windows (top-most first) with their roots; a root is null when unavailable. Blocking IPC. */
+    private fun windowsWithRoots(): List<Pair<AccessibilityWindowInfo, AccessibilityNodeInfo?>> {
+        val infos: List<AccessibilityWindowInfo> = try {
+            windows.orEmpty()
+        } catch (e: RuntimeException) {
+            emptyList()
+        }
+        return infos.map { w -> w to try { w.root } catch (e: RuntimeException) { null } }
+    }
+
+    private fun activeRoot(): Pair<AccessibilityNodeInfo, Bounds>? {
+        val root = try { rootInActiveWindow } catch (e: RuntimeException) { null } ?: return null
+        val rect = Rect().also(root::getBoundsInScreen)
+        return root to Bounds(rect.left, rect.top, rect.right, rect.bottom)
+    }
+
+    private fun boundsOf(w: AccessibilityWindowInfo): Bounds {
+        val rect = Rect().also(w::getBoundsInScreen)
+        return Bounds(rect.left, rect.top, rect.right, rect.bottom)
     }
 
     /**
@@ -170,7 +200,10 @@ class BridgeAccessibilityService : AccessibilityService() {
         return Bounds(r.left, r.top, r.right, r.bottom)
     }
 
-    /** Taps at screen pixel ([x], [y]). Returns false if the system cancelled the gesture. */
+    /**
+     * Taps at screen pixel ([x], [y]). Returns false if the system cancelled the gesture. Like every gesture, refused
+     * (ToolException) while a PhoneBridge approval is pending or shown.
+     */
     suspend fun tap(x: Int, y: Int): Boolean = dispatchStroke(pointPath(x, y), TAP_MS)
 
     /** Touches and holds at ([x], [y]) for longer than the user's long-press timeout. */
@@ -204,11 +237,14 @@ class BridgeAccessibilityService : AccessibilityService() {
         return Path().apply { moveTo(clampX(x, screen), clampY(y, screen)) }
     }
 
+    /** Throws [ToolException] instead of dispatching while a PhoneBridge approval is pending or shown ([SelfProtection]). */
     private suspend fun dispatchStroke(path: Path, durationMs: Long): Boolean {
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
             .build()
         return withContext(Dispatchers.Main) {
+            // Checked on the main thread right before dispatching, so no approval can appear in between unnoticed.
+            SelfProtection.requireNoPendingApproval()
             withTimeoutOrNull(durationMs + GESTURE_GRACE_MS) {
                 suspendCancellableCoroutine { cont ->
                     val callback = object : GestureResultCallback() {
