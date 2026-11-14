@@ -9,8 +9,9 @@ Why not `https://m.uber.com/ul/?…`: that universal-link form is no longer in U
 `https://m.uber.com/looking?drop[0]=<JSON>`, while the `action=setPickup` parameters are documented for the
 `uber://` scheme.
 
-Why coordinates are required: Uber documents the address (like the nickname) as display text that "will not
-override the latitude/longitude", so an address alone is not a verified destination.
+Why coordinates are required: Uber's docs treat the address as display text (the universal-link location object
+says it "will not override the latitude/longitude", and the FAQ asks for a nickname or formatted address in
+addition to the location), so an address alone is not a verified destination.
 
 Known limitations:
 
