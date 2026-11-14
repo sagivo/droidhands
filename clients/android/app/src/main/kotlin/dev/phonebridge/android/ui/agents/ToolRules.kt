@@ -45,12 +45,12 @@ data class ToolGroup(val scope: String, val tools: List<ToolInfo>)
 /** Pure logic of the per-tool rules editor (unit-tested). */
 object ToolRules {
     /**
-     * Tools the agent can see with [scopes], grouped by scope in catalog order, tools by name.
-     * Always-allowed tools (empty scope, e.g. `bridge_capabilities`) are left out: there is nothing
-     * useful to configure.
+     * Tools the agent can see with [scopes] and risk cap [maxRisk] (null = none), grouped by scope in
+     * catalog order, tools by name. Always-allowed tools (empty scope, e.g. `bridge_capabilities`) are
+     * left out: there is nothing useful to configure.
      */
-    fun groups(tools: List<ToolInfo>, scopes: Set<String>): List<ToolGroup> {
-        val visible = tools.filter { it.scope.isNotEmpty() && it.scope in scopes }
+    fun groups(tools: List<ToolInfo>, scopes: Set<String>, maxRisk: Risk? = null): List<ToolGroup> {
+        val visible = tools.filter { it.scope.isNotEmpty() && it.scope in scopes && (maxRisk == null || it.risk <= maxRisk) }
         val order = TokenPresentation.orderedScopes(visible.mapTo(LinkedHashSet()) { it.scope })
         return order.map { scope -> ToolGroup(scope, visible.filter { it.scope == scope }.sortedBy { it.name }) }
     }

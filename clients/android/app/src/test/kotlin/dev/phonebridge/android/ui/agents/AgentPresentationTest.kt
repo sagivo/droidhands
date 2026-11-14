@@ -6,8 +6,11 @@ import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.AppPolicy
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.ToolRule
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
@@ -31,12 +34,26 @@ class AgentPresentationTest {
 
     @Test
     fun accessLevels() {
-        assertEquals(AccessLevel.READ_ONLY, AccessLevel.of(Scopes.PRESET_READ_ONLY))
-        assertEquals(AccessLevel.ASSISTANT, AccessLevel.of(Scopes.PRESET_ASSISTANT))
-        assertEquals(AccessLevel.FULL, AccessLevel.of(Scopes.ALL))
-        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(setOf(Scopes.DEVICE)))
-        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(emptySet()))
-        AccessLevel.entries.filter { it != AccessLevel.CUSTOM }.forEach { assertEquals(it, AccessLevel.of(it.scopes!!)) }
+        assertEquals(AccessLevel.READ_ONLY, AccessLevel.of(Scopes.PRESET_READ_ONLY, Risk.READ))
+        assertEquals(AccessLevel.ASSISTANT, AccessLevel.of(Scopes.PRESET_ASSISTANT, null))
+        assertEquals(AccessLevel.FULL, AccessLevel.of(Scopes.ALL, null))
+        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(setOf(Scopes.DEVICE), null))
+        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(emptySet(), null))
+        AccessLevel.entries.filter { it != AccessLevel.CUSTOM }.forEach { assertEquals(it, AccessLevel.of(it.scopes!!, it.maxRisk)) }
+        assertEquals(AccessLevel.READ_ONLY, AccessLevel.of(record("a", scopes = Scopes.PRESET_READ_ONLY).copy(maxRisk = Risk.READ)))
+    }
+
+    @Test
+    fun readOnlyMeansCappedAtRead() {
+        assertEquals(Risk.READ, AccessLevel.READ_ONLY.maxRisk)
+        assertNull(AccessLevel.ASSISTANT.maxRisk)
+        assertNull(AccessLevel.FULL.maxRisk)
+        assertNull(AccessLevel.CUSTOM.maxRisk)
+        assertTrue(AccessLevel.READ_ONLY.description.startsWith("Can look but never act"))
+        // Without the cap the Read-only scopes can still act (volume, clipboard, url_open…): not "Read-only".
+        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(Scopes.PRESET_READ_ONLY, null))
+        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(record("a", scopes = Scopes.PRESET_READ_ONLY)))
+        assertEquals(AccessLevel.CUSTOM, AccessLevel.of(Scopes.PRESET_ASSISTANT, Risk.READ))
     }
 
     @Test

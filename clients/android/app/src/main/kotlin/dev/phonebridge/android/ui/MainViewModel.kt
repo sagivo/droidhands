@@ -129,9 +129,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _messages.send("Activity log cleared")
     }
 
-    /** Locks every agent out at once (pairing an agent again creates a new one). */
+    /** Locks every agent out at once and stops their running calls (pairing an agent again creates a new one). */
     fun revokeAll() = io("Couldn't revoke the agents") {
-        val count = graph.tokenManager.revokeAll()
+        val count = GraphAdapters.revokeAllAgents(graph)
         _messages.send(AgentPresentation.revokedAllText(count))
     }
 

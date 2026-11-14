@@ -3,6 +3,7 @@ package dev.phonebridge.android.ui.tokens
 import dev.phonebridge.android.ui.format.TimeFormat
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 
 /** Display state of a token. A revoked token stays REVOKED even after its expiry passes. */
@@ -33,12 +34,46 @@ object TokenPresentation {
         }
     }
 
-    /** Name of the preset whose scopes equal [scopes] exactly, or null. */
-    fun presetFor(scopes: Set<String>): String? = Scopes.PRESETS.entries.firstOrNull { it.value == scopes }?.key
+    /**
+     * Name of the preset whose scopes and risk cap equal [scopes] and [maxRisk] exactly, or null. The
+     * Read-only scopes without the Read-only cap are not Read-only: such an agent can still act.
+     */
+    fun presetFor(scopes: Set<String>, maxRisk: Risk?): String? =
+        Scopes.PRESETS.entries.firstOrNull { (name, presetScopes) -> presetScopes == scopes && presetCap(name) == maxRisk }?.key
+
+    /** The risk cap that comes with preset [name] (Read-only: [Risk.READ]); null for no cap. */
+    fun presetCap(name: String): Risk? = Scopes.PRESET_MAX_RISK[name]
+
+    /**
+     * Cap for a selection of [scopes] made by hand: the preset's cap when they are exactly a preset's
+     * scopes, otherwise none (a custom selection gets what its scopes allow).
+     */
+    fun capForScopes(scopes: Set<String>): Risk? =
+        Scopes.PRESETS.entries.firstOrNull { it.value == scopes }?.let { presetCap(it.key) }
+
+    /**
+     * What a risk cap means for the agent, or null for no cap. With [scopes] equal to the Read-only
+     * scopes but no cap (agents created before the cap existed), warns that the agent can still act.
+     */
+    fun capNotice(scopes: Set<String>, maxRisk: Risk?): String? = when (maxRisk) {
+        Risk.READ -> READ_ONLY_CAP
+        Risk.ACTION -> "Sensitive tools (sending messages, calls, notification replies, raw intents) are hidden from this " +
+            "agent and refused."
+        Risk.SENSITIVE -> null
+        null -> if (scopes == Scopes.PRESET_READ_ONLY) UNCAPPED_READ_ONLY else null
+    }
+
+    const val READ_ONLY_CAP =
+        "Read-only: can look but never act. Tools that change anything (opening apps or links, volume, ringer, alarms, " +
+            "clipboard, messages) are hidden from this agent and refused."
+
+    const val UNCAPPED_READ_ONLY =
+        "These are the Read-only capabilities without the Read-only limit, so this agent can still act: change volume, " +
+            "ringer, clipboard and alarms, speak, and open apps and links. Choose Read-only to block every action."
 
     /** "Assistant", "contacts.read, messages.send", or "Custom · 5 scopes". */
-    fun scopeSummary(scopes: Set<String>): String {
-        presetFor(scopes)?.let { return it }
+    fun scopeSummary(scopes: Set<String>, maxRisk: Risk?): String {
+        presetFor(scopes, maxRisk)?.let { return it }
         if (scopes.isEmpty()) return "No scopes"
         val ordered = orderedScopes(scopes)
         return if (ordered.size <= 3) ordered.joinToString(", ") else "Custom · ${ordered.size} scopes"

@@ -37,6 +37,31 @@ class PhoneTextTest {
     }
 
     @Test
+    fun callAndMessageTargetsArePlainNumbersOnly() {
+        assertEquals("+972541234567", PhoneText.cleanDialable(" +972 (54) 123-4567 "))
+        assertEquals("2125551234", PhoneText.cleanDialable("212.555.1234"))
+        assertEquals("0541234567", PhoneText.cleanDialable("٠٥٤١٢٣٤٥٦٧"))
+        assertEquals("+972541234567", PhoneText.cleanDialable("‪+972 54-123-4567‬")) // as copied from WhatsApp
+        assertEquals("911", PhoneText.cleanDialable("911"))
+        // GSM MMI/USSD codes: call forwarding, balance checks, IMEI…
+        listOf("**21*0015551234567#", "*21*0541234567#", "*100#", "#31#0541234567", "*#06#", "0541234567#", "＊21＊0541234567＃")
+            .forEach { assertNull(it, PhoneText.cleanDialable(it)) }
+        // Letters, pause/wait and extension markers, control characters, too few digits.
+        listOf("tel:+12125551234", "+1 212 555 1234 x12", "+1 212 555 1234 ext. 12", "212-555-1234,5", "212-555-1234;5",
+            "1-800-FLOWERS", "+1 212\n555 1234", "+1 212\t555 1234", "12", "+", "")
+            .forEach { assertNull(it, PhoneText.cleanDialable(it)) }
+    }
+
+    @Test
+    fun notDialableMessagesExplainWhy() {
+        val code = PhoneText.notDialableMessage("**21*0541234567#", "to")
+        assertTrue(code, code.startsWith("'to' contains * or #") && code.contains("USSD/MMI"))
+        val name = PhoneText.notDialableMessage("+1 212 555 1234 x12", "to")
+        assertTrue(name, name.startsWith("'to' must be a phone number") && name.contains("pass it as 'contact'"))
+        assertFalse(PhoneText.notDialableMessage("054,1234567", "contact").contains("pass it as 'contact'"))
+    }
+
+    @Test
     fun cleanRejectsNonNumbers() {
         assertNull(PhoneText.clean("Tania"))
         assertNull(PhoneText.clean("1-800-FLOWERS"))

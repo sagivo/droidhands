@@ -157,13 +157,14 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Locks the agent out and stops its calls that are still running. */
     fun revoke(record: TokenRecord) = io("Couldn't revoke \"${record.name}\"", "\"${record.name}\" revoked") {
-        graph.tokenManager.revoke(record.id)
+        GraphAdapters.revokeAgent(graph, record.id)
     }
 
+    /** Removes the agent (and its usage counters) and stops its calls that are still running. */
     fun delete(record: TokenRecord) = io("Couldn't delete \"${record.name}\"", "\"${record.name}\" deleted") {
-        graph.tokenManager.delete(record.id)
-        GraphAdapters.forgetUsage(graph, record.id)
+        GraphAdapters.deleteAgent(graph, record.id)
     }
 
     /** Loads (or refreshes) the launchable apps for the picker. */
@@ -180,7 +181,7 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun io(failure: String, success: String, block: () -> Unit) {
+    private fun io(failure: String, success: String, block: suspend () -> Unit) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { block() }

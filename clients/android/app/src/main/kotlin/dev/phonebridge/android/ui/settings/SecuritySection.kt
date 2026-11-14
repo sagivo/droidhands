@@ -87,7 +87,8 @@ internal fun SecuritySection(
         SwitchRow(
             title = "Hide one-time codes",
             subtitle = "Verification and 2FA codes in SMS and notifications are shown to agents as [code hidden], so a " +
-                "tricked agent can't use them to take over your accounts. Recommended.",
+                "tricked agent can't use them to take over your accounts. Recommended. Screen reading and screenshots " +
+                "can still show a code that is on screen: add your SMS and authenticator apps to Never-allow apps.",
             checked = redactOneTimeCodes,
             onCheckedChange = onRedactChange,
         )

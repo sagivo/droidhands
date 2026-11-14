@@ -123,7 +123,7 @@ private fun AgentCard(
 ) {
     val colors = statusColors()
     val state = TokenPresentation.state(record, now)
-    val level = AccessLevel.of(record.scopes)
+    val level = AccessLevel.of(record)
     OutlinedCard(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

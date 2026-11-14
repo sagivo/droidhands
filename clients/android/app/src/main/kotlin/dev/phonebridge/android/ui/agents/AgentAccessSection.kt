@@ -67,6 +67,10 @@ internal fun AgentAccessSection(
             }
         }
         Text(level.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Presets describe their cap above; a custom selection says whether it has one.
+        if (level == AccessLevel.CUSTOM) {
+            draft.capNotice?.let { Notice(it, kind = if (draft.maxRisk == null) NoticeKind.WARNING else NoticeKind.INFO) }
+        }
         TextButton(onClick = { showScopes = !showScopes }) {
             Text(if (showScopes) "Hide capabilities" else "Show capabilities (${draft.scopes.size} of ${Scopes.ALL.size})")
         }

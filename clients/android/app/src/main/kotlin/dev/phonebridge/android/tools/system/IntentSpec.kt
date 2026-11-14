@@ -50,6 +50,13 @@ object IntentSpecParser {
     const val MAX_STRING_CHARS = 100_000
     private const val MAX_DATA_CHARS = 8_192
 
+    /** Activity actions that place a call without the dialer when the sender may call (Intent.ACTION_CALL & co). */
+    private val CALL_ACTIONS = setOf(
+        "android.intent.action.CALL",
+        "android.intent.action.CALL_PRIVILEGED",
+        "android.intent.action.CALL_EMERGENCY",
+    )
+
     private val ACTION_SHORT = Regex("^[A-Z][A-Z0-9_]*$")
     private val NAME = Regex("^[A-Za-z0-9_.$]+$")
     private val MIME = Regex("^[a-z0-9*][a-z0-9!#$&^_.+*-]*/[a-z0-9*][a-z0-9!#$&^_.+*-]*$")
@@ -60,6 +67,13 @@ object IntentSpecParser {
      */
     fun parse(args: JsonObject, ownPackage: String): IntentSpec {
         val action = expandAction(args.optString("action")?.trim() ?: throw ToolException("Missing required argument 'action'"))
+        // PhoneBridge holds CALL_PHONE, so these would dial at once (USSD/MMI codes included), past phone_call's checks.
+        if (action in CALL_ACTIONS) {
+            throw ToolException(
+                "intent_start can't place phone calls. Use phone_call, or action DIAL to show the number in the dialer for " +
+                    "the user to call.",
+            )
+        }
         val data = args.optString("data")?.trim()?.takeIf { it.isNotEmpty() }?.also {
             if (it.length > MAX_DATA_CHARS) throw ToolException("Argument 'data' is too long (max $MAX_DATA_CHARS characters).")
             if (it.any(Character::isISOControl)) throw ToolException("Argument 'data' must not contain control characters.")

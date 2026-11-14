@@ -2,12 +2,14 @@ package dev.phonebridge.android.ui.agents
 
 import dev.phonebridge.android.ui.tokens.ExpiryOption
 import dev.phonebridge.android.ui.tokens.TokenDraft
+import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.core.auth.ActiveHours
 import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.AppPolicy
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.ToolRule
+import dev.phonebridge.core.tools.Risk
 
 /**
  * Editable copy of an agent's settings on the detail page. Immutable and pure (unit-tested): the
@@ -23,10 +25,15 @@ data class AgentDraft(
     val appPolicy: AppPolicy = AppPolicy(),
     val toolRules: Map<String, ToolRule> = emptyMap(),
     val activeHours: ActiveHours? = null,
+    /** Highest tool risk the agent may use ([TokenRecord.maxRisk]); set with the access level. */
+    val maxRisk: Risk? = null,
 ) {
     val trimmedName: String get() = name.trim()
 
-    val accessLevel: AccessLevel get() = AccessLevel.of(scopes)
+    val accessLevel: AccessLevel get() = AccessLevel.of(scopes, maxRisk)
+
+    /** What the risk cap means (or that the Read-only scopes are uncapped), for the Access section. */
+    val capNotice: String? get() = TokenPresentation.capNotice(scopes, maxRisk)
 
     val nameError: String? get() = nameError(name)
 
@@ -44,9 +51,14 @@ data class AgentDraft(
 
     val canSave: Boolean get() = nameError == null && scopesError == null && activeHoursError == null
 
-    fun withLevel(level: AccessLevel): AgentDraft = level.scopes?.let { copy(scopes = it) } ?: this
+    /** A preset sets its scopes and its cap; [AccessLevel.CUSTOM] changes nothing (the scopes are picked next). */
+    fun withLevel(level: AccessLevel): AgentDraft = level.scopes?.let { copy(scopes = it, maxRisk = level.maxRisk) } ?: this
 
-    fun toggleScope(scope: String): AgentDraft = copy(scopes = if (scope in scopes) scopes - scope else scopes + scope)
+    /** A hand-picked selection gets a preset's cap only when it is exactly that preset's scopes. */
+    fun toggleScope(scope: String): AgentDraft {
+        val toggled = if (scope in scopes) scopes - scope else scopes + scope
+        return copy(scopes = toggled, maxRisk = TokenPresentation.capForScopes(toggled))
+    }
 
     fun withRule(tool: String, choice: RuleChoice): AgentDraft = copy(toolRules = ToolRules.withChoice(toolRules, tool, choice))
 
@@ -70,6 +82,7 @@ data class AgentDraft(
         appPolicy = normalizedAppPolicy(),
         toolRules = toolRules,
         activeHours = activeHours,
+        maxRisk = maxRisk,
     )
 
     /** True if saving would change [record]'s settings. */
@@ -98,6 +111,7 @@ data class AgentDraft(
             appPolicy = record.appPolicy,
             toolRules = record.toolRules,
             activeHours = record.activeHours,
+            maxRisk = record.maxRisk,
         )
 
         private fun saturatedAdd(a: Long, b: Long): Long = if (Long.MAX_VALUE - a < b) Long.MAX_VALUE else a + b

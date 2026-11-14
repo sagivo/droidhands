@@ -55,8 +55,9 @@ internal fun notificationActionTool(context: Context): Tool {
         val realTitle = target.info.actions.firstOrNull { it.index == chosen.index }?.title ?: chosen.title
         described.take(key, title, index)?.let { approved ->
             if (NotificationActions.normalize(approved) != NotificationActions.normalize(realTitle)) {
+                // The approved title is unmasked (it was shown only to the user): don't echo it.
                 throw ToolException(
-                    "The notification changed after the user approved \"$approved\"; it now resolves to \"${chosen.title}\". " +
+                    "The notification changed after the user approved the tap; it now resolves to \"${chosen.title}\". " +
                         "Nothing was tapped. Call notifications_list and try again.",
                 )
             }

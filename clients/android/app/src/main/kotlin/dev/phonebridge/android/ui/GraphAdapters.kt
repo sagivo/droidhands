@@ -12,13 +12,27 @@ import dev.phonebridge.core.audit.TokenUsage
 import dev.phonebridge.core.transport.PairingRequest
 import kotlinx.coroutines.flow.StateFlow
 
-/** The one place the UI touches the graph's wave-2 APIs (usage, pairing, security settings). */
+/** The one place the UI touches the graph's newer APIs (usage, agent removal, pairing, security settings). */
 internal object GraphAdapters {
     // ---- Usage (graph.usage: UsageTracker) ----
 
     fun usage(graph: BridgeGraph): StateFlow<Map<String, TokenUsage>> = graph.usage.usage
 
-    fun forgetUsage(graph: BridgeGraph, tokenId: String) = graph.usage.forget(tokenId)
+    // ---- Removing agents ----
+    // Never TokenManager directly: the graph also stops the agent's calls that are still running (and denies
+    // their open prompts), so nothing it started before can act afterwards. Blocking (disk): call from IO.
+
+    suspend fun revokeAgent(graph: BridgeGraph, tokenId: String) {
+        graph.revokeAgent(tokenId)
+    }
+
+    /** Also forgets the agent's usage counters. */
+    suspend fun deleteAgent(graph: BridgeGraph, tokenId: String) {
+        graph.deleteAgent(tokenId)
+    }
+
+    /** Returns how many agents were newly revoked. */
+    suspend fun revokeAllAgents(graph: BridgeGraph): Int = graph.revokeAllAgents()
 
     // ---- One-tap pairing (graph.pairing: PairingCoordinator) ----
 

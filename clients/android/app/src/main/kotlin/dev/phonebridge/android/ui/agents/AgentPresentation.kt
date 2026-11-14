@@ -7,13 +7,25 @@ import dev.phonebridge.core.audit.TokenUsage
 import dev.phonebridge.core.auth.ActiveHours
 import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import java.time.LocalDate
 
-/** The access levels offered for an agent; [CUSTOM] is any scope set that isn't a preset. */
+/**
+ * The access levels offered for an agent: a preset is its scopes plus its risk cap
+ * ([TokenRecord.maxRisk]); [CUSTOM] is anything else.
+ */
 enum class AccessLevel(val label: String, val description: String) {
-    READ_ONLY("Read-only", "Can look (messages, notifications, calendar, screen) but not act."),
-    ASSISTANT("Assistant", "Can also send messages, call, reply and create events. Sensitive actions ask you first."),
+    READ_ONLY(
+        "Read-only",
+        "Can look but never act: reads messages, notifications, contacts, calendar, location and the screen. Tools " +
+            "that change anything are blocked.",
+    ),
+    ASSISTANT(
+        "Assistant",
+        "Can also act: send messages, call, reply, create events, open apps and links, and change volume, alarms and " +
+            "the clipboard. Sensitive actions ask you first.",
+    ),
     FULL("Full control", "Everything, including tapping and typing in any app and raw intents."),
     CUSTOM("Custom", "You pick exactly which capabilities the agent gets."),
     ;
@@ -27,9 +39,18 @@ enum class AccessLevel(val label: String, val description: String) {
             CUSTOM -> null
         }
 
+    /** The preset's risk cap (Read-only: READ); null for no cap, and for [CUSTOM]. */
+    val maxRisk: Risk? get() = if (this == CUSTOM) null else TokenPresentation.presetCap(label)
+
     companion object {
-        /** The preset whose scopes equal [scopes] exactly, otherwise [CUSTOM]. */
-        fun of(scopes: Set<String>): AccessLevel = entries.firstOrNull { it.scopes == scopes } ?: CUSTOM
+        /**
+         * The preset whose scopes and cap equal [scopes] and [maxRisk] exactly, otherwise [CUSTOM]: the
+         * Read-only scopes without the Read-only cap can still act, so they are not "Read-only".
+         */
+        fun of(scopes: Set<String>, maxRisk: Risk?): AccessLevel =
+            entries.firstOrNull { it != CUSTOM && it.scopes == scopes && it.maxRisk == maxRisk } ?: CUSTOM
+
+        fun of(record: TokenRecord): AccessLevel = of(record.scopes, record.maxRisk)
     }
 }
 

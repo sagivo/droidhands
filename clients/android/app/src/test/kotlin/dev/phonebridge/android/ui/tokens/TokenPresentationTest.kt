@@ -2,9 +2,11 @@ package dev.phonebridge.android.ui.tokens
 
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,15 +30,48 @@ class TokenPresentationTest {
 
     @Test
     fun scopeSummary() {
-        assertEquals("Read-only", TokenPresentation.scopeSummary(Scopes.PRESET_READ_ONLY))
-        assertEquals("Assistant", TokenPresentation.scopeSummary(Scopes.PRESET_ASSISTANT))
-        assertEquals("Full control", TokenPresentation.scopeSummary(Scopes.ALL))
-        assertEquals("No scopes", TokenPresentation.scopeSummary(emptySet()))
+        assertEquals("Read-only", TokenPresentation.scopeSummary(Scopes.PRESET_READ_ONLY, Risk.READ))
+        assertEquals("Assistant", TokenPresentation.scopeSummary(Scopes.PRESET_ASSISTANT, null))
+        assertEquals("Full control", TokenPresentation.scopeSummary(Scopes.ALL, null))
+        assertEquals("No scopes", TokenPresentation.scopeSummary(emptySet(), null))
         assertEquals(
             "contacts.read, messages.send",
-            TokenPresentation.scopeSummary(setOf(Scopes.MESSAGES_SEND, Scopes.CONTACTS_READ)),
+            TokenPresentation.scopeSummary(setOf(Scopes.MESSAGES_SEND, Scopes.CONTACTS_READ), null),
         )
-        assertEquals("Custom · 4 scopes", TokenPresentation.scopeSummary(setOf("device", "apps", "calls", "location")))
+        assertEquals("Custom · 4 scopes", TokenPresentation.scopeSummary(setOf("device", "apps", "calls", "location"), null))
+        // The Read-only scopes without the cap can still act.
+        assertEquals("Custom · ${Scopes.PRESET_READ_ONLY.size} scopes", TokenPresentation.scopeSummary(Scopes.PRESET_READ_ONLY, null))
+    }
+
+    @Test
+    fun presetCaps() {
+        assertEquals(Risk.READ, TokenPresentation.presetCap("Read-only"))
+        assertNull(TokenPresentation.presetCap("Assistant"))
+        assertNull(TokenPresentation.presetCap("Full control"))
+        assertEquals(Risk.READ, TokenPresentation.capForScopes(Scopes.PRESET_READ_ONLY))
+        assertNull(TokenPresentation.capForScopes(Scopes.PRESET_READ_ONLY - Scopes.DEVICE))
+        assertEquals("Read-only", TokenPresentation.presetFor(Scopes.PRESET_READ_ONLY, Risk.READ))
+        assertNull(TokenPresentation.presetFor(Scopes.PRESET_READ_ONLY, null))
+        assertEquals(TokenPresentation.READ_ONLY_CAP, TokenPresentation.capNotice(Scopes.PRESET_READ_ONLY, Risk.READ))
+        assertTrue(TokenPresentation.READ_ONLY_CAP.startsWith("Read-only: can look but never act"))
+        assertEquals(TokenPresentation.UNCAPPED_READ_ONLY, TokenPresentation.capNotice(Scopes.PRESET_READ_ONLY, null))
+        assertNull(TokenPresentation.capNotice(Scopes.PRESET_ASSISTANT, null))
+        assertNotNull(TokenPresentation.capNotice(setOf(Scopes.CALLS), Risk.ACTION))
+    }
+
+    @Test
+    fun theReadOnlyPresetIssuesACappedToken() {
+        val readOnly = TokenDraft().withPreset("Read-only")
+        assertEquals(Scopes.PRESET_READ_ONLY, readOnly.scopes)
+        assertEquals(Risk.READ, readOnly.maxRisk)
+        assertEquals("Read-only", readOnly.selectedPreset)
+        assertNull(readOnly.withPreset("Assistant").maxRisk)
+        val custom = readOnly.toggle(Scopes.LOCATION)
+        assertNull(custom.maxRisk)
+        assertNull(custom.selectedPreset)
+        assertEquals(Risk.READ, custom.toggle(Scopes.LOCATION).maxRisk)
+        assertEquals(Risk.READ, TokenDraft(scopes = Scopes.PRESET_READ_ONLY).maxRisk)
+        assertNull(TokenDraft().maxRisk)
     }
 
     @Test

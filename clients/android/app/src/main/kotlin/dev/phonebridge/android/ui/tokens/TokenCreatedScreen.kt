@@ -103,7 +103,7 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SectionHeader("\"${token.record.name}\"")
                     Text(
-                        "${TokenPresentation.scopeSummary(token.record.scopes)} · " +
+                        "${TokenPresentation.scopeSummary(token.record.scopes, token.record.maxRisk)} · " +
                             "${TokenPresentation.policyLabel(token.record.confirmPolicy)} · " +
                             TokenPresentation.expiryText(token.record.expiresAt, System.currentTimeMillis()),
                         style = MaterialTheme.typography.bodyMedium,

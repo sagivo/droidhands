@@ -28,7 +28,10 @@ internal sealed interface NumberChoice {
  *
  * * A unique exact match (score 1.0) wins.
  * * Otherwise the best match wins only if it scores at least [NameMatching.AUTO_PICK] (0.85) and
- *   the runner-up scores below [RUNNER_UP_MAX] (0.75).
+ *   the runner-up scores below [RUNNER_UP_MAX] (0.75). Only matches on whole name tokens score that
+ *   high ("Tania" or "Cohen" → "Tania Cohen"): a query that only starts a name ("Dan" → "Danielle
+ *   Smith") is never picked, and another contact that starts with the query ("Dana Levi") keeps a
+ *   whole-token match ("Dan Katz") from being picked (see [NameMatching]).
  * * Anything else is ambiguous: the agent gets up to [MAX_CANDIDATES] candidates to ask the user about.
  *
  * Several exact matches that share exactly the same phone numbers are treated as duplicates of one

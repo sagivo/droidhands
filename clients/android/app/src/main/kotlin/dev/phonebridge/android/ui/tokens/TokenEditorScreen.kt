@@ -112,6 +112,9 @@ internal fun TokenEditorScreen(
                             )
                         }
                     }
+                    TokenPresentation.capNotice(draft.scopes, draft.maxRisk)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     draft.scopesError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 }
             }

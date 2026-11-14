@@ -40,6 +40,15 @@ class IntentSpecTest {
     }
 
     @Test
+    fun `call intents are refused so PhoneBridge's phone permission can't dial codes`() {
+        listOf("CALL", "android.intent.action.CALL", "CALL_PRIVILEGED", "android.intent.action.CALL_EMERGENCY").forEach { action ->
+            val message = rejected("""{"action":"$action","data":"tel:**21*0541234567%23"}""")
+            assertTrue(message, message.contains("phone_call"))
+        }
+        assertEquals("android.intent.action.DIAL", parse("""{"action":"DIAL","data":"tel:0541234567"}""").action)
+    }
+
+    @Test
     fun `nested objects, nulls and non-string arrays are rejected`() {
         assertThrows(ToolException::class.java) { IntentSpecParser.convertExtras(json("""{"o":{"a":1}}""")) }
         assertThrows(ToolException::class.java) { IntentSpecParser.convertExtras(json("""{"n":null}""")) }

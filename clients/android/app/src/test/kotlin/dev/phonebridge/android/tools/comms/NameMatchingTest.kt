@@ -62,15 +62,32 @@ class NameMatchingTest {
 
     @Test
     fun structuralTiers() {
-        assertEquals(0.90, score("Tan", "Tania Cohen"), 1e-9)
         assertEquals(0.90, score("Tania", "Tania Cohen"), 1e-9)
-        assertEquals(0.90, score("Tania C", "Tania Cohen"), 1e-9)
         assertEquals(0.87, score("Cohen Tania", "Tania Cohen"), 1e-9)
         assertEquals(0.87, score("Cohen", "Tania Cohen"), 1e-9)
-        assertEquals(0.85, score("Coh", "Tania Cohen"), 1e-9)
-        assertEquals(0.85, score("T Coh", "Tania Cohen"), 1e-9)
+        // Partial tokens: candidates only.
+        assertEquals(0.83, score("Tan", "Tania Cohen"), 1e-9)
+        assertEquals(0.83, score("Tania C", "Tania Cohen"), 1e-9)
+        assertEquals(0.81, score("Coh", "Tania Cohen"), 1e-9)
+        assertEquals(0.81, score("T Coh", "Tania Cohen"), 1e-9)
         // A longer query that contains the whole name is a candidate, never an automatic pick.
         assertEquals(0.78, score("Tania Cohen", "Tania"), 1e-9)
+    }
+
+    @Test
+    fun onlyWholeTokenMatchesCanBePickedAutomatically() {
+        listOf("Tania" to "Tania Cohen", "Cohen" to "Tania Cohen", "Dan" to "Dan Katz", "Tanya" to "Tania Cohen")
+            .forEach { (query, name) -> assertAutoPick(query, name) }
+        // A whole first name that is only the start of another name is a different person, or an abbreviation.
+        listOf(
+            "Dan" to "Danielle Smith", "Dan" to "Dana Levi", "Chris" to "Christine", "Al" to "Alexander", "Tan" to "Tania Cohen",
+            "Tania C" to "Tania Cohen", "Coh" to "Tania Cohen", "Dan" to "Ann Danvers",
+        ).forEach { (query, name) ->
+            val s = score(query, name)
+            assertTrue("'$query' vs '$name' scored $s", s < NameMatching.AUTO_PICK - ContactRanking.STARRED_BOOST)
+            // High enough to stop a whole-token match of another contact from being picked.
+            assertTrue("'$query' vs '$name' scored $s", s >= RecipientSelection.RUNNER_UP_MAX)
+        }
     }
 
     @Test

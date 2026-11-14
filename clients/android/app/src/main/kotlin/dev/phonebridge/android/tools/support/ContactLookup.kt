@@ -5,6 +5,7 @@ import android.content.Context
 import dev.phonebridge.android.tools.comms.CONTACTS_ACCESS_DENIED
 import dev.phonebridge.android.tools.comms.ContactsRepository
 import dev.phonebridge.android.tools.comms.E164Formatter
+import dev.phonebridge.android.tools.comms.PhoneText
 import dev.phonebridge.android.tools.comms.RecipientResolver
 import dev.phonebridge.android.tools.comms.WhatsAppRows
 import dev.phonebridge.android.tools.comms.withProviderAccess
@@ -117,6 +118,11 @@ object PhoneNumbers {
     /** Best-effort E.164 ("+972541234567") or null if it can't be determined. */
     fun toE164(context: Context, raw: String): String? = E164Formatter.toE164(context, raw)
 
-    /** International digits without '+' (WhatsApp wa.me format), or null. */
-    fun toWhatsAppDigits(context: Context, raw: String): String? = toE164(context, raw)?.removePrefix("+")
+    /**
+     * International digits without '+' (WhatsApp wa.me format), or null. Like call and SMS targets,
+     * only plain phone numbers are accepted ([PhoneText.cleanDialable]: no `*`/`#` codes, letters or
+     * extensions).
+     */
+    fun toWhatsAppDigits(context: Context, raw: String): String? =
+        PhoneText.cleanDialable(raw)?.let { toE164(context, it) }?.removePrefix("+")
 }
