@@ -3,10 +3,12 @@ package dev.phonebridge.core.transport
 import dev.phonebridge.core.auth.DeviceIdentity
 import dev.phonebridge.core.mcp.TransportRequest
 import dev.phonebridge.core.mcp.TransportResponse
+import dev.phonebridge.core.transport.RelayProtocol.long
 import dev.phonebridge.core.transport.RelayProtocol.string
 import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -65,10 +67,17 @@ data class DeviceHello(
  *   connection drops finish, but their responses are dropped (the relay has already failed them).
  *   [stop] cancels in-flight requests.
  * * Responses that would exceed the relay's 16 MiB frame limit are replaced by a 500 error.
+ * * One-tap pairing (docs/PROTOCOL.md §5.3): `pair_request` frames go to [pairingHandler] and its
+ *   decision is sent back as `pair_response`; prompts are cancelled (and nothing is sent) on
+ *   `pair_cancel`, at the request's `expiresAt`, or when the connection drops; `pair_complete` and
+ *   `pair_abandoned` reach [PairingHandler.onPairFinished]. Without a handler every request is
+ *   answered `busy`. See [RelayPairings]. `expiresAt` is relay time: the clock offset is taken from
+ *   the welcome's `serverTime`.
+ * * The welcome's `connectUrl` (one-tap connector URL) is reported in [RelayStatus.Connected].
  *
  * Lifecycle: [start] while running (connecting, connected or waiting to retry) is a no-op; [stop]
- * closes with 1000, cancels reconnects and sets Stopped; [start] after [stop] or after a fatal
- * error connects again. All methods are thread-safe.
+ * closes with 1000, cancels reconnects and open pairing prompts and sets Stopped; [start] after
+ * [stop] or after a fatal error connects again. All methods are thread-safe.
  */
 class RelayClient(
     private val relayBaseUrl: String,
@@ -77,8 +86,9 @@ class RelayClient(
     private val handler: suspend (TransportRequest) -> TransportResponse,
     private val scope: CoroutineScope,
     private val httpClient: OkHttpClient = OkHttpClient(),
-    /** Handles pair_request / pair_complete / pair_abandoned / pair_cancel frames (wave 2: core agent wires it). */
+    /** Handles pair_request / pair_complete / pair_abandoned / pair_cancel frames; null answers every request "busy". */
     private val pairingHandler: PairingHandler? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val lock = Any()
     private val state = MutableStateFlow<RelayStatus>(RelayStatus.Stopped)
@@ -142,10 +152,14 @@ class RelayClient(
     }
 
     /** Must hold [lock]. */
-    private fun launchLocked(block: suspend CoroutineScope.() -> Unit): Job? {
+    private fun launchLocked(start: CoroutineStart = CoroutineStart.DEFAULT, block: suspend CoroutineScope.() -> Unit): Job? {
         val parent = jobs ?: return null
-        return scope.launch(parent + Dispatchers.IO + CoroutineName("phonebridge-relay"), block = block)
+        return scope.launch(parent + Dispatchers.IO + CoroutineName("phonebridge-relay"), start, block)
     }
+
+    /** Launches for connection [gen] only while it is current. */
+    private fun launchFor(gen: Long, start: CoroutineStart, block: suspend CoroutineScope.() -> Unit): Job? =
+        synchronized(lock) { if (running && gen == generation) launchLocked(start, block) else null }
 
     private fun isCurrent(gen: Long): Boolean = synchronized(lock) { running && gen == generation }
 
@@ -157,12 +171,27 @@ class RelayClient(
         private var relayError: String? = null
         private var welcomeTimeout: Job? = null
 
+        /** Relay clock minus local clock, from the welcome's `serverTime` (0 until then). */
+        @Volatile
+        private var clockOffsetMs = 0L
+
+        @Volatile
+        private var webSocket: WebSocket? = null
+
+        private val pairings = RelayPairings(
+            handler = pairingHandler,
+            send = { text -> webSocket?.send(text) ?: false },
+            launch = { start, block -> launchFor(gen, start, block) },
+            relayNow = { clock() + clockOffsetMs },
+        )
+
         override fun onOpen(webSocket: WebSocket, response: Response) {
             synchronized(lock) {
                 if (!running || gen != generation) {
                     webSocket.close(RelayProtocol.CLOSE_NORMAL, "Stale connection")
                     return
                 }
+                this.webSocket = webSocket
                 webSocket.send(RelayProtocol.hello(identity, hello).toString())
                 welcomeTimeout = launchLocked {
                     delay(WELCOME_TIMEOUT_MS)
@@ -187,6 +216,10 @@ class RelayClient(
                     .joinToString(" ").ifEmpty { null }
                 "request" -> onRequest(webSocket, frame)
                 "ping" -> webSocket.send(RelayProtocol.pong(frame["t"]).toString())
+                "pair_request" -> pairings.onRequest(frame)
+                "pair_cancel" -> pairings.onCancel(frame)
+                "pair_complete" -> pairings.onFinished(frame, completed = true)
+                "pair_abandoned" -> pairings.onFinished(frame, completed = false)
                 else -> Unit // pong and unknown types are ignored (forward compatibility).
             }
         }
@@ -197,8 +230,10 @@ class RelayClient(
                 welcomed.set(true)
                 welcomeTimeout?.cancel()
                 attempt = 0
+                frame.long("serverTime")?.let { clockOffsetMs = it - clock() }
                 val mcpUrl = frame.string("mcpUrl") ?: RelayProtocol.mcpUrl(relayBaseUrl).orEmpty()
-                state.value = RelayStatus.Connected(mcpUrl)
+                val connectUrl = frame.string("connectUrl")?.takeIf { it.isNotBlank() }
+                state.value = RelayStatus.Connected(mcpUrl, connectUrl)
             }
         }
 
@@ -231,6 +266,7 @@ class RelayClient(
 
         private fun ended(code: Int?, reason: String?, failure: String?) {
             if (!ended.compareAndSet(false, true)) return
+            pairings.cancelAll()
             synchronized(lock) {
                 welcomeTimeout?.cancel()
                 if (!running || gen != generation) return

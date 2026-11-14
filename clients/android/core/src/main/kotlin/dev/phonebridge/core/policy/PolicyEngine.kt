@@ -1,9 +1,12 @@
 package dev.phonebridge.core.policy
 
+import dev.phonebridge.core.auth.ActiveHours
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Tool
+import java.time.ZoneId
 
 data class RateLimits(
     val callsPerMinute: Int = 120,
@@ -17,24 +20,33 @@ sealed interface PolicyDecision {
     /** Run only after user approval. */
     data object RequireConfirmation : PolicyDecision
 
-    /** Refuse; [reason] is shown to the agent. */
+    /**
+     * Refuse; [reason] is shown to the agent. [rateLimited] = a rate limit (audited RATE_LIMITED);
+     * otherwise the token's own rules refused it (a BLOCK tool rule or outside active hours, audited
+     * DENIED_POLICY).
+     */
     data class Deny(val reason: String, val rateLimited: Boolean = false) : PolicyDecision
 }
 
 /**
- * Scope check is done by McpServer before this. PolicyEngine applies per-token sliding-window rate
- * limits (recording the call when allowed) and the token's ConfirmPolicy vs the tool's Risk.
+ * Scope check is done by McpServer before this. PolicyEngine applies, in this order:
+ * 1. the token's per-tool rule BLOCK ([ToolRule.BLOCK]) → Deny;
+ * 2. the token's [TokenRecord.activeHours], evaluated at [clock] in [zone] (phone-local time) → Deny
+ *    outside the window (overnight windows such as 22:00-06:00 work);
+ * 3. per-token sliding-window rate limits (recording the call when allowed);
+ * 4. confirmation: rule ASK → RequireConfirmation (even for `READ` tools), rule ALLOW → Allow,
+ *    no rule → the token's ConfirmPolicy vs the tool's Risk.
  *
  * Every call counts toward the token's total limit; `SENSITIVE` calls also count toward the
- * sensitive limit. Denied calls are not recorded, so an agent that backs off recovers as the
- * window slides. Thread-safe. Memory is bounded: each window holds at most its limit of
- * timestamps, and tokens idle for a whole window are dropped.
+ * sensitive limit (ALLOW rules are still rate-limited). Denied calls are not recorded, so an agent
+ * that backs off recovers as the window slides. Thread-safe. Memory is bounded: each window holds
+ * at most its limit of timestamps, and tokens idle for a whole window are dropped.
  */
 class PolicyEngine(
     private val limits: RateLimits = RateLimits(),
     private val clock: () -> Long = System::currentTimeMillis,
-    /** Zone for TokenRecord.activeHours (wave 2: core agent implements tool rules + active hours). */
-    private val zone: () -> java.time.ZoneId = { java.time.ZoneId.systemDefault() },
+    /** Zone for [TokenRecord.activeHours] (the phone's local time). */
+    private val zone: () -> ZoneId = { ZoneId.systemDefault() },
 ) {
     private class Windows(val all: ArrayDeque<Long> = ArrayDeque(), val sensitive: ArrayDeque<Long> = ArrayDeque())
 
@@ -48,6 +60,10 @@ class PolicyEngine(
     }
 
     fun evaluate(token: TokenRecord, tool: Tool): PolicyDecision {
+        val rule = token.toolRules[tool.name]
+        if (rule == ToolRule.BLOCK) return PolicyDecision.Deny(blockedMessage(tool.name))
+        token.activeHours?.let { hours -> outsideActiveHours(hours, clock())?.let { return it } }
+
         val sensitive = tool.risk == Risk.SENSITIVE
         synchronized(lock) {
             val now = clock()
@@ -64,7 +80,20 @@ class PolicyEngine(
             w.all.addLast(now)
             if (sensitive) w.sensitive.addLast(now)
         }
-        return confirmationDecision(token.confirmPolicy, tool.risk)
+        return if (requiresConfirmation(token.confirmPolicy, tool.risk, rule)) PolicyDecision.RequireConfirmation else PolicyDecision.Allow
+    }
+
+    /** Null when [now] is inside [hours]; otherwise the denial explaining the window. */
+    private fun outsideActiveHours(hours: ActiveHours, now: Long): PolicyDecision.Deny? {
+        if (!ActiveWindow.isValid(hours)) return PolicyDecision.Deny(INVALID_HOURS_MESSAGE)
+        val zoneId = try {
+            zone()
+        } catch (e: Exception) {
+            ZoneId.systemDefault()
+        }
+        val minute = ActiveWindow.minuteOfDay(now, zoneId)
+        if (ActiveWindow.contains(hours, minute)) return null
+        return PolicyDecision.Deny(outsideHoursMessage(hours, minute))
     }
 
     /** Number of tokens with live rate-limit state (for tests and diagnostics). */
@@ -110,8 +139,28 @@ class PolicyEngine(
             ConfirmPolicy.ALL_ACTIONS -> risk != Risk.READ
         }
 
-        internal fun confirmationDecision(policy: ConfirmPolicy, risk: Risk): PolicyDecision =
-            if (requiresConfirmation(policy, risk)) PolicyDecision.RequireConfirmation else PolicyDecision.Allow
+        /**
+         * Whether a call needs on-phone approval for a token with [policy] and an optional per-tool
+         * [rule]: ASK always, ALLOW never, otherwise [requiresConfirmation]. BLOCKed calls never run.
+         */
+        fun requiresConfirmation(policy: ConfirmPolicy, risk: Risk, rule: ToolRule?): Boolean = when (rule) {
+            ToolRule.ASK -> true
+            ToolRule.ALLOW, ToolRule.BLOCK -> false
+            null -> requiresConfirmation(policy, risk)
+        }
+
+        internal const val INVALID_HOURS_MESSAGE =
+            "This agent's active hours in PhoneBridge are not a valid time window, so it may not act right now. " +
+                "Ask the user to fix or turn off this agent's active hours in the PhoneBridge app."
+
+        internal fun blockedMessage(toolName: String) =
+            "The tool '$toolName' is blocked for this agent by the user. Do not try to work around it (for example " +
+                "with other tools). If the task needs it, ask the user to change this agent's tool rules in the PhoneBridge app."
+
+        internal fun outsideHoursMessage(hours: ActiveHours, nowMinute: Int) =
+            "This agent may only act between ${ActiveWindow.format(hours.startMinute)} and ${ActiveWindow.format(hours.endMinute)} " +
+                "(the phone's local time; it is ${ActiveWindow.format(nowMinute)} there now). Try again within that window, " +
+                "or ask the user to change this agent's active hours in the PhoneBridge app."
 
         /** Seconds until the oldest call leaves the window, clamped to 1..60. */
         internal fun retryAfterSeconds(oldest: Long, now: Long): Long {

@@ -7,8 +7,11 @@ import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.confirm.ConfirmationProvider
 import dev.phonebridge.core.confirm.ConfirmationRequest
 import dev.phonebridge.core.confirm.ConfirmationResult
+import dev.phonebridge.core.policy.GlobalSecurity
 import dev.phonebridge.core.policy.PolicyDecision
 import dev.phonebridge.core.policy.PolicyEngine
+import dev.phonebridge.core.tools.AppAccess
+import dev.phonebridge.core.tools.AppBlockedException
 import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -44,12 +47,17 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The `tools/call` pipeline (docs/ARCHITECTURE.md "Request lifecycle"): lookup and scope check,
- * kill switch, policy, confirmation, execution with timeout, result encoding, audit.
+ * kill switch, device-wide security settings, policy (tool rules, active hours, rate limits),
+ * confirmation, execution with timeout, result encoding, audit.
  *
  * Timeout model: [Tool.timeoutMs] covers the tool's own work only. Pre-confirmation happens
  * before the budget starts. For internally-confirming tools the budget is paused while
  * [CallContext.requireConfirmation] waits for the user, so a slow approval never kills the tool.
  * Each prompt has its own limit, the server's confirmation timeout.
+ *
+ * The tool gets a [CallContext] with the token's [AppAccess] (its app policy plus the global
+ * never-allow list) and the global one-time-code setting. An [AppBlockedException] from the tool is
+ * audited as DENIED_APP; policy refusals as DENIED_POLICY (or RATE_LIMITED).
  *
  * Every call ends with exactly one audit entry.
  */
@@ -61,6 +69,7 @@ internal class ToolCalls(
     private val isAccessEnabled: () -> Boolean,
     private val confirmationTimeoutMs: Long,
     private val clock: () -> Long,
+    private val globalSecurity: () -> GlobalSecurity = { GlobalSecurity() },
 ) {
     private val random = SecureRandom()
 
@@ -132,10 +141,16 @@ internal class ToolCalls(
         }
         if (!enabled) return Outcome(ToolResult.error(PAUSED_MESSAGE), AuditOutcome.PAUSED)
 
+        val security = try {
+            globalSecurity()
+        } catch (e: Exception) {
+            // Fail closed: without the never-allow list no app-facing call is safe.
+            return Outcome(ToolResult.error(SECURITY_UNAVAILABLE_MESSAGE), AuditOutcome.EXCEPTION, "security settings: ${ToolText.describe(e)}")
+        }
+
         val decision = policy.evaluate(token, tool)
         if (decision is PolicyDecision.Deny) {
-            // PolicyEngine only denies for rate limits today; any other policy denial is closest to a scope denial.
-            val audit = if (decision.rateLimited) AuditOutcome.RATE_LIMITED else AuditOutcome.DENIED_SCOPE
+            val audit = if (decision.rateLimited) AuditOutcome.RATE_LIMITED else AuditOutcome.DENIED_POLICY
             return Outcome(ToolResult.error(decision.reason), audit, decision.reason)
         }
         val needsConfirmation = decision == PolicyDecision.RequireConfirmation
@@ -172,6 +187,10 @@ internal class ToolCalls(
             scopes = token.scopes,
             transport = transport,
             requestId = newId(10),
+            appAccess = AppAccess.of(token.appPolicy, security.neverAllowApps),
+            redactOneTimeCodes = security.redactOneTimeCodes,
+            toolRules = token.toolRules,
+            activeHours = token.activeHours,
             confirmer = confirmer,
         )
 
@@ -208,6 +227,8 @@ internal class ToolCalls(
                 failure != null -> Outcome(ToolResult.error(execution.message), failure.audit, failure.detail)
                 else -> Outcome(ToolResult.error(execution.message), AuditOutcome.TOOL_ERROR, execution.message)
             }
+            is Execution.AppBlocked ->
+                Outcome(ToolResult.error(execution.message), AuditOutcome.DENIED_APP, "blocked app ${execution.packageName}")
             is Execution.InnerTimeout -> Outcome(ToolResult.error(execution.message), AuditOutcome.TIMEOUT, execution.message)
             is Execution.Crashed -> Outcome(ToolResult.error("Internal error: ${execution.description}"), AuditOutcome.EXCEPTION, execution.description)
             Execution.TimedOut -> Outcome(ToolResult.error(timeoutMessage(tool)), AuditOutcome.TIMEOUT, "timed out after ${ToolText.shortSeconds(tool.timeoutMs)}")
@@ -219,6 +240,7 @@ internal class ToolCalls(
     private sealed interface Execution {
         class Completed(val result: ToolResult) : Execution
         class Failed(val message: String) : Execution
+        class AppBlocked(val message: String, val packageName: String) : Execution
         class InnerTimeout(val message: String) : Execution
         class Crashed(val description: String) : Execution
         data object TimedOut : Execution
@@ -251,6 +273,8 @@ internal class ToolCalls(
 
     private suspend fun invoke(tool: Tool, args: JsonObject, ctx: CallContext): Execution = try {
         Execution.Completed(tool.call(args, ctx))
+    } catch (e: AppBlockedException) {
+        Execution.AppBlocked(e.message?.takeIf { it.isNotBlank() } ?: "${tool.title} was refused: the app is blocked for this agent.", e.packageName)
     } catch (e: ToolException) {
         Execution.Failed(e.message?.takeIf { it.isNotBlank() } ?: "${tool.title} failed.")
     } catch (e: CancellationException) {
@@ -332,6 +356,9 @@ internal class ToolCalls(
     companion object {
         const val PAUSED_MESSAGE = "Agent access is paused on the phone. Ask the user to resume it in the PhoneBridge app."
         const val DENIED_MESSAGE = "The user denied this action on the phone. Do not retry unless the user asks again."
+        const val SECURITY_UNAVAILABLE_MESSAGE =
+            "PhoneBridge could not read the phone's security settings, so it refused this call. " +
+                "Ask the user to open the PhoneBridge app (restarting it if needed), then retry."
 
         /** MCP `CallToolResult`. */
         fun encodeResult(result: ToolResult): JsonObject = buildJsonObject {

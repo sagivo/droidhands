@@ -16,6 +16,12 @@ enum class AuditOutcome {
     AUTH_FAILED,
     TIMEOUT,
     EXCEPTION,
+
+    /** Refused by the token's policy: a per-tool BLOCK rule, or outside the token's active hours. */
+    DENIED_POLICY,
+
+    /** The tool touched an app the user blocked for this agent (app access / never-allow list). */
+    DENIED_APP,
 }
 
 @Serializable

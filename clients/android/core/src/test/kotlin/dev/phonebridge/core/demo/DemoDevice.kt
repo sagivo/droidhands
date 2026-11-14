@@ -23,6 +23,9 @@ import dev.phonebridge.core.tools.reqString
 import dev.phonebridge.core.tools.tool
 import dev.phonebridge.core.transport.DeviceHello
 import dev.phonebridge.core.transport.LocalHttpServer
+import dev.phonebridge.core.transport.PairingDecision
+import dev.phonebridge.core.transport.PairingHandler
+import dev.phonebridge.core.transport.PairingRequest
 import dev.phonebridge.core.transport.RelayClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -43,10 +46,16 @@ import kotlinx.serialization.json.put
  * * `DEMO_LOCAL_PORT`: start the local HTTP server on 127.0.0.1:<port> (0 = any free port).
  * * `DEMO_RELAY_URL`, `DEMO_ACCESS_KEY`: connect to a relay.
  * * `DEMO_DEVICE_SECRET`: base64url device secret for a stable device id (default: random).
+ * * `DEMO_PAIR`: how to answer one-tap pairing requests from the relay (docs/PROTOCOL.md §5):
+ *   `approve` (issues a real token named after the client, origin "pairing", all scopes, the
+ *   `DEMO_POLICY` confirmation policy), `deny`, or `ignore` (never answers, so the relay expires it).
+ *   Unset: no pairing handler, so the device answers `busy`.
  *
  * Stdout: exactly one `DEMO_TOKEN=<token>` and one `DEMO_DEVICE_ID=<id>` line, then
  * `DEMO_LOCAL_PORT=<port>` if local mode is on, then one `RELAY_STATUS=<status>` line per relay
- * status change. Runs until killed.
+ * status change, and per pairing `PAIRED tokenId=<id> client=<name>` (approved),
+ * `PAIR_COMPLETE id=<pairing id> tokenId=<id>` and `PAIR_ABANDONED id=<pairing id> tokenId=<id|none>`
+ * (the token is then deleted). Runs until killed.
  */
 fun main() {
     val env = System.getenv()
@@ -110,6 +119,7 @@ fun main() {
             hello = DeviceHello("demo", "0.1.0", "Demo device", accessKey = env["DEMO_ACCESS_KEY"]),
             handler = server::handle,
             scope = scope,
+            pairingHandler = demoPairingHandler(env["DEMO_PAIR"]?.trim()?.lowercase(), tokens, policy),
         )
         scope.launch {
             relay.status.collect {
@@ -122,6 +132,41 @@ fun main() {
     }
 
     runBlocking { awaitCancellation() }
+}
+
+/**
+ * Pairing handler for `DEMO_PAIR` = `approve` | `deny` | `ignore`; null (answer `busy`) otherwise.
+ * Prints `PAIRED` / `PAIR_COMPLETE` / `PAIR_ABANDONED` lines on stdout (never the token itself).
+ */
+internal fun demoPairingHandler(mode: String?, tokens: TokenManager, policy: ConfirmPolicy): PairingHandler? {
+    if (mode !in setOf("approve", "deny", "ignore")) return null
+    return object : PairingHandler {
+        override suspend fun onPairRequest(request: PairingRequest): PairingDecision {
+            System.err.println("PAIR_REQUEST id=${request.id} client=${request.clientName} host=${request.redirectHost} code=${request.displayCode}")
+            return when (mode) {
+                "approve" -> {
+                    val issued = tokens.issue(
+                        request.clientName, Scopes.ALL, policy, ttlMillis = null, origin = "pairing", clientHost = request.redirectHost,
+                    )
+                    println("PAIRED tokenId=${issued.record.id} client=${issued.record.name}")
+                    System.out.flush()
+                    PairingDecision.Approved(issued.plaintext, issued.record.id)
+                }
+                "deny" -> PairingDecision.Denied("denied")
+                else -> awaitCancellation()
+            }
+        }
+
+        override fun onPairFinished(id: String, tokenId: String?, completed: Boolean) {
+            if (completed) {
+                println("PAIR_COMPLETE id=$id tokenId=${tokenId ?: "none"}")
+            } else {
+                tokenId?.let(tokens::delete)
+                println("PAIR_ABANDONED id=$id tokenId=${tokenId ?: "none"}")
+            }
+            System.out.flush()
+        }
+    }
 }
 
 /** `echo`, `demo_send` (internal confirmation) and `demo_image`. */

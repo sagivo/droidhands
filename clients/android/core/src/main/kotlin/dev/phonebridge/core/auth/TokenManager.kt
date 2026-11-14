@@ -10,9 +10,9 @@ import java.security.SecureRandom
  * Issues and verifies agent tokens of the form `pb1.<deviceId>.<tokenId>.<secret>`
  * (docs/PROTOCOL.md §2). Thread-safe. Persists through [store] on every mutation.
  *
- * Mutations ([issue], [revoke], [delete]) save first and publish to [tokens] only if the save
- * succeeded, so a failing store never leaves memory and disk silently out of sync; the store's
- * exception propagates to the caller. Saves happen on the calling thread: call from a
+ * Mutations ([issue], [update], [revoke], [revokeAll], [delete]) save first and publish to [tokens]
+ * only if the save succeeded, so a failing store never leaves memory and disk silently out of sync;
+ * the store's exception propagates to the caller. Saves happen on the calling thread: call from a
  * background dispatcher when the store does disk I/O.
  *
  * The constructor loads [store] once; an exception from [TokenStore.load] propagates (failing
@@ -38,7 +38,11 @@ class TokenManager(
     /**
      * Creates a token. The returned [IssuedToken.plaintext] is the only copy of the secret.
      * @param name non-blank display name (trimmed).
+     * @param scopes a subset of [dev.phonebridge.core.tools.Scopes.ALL].
      * @param ttlMillis null = never expires; otherwise must be positive.
+     * @param origin "manual" (created in the app) or "pairing" (one-tap pairing); non-blank.
+     * @param clientHost for paired agents, the OAuth redirect host (blank = null).
+     * @param appPolicy which apps the agent may see/operate.
      * @throws IllegalArgumentException on invalid arguments; any exception from [TokenStore.save].
      */
     fun issue(
@@ -53,6 +57,9 @@ class TokenManager(
         val trimmedName = name.trim()
         require(trimmedName.isNotEmpty()) { "Token name must not be blank" }
         require(ttlMillis == null || ttlMillis > 0) { "ttlMillis must be positive" }
+        val trimmedOrigin = origin.trim()
+        require(trimmedOrigin.isNotEmpty()) { "Token origin must not be blank" }
+        TokenValidation.requireKnownScopes(scopes)
 
         val secretBytes = ByteArray(SECRET_BYTES).also(random::nextBytes)
         val secret = Encoding.base64Url(secretBytes)
@@ -70,6 +77,9 @@ class TokenManager(
                 confirmPolicy = confirmPolicy,
                 createdAt = now,
                 expiresAt = ttlMillis?.let { saturatedAdd(now, it) },
+                origin = trimmedOrigin,
+                clientHost = clientHost?.trim()?.takeIf { it.isNotEmpty() },
+                appPolicy = appPolicy.copy(packages = LinkedHashSet(appPolicy.packages)),
             )
             commit(listOf(record) + current)
             return IssuedToken(record, TokenFormat.format(deviceId, record.id, secret))
@@ -118,18 +128,61 @@ class TokenManager(
         }
     }
 
-    /** Removes a token entirely. No-op if unknown. */
     /**
      * Edits a token's mutable settings (name, scopes, confirmPolicy, expiresAt, appPolicy, toolRules,
      * activeHours). [transform]'s changes to id/secretHash/createdAt/origin/lastUsedAt/revoked are
-     * ignored. Persists; returns the updated record. Throws NoSuchElementException for unknown ids.
-     * STUB — core agent (wave 2).
+     * ignored, and so are changes to clientHost (provenance, like origin). Persists; returns the
+     * updated record (the stored one, without saving, when nothing changed).
+     *
+     * [transform] runs under the manager's lock: keep it a quick, pure `copy(...)` and do not call
+     * back into this manager from it.
+     *
+     * @throws NoSuchElementException for unknown ids.
+     * @throws IllegalArgumentException if the result is invalid: blank name, scopes outside
+     *   [dev.phonebridge.core.tools.Scopes.ALL], or active-hours minutes outside 0..1439 or start == end.
+     *   Nothing changes then.
+     * @throws Exception from [TokenStore.save] (nothing changes then either).
      */
-    fun update(id: String, transform: (TokenRecord) -> TokenRecord): TokenRecord = TODO()
+    fun update(id: String, transform: (TokenRecord) -> TokenRecord): TokenRecord {
+        synchronized(lock) {
+            val current = state.value
+            val existing = current.firstOrNull { it.id == id } ?: throw NoSuchElementException("Unknown token id $id")
+            val edited = transform(existing)
+            val merged = edited.copy(
+                id = existing.id,
+                name = edited.name.trim(),
+                secretHash = existing.secretHash,
+                scopes = LinkedHashSet(edited.scopes),
+                createdAt = existing.createdAt,
+                lastUsedAt = existing.lastUsedAt,
+                revoked = existing.revoked,
+                origin = existing.origin,
+                clientHost = existing.clientHost,
+                appPolicy = edited.appPolicy.copy(packages = LinkedHashSet(edited.appPolicy.packages)),
+                toolRules = LinkedHashMap(edited.toolRules),
+            )
+            TokenValidation.requireValid(merged)
+            if (merged == existing) return existing
+            commit(current.map { if (it.id == id) merged else it })
+            return merged
+        }
+    }
 
-    /** Revokes every active token; returns how many were revoked. STUB — core agent (wave 2). */
-    fun revokeAll(): Int = TODO()
+    /**
+     * Revokes every token that is not revoked yet (expired ones included, so none can come back if
+     * the clock moves). Returns how many tokens were newly revoked; when that is 0 nothing is saved.
+     */
+    fun revokeAll(): Int {
+        synchronized(lock) {
+            val current = state.value
+            val count = current.count { !it.revoked }
+            if (count == 0) return 0
+            commit(current.map { if (it.revoked) it else it.copy(revoked = true) })
+            return count
+        }
+    }
 
+    /** Removes a token entirely. No-op if unknown. */
     fun delete(id: String) {
         synchronized(lock) {
             val current = state.value

@@ -59,8 +59,11 @@ interface Tool {
     suspend fun call(args: JsonObject, ctx: CallContext): ToolResult
 }
 
-/** Expected, agent-visible failure. The message should tell the agent what to do next. */
-class ToolException(message: String) : Exception(message)
+/**
+ * Expected, agent-visible failure. The message should tell the agent what to do next.
+ * Open so the pipeline can tell specific refusals apart (see [AppBlockedException]).
+ */
+open class ToolException(message: String) : Exception(message)
 
 /**
  * Concise way to declare a tool.
