@@ -91,6 +91,13 @@ class McpServer(
 ) {
     private val toolCalls = ToolCalls(registry, policy, confirmations, audit, isAccessEnabled, confirmationTimeoutMs, clock, globalSecurity)
 
+    /**
+     * Cancels in-flight tools/call executions — all of them ([tokenId] = null, e.g. on Pause) or one token's
+     * (on revoke/delete) — and denies their pending prompts. Cancelled calls are audited. Returns how many
+     * were cancelled. STUB — implemented by the core agent (wave 3).
+     */
+    fun cancelCalls(tokenId: String? = null): Int = TODO()
+
     suspend fun handle(request: TransportRequest): TransportResponse {
         val auth = try {
             tokens.authenticate(request.authorization)

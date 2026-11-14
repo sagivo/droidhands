@@ -37,6 +37,11 @@ data class TokenRecord(
     val toolRules: Map<String, ToolRule> = emptyMap(),
     /** Daily local-time window in which the agent may act; null = always. */
     val activeHours: ActiveHours? = null,
+    /**
+     * Highest tool risk this agent may use; tools above it are hidden from tools/list and refused
+     * (DENIED_POLICY). The "Read-only" preset sets READ. null = no cap (scopes decide).
+     */
+    val maxRisk: dev.phonebridge.core.tools.Risk? = null,
 )
 
 @Serializable
