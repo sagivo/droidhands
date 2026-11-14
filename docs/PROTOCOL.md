@@ -98,6 +98,11 @@ If a device connects while another connection for the same `deviceId` is live, t
 **new** connection and closes the old one with `4009`. Pending requests on the old connection fail
 with HTTP 502.
 
+**Pre-hello limits.** Until its `hello` is accepted, a socket may send at most 16 KiB, or it is dropped.
+The 16 MiB frame limit applies only after that. The upgrade is answered `429`/`503` when too many sockets
+per IP, or in total, are waiting for their hello. A refused or timed-out handshake gets its close code and
+is terminated 2 s later.
+
 ### 3.2 Tunneled HTTP request (relay → device)
 
 ```json
@@ -132,7 +137,10 @@ with HTTP 502.
 }
 ```
 
-The relay copies `status`, the safe headers (`content-type`, `mcp-session-id`, `www-authenticate`,
+Requests that fail because the device disconnected, was replaced, timed out or the relay is shutting
+down get a JSON-RPC error saying **the phone may already have performed the action and the agent must
+check before resending**. The device keeps running a request whose connection dropped, finishes it and
+audits it. The relay copies `status`, the safe headers (`content-type`, `mcp-session-id`, `www-authenticate`,
 `retry-after`), and `body` to the agent's HTTP response. If no response arrives within
 **150 s**, the relay answers `504` with a JSON-RPC error. The device needs up to 60 s for user
 confirmation plus up to 60 s for the tool to run. If the device is offline, the relay answers
@@ -214,11 +222,14 @@ credentials) so browser-based clients work.
 `GET /oauth/authorize?response_type=code&client_id&redirect_uri&code_challenge&code_challenge_method=S256&state&resource[&scope]`
 
 1. The relay validates `client_id` (HMAC), checks that `redirect_uri` is one of the registered
-   URIs (exact match), and requires PKCE `S256`. On any of these errors it renders an HTML error
+   URIs, and requires PKCE `S256`. Matching is exact, except that loopback URIs match on any port
+   (RFC 8252 §7.3), and loopback registrations may omit the port. An unsupported `response_type` also gets
+   an HTML error page, never a redirect. On any of these errors it renders an HTML error
    page and does **not** redirect.
 2. The relay picks the device from `resource`, which must be `{relay}/d/<id>/mcp` or `{relay}/d/<id>`.
-   If `resource` is missing and exactly one device is online, it uses that one; otherwise it shows an
-   error page.
+   `resource` is **required**: without it the relay shows an error page. The operator can set
+   `ALLOW_IMPLICIT_DEVICE=true` to fall back to the only online device, but that lets anyone who knows the
+   relay URL push a pairing prompt to that phone.
 3. If the device is offline, the page says "Your phone is offline. Open PhoneBridge, make sure it
    shows Connected, then reload this page."
 4. The relay creates a pending pairing: `id` = `p_` + 16 random bytes in base64url; `displayCode` = 4
@@ -262,7 +273,10 @@ credentials) so browser-based clients work.
 reloadable page that 303-redirects once the pairing is decided. Repeating an identical authorization
 request reuses the pending (or approved) pairing instead of prompting the phone again. When a phone
 disconnects, its pending pairings become `expired`; no `pair_cancel` is sent, because the connection is
-gone. A late or foreign `pair_response` carrying a token gets `pair_abandoned` with its tokenId, and a
+gone. When a phone reconnects while the relay still has pending pairings for it, the relay re-sends each
+`pair_request` (same `id`, `displayCode` and `expiresAt`), and the phone keeps a single prompt per id.
+The device converts `expiresAt` to its own clock using the welcome's `serverTime`. A late or foreign
+`pair_response` carrying a token gets `pair_abandoned` with its tokenId, and a
 duplicate approval is ignored. `pair_complete`/`pair_abandoned` notices for an offline phone are
 queued in memory and delivered when it reconnects. The device rejects malformed `pair_request`s
 (bad id, or a display code outside the alphabet) with `denied`. It answers `busy` beyond 5 open

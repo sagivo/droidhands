@@ -17,8 +17,10 @@ Every tool has:
   side effect.
 
 Contact resolution: tools that accept `contact` (a name) resolve it with the same logic as
-`contacts_search`. If zero or several contacts match, the tool fails with an error that lists the
-candidates, so the agent can ask the user. It never guesses.
+`contacts_search`. A contact is picked only on an exact full-name match, or a unique whole-word match
+that no other contact shares as a prefix. Otherwise the tool fails with an error that lists the
+candidates, so the agent can ask the user. It never guesses. `to` must be a plain phone number (digits,
+an optional leading `+`, and spacing or punctuation). USSD/MMI codes containing `*` or `#` are refused.
 
 ## Common result conventions
 
@@ -40,7 +42,8 @@ candidates, so the agent can ask the user. It never guesses.
 
 | tool | scope | risk | args | notes |
 |---|---|---|---|---|
-| `bridge_capabilities` | *(none, always allowed)* | READ | – | The token's name and scopes, its `app_access` (mode, summary, allowed apps for allowlists, blocked-app **count** only), `tool_rules`, `active_hours`, and `one_time_codes_hidden`. Also each visible tool with its availability (for example a missing permission, accessibility off or stuck, or phone locked) and its `rule`. BLOCKed tools are omitted. Agents should call it when unsure. |
+| `bridge_capabilities` | *(none, always allowed)* | READ | – | The token's name and scopes, its `app_access` (mode, summary, allowed apps for allowlists, blocked-app **count** only), `tool_rules`, `active_hours`, `max_risk` (for example `READ` for Read-only agents, whose action tools
+are hidden), and `one_time_codes_hidden`. Also each visible tool with its availability (for example a missing permission, accessibility off or stuck, or phone locked) and its `rule`. BLOCKed tools are omitted. Agents should call it when unsure. |
 
 ## Device — scope `device`
 
@@ -122,7 +125,10 @@ Messages, Slack…).
 
 ## Screen — scopes `screen.read`, `screen.control`
 
-Generic control of **any** app through the platform's accessibility layer. Subject to the token's
+Generic control of **any** app through the platform's accessibility layer. Element refs (`n42`) are
+**per agent** and never reused: a ref from another agent or an older snapshot is rejected, so call
+`screen_read` again. Screen control is paused while a PhoneBridge approval is waiting. Right after an app
+switch, `screen_read` waits briefly for the new window's content instead of returning an empty screen. Subject to the token's
 **app access** (docs/SECURITY.md): refused while a blocked app is in the foreground. Blocked apps'
 windows are omitted. Screenshots are refused when any blocked window is visible, and when the
 notification shade or recents screen is showing while app restrictions apply. Element references

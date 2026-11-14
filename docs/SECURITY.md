@@ -86,6 +86,30 @@ its screen tools, so an agent cannot approve its own requests.
 
 Data scopes such as `contacts.read`, `messages.send` (SMS through the system API) and `calendar.*` are governed by **scopes**, not by app access, because they go through Android system APIs rather than an app's UI.
 
+## Stopping agents, and keeping the record
+
+* **Pause, Revoke, Revoke all and Delete stop work that is already running.** Calls waiting for an
+  unlock, an approval or the screen are cancelled. Their prompts are withdrawn, and each call is audited
+  as `CANCELLED`. Tools re-check pause and token state after every wait and right before each side effect.
+* **No self-approval.** While any approval or pairing prompt is pending or on screen, every screen-control
+  gesture is refused. The check runs right before each tap, and hit-testing fails closed on windows that
+  Android hides from accessibility. PhoneBridge's own notifications (including heads-up prompts) are removed
+  from `screen_read` output, so an agent can neither see nor tap another agent's prompt.
+* **Read-only means read-only.** The *Read-only* preset caps the agent at `READ` tools (`maxRisk`). Tools
+  that change anything are hidden and refused, whatever the scopes say.
+* **Phone codes are never dialed.** `phone_call`, `sms_send` and WhatsApp recipients must be plain numbers.
+  USSD/MMI strings such as `*21*…#` (call forwarding) are refused.
+* **Recipients aren't guessed.** A contact is auto-picked only on an exact full-name match, or a unique
+  whole-word match that no other contact shares as a prefix ("Dan" does not pick "Danielle").
+* **One-time codes** are masked across a notification's title, text and messages together, and in
+  `screen_read` text. Screenshots are refused while a code is visible.
+* **The audit log can't be flushed.** Refusals before anything runs (bad token, unknown tool, scope or
+  policy denials, rate limits) are written verbatim only up to a small per-source budget. Beyond that they
+  are summarized as "N more requests like this", so junk calls can't push real entries out of the log.
+* **Calls survive a network switch.** A dropped relay connection no longer cancels a running tool. It
+  finishes and is audited, and only its response is lost. Agents are told the phone may already have done
+  the action, and to check before resending.
+
 ## Rate limits (per token, sliding 60 s window)
 
 120 calls per minute in total, and 20 `SENSITIVE` calls per minute. Calls over the limit are
