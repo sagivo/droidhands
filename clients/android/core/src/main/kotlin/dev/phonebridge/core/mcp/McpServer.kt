@@ -11,6 +11,7 @@ import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.confirm.ConfirmationProvider
 import dev.phonebridge.core.policy.GlobalSecurity
 import dev.phonebridge.core.policy.PolicyEngine
+import dev.phonebridge.core.tools.AppAccess
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -99,6 +100,11 @@ class McpServer(
     private val globalSecurity: () -> GlobalSecurity = { GlobalSecurity() },
     /** Told about each tool call while it runs (the live activity notification); see [CallActivity]. */
     private val activity: CallActivity = CallActivity.NONE,
+    /**
+     * An app's display name for the agent's access summary in `initialize` (null: the package name only).
+     * May block briefly (package lookups); [handle] runs off the main thread.
+     */
+    private val appLabel: (String) -> String? = { null },
 ) {
     private val auditThrottle = AuditThrottle(audit, clock)
     private val inFlight = InFlightCalls()
@@ -214,7 +220,7 @@ class McpServer(
             else -> return JsonRpc.error(id, JsonRpc.INVALID_PARAMS, "Invalid params: \"params\" must be an object")
         }
         return when (message.method) {
-            "initialize" -> JsonRpc.result(id, initializeResult(params))
+            "initialize" -> JsonRpc.result(id, initializeResult(params, token))
             "ping" -> JsonRpc.result(id, EMPTY_OBJECT)
             "tools/list" -> JsonRpc.result(id, toolsList(token))
             "tools/call" -> callTool(id, params, token, request.transport)
@@ -231,7 +237,11 @@ class McpServer(
         return inFlight.run(call, stopped) { toolCalls.call(id, params, token, transport, call) }
     }
 
-    private fun initializeResult(params: JsonObject): JsonObject {
+    /**
+     * The `initialize` result. Its instructions are the server's [instructions] followed by the token's access
+     * ([AccessSummary]): which apps and abilities, and whether actions ask the user first.
+     */
+    private fun initializeResult(params: JsonObject, token: TokenRecord): JsonObject {
         val requested = (params["protocolVersion"] as? JsonPrimitive)?.takeIf { it.isString }?.content
         val version = requested?.takeIf { it in SUPPORTED_PROTOCOL_VERSIONS } ?: SUPPORTED_PROTOCOL_VERSIONS.first()
         return buildJsonObject {
@@ -244,8 +254,23 @@ class McpServer(
                 put("version", serverInfo.version)
                 serverInfo.title?.let { put("title", it) }
             }
-            instructions?.let { put("instructions", it) }
+            listOfNotNull(instructions, accessInstructions(token)).joinToString("\n\n").takeIf { it.isNotEmpty() }?.let { put("instructions", it) }
         }
+    }
+
+    private fun accessInstructions(token: TokenRecord): String? = try {
+        val security = globalSecurity()
+        val facts = AccessSummary.Facts(
+            agentName = token.name,
+            scopes = token.scopes,
+            apps = AppAccess.of(token.appPolicy, security.neverAllowApps, token.name),
+            confirmPolicy = token.confirmPolicy,
+            maxRisk = token.maxRisk,
+            toolRules = token.toolRules,
+        )
+        AccessSummary.instructions(facts) { pkg -> runCatching { appLabel(pkg) }.getOrNull() }
+    } catch (e: Exception) {
+        null // Without the security settings the summary could be wrong; bridge_capabilities still describes the access.
     }
 
     private fun toolsList(token: TokenRecord): JsonObject = buildJsonObject {

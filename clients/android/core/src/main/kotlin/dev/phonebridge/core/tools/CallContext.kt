@@ -1,6 +1,7 @@
 package dev.phonebridge.core.tools
 
 import dev.phonebridge.core.auth.ActiveHours
+import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.ToolRule
 
 /** Per-call information handed to [Tool.call]. */
@@ -25,6 +26,8 @@ class CallContext(
     val activeHours: ActiveHours? = null,
     /** The calling token's risk cap (informational; enforced by the server), or null for none. */
     val maxRisk: Risk? = null,
+    /** The calling token's approval policy (informational; applied by the server), or null when unknown. */
+    val confirmPolicy: ConfirmPolicy? = null,
     /**
      * Throws [ToolException] if access was paused or this token was revoked/deleted (or expired, or lost
      * access to this tool) since the call started. Tools MUST call [ensureStillAllowed] after any wait

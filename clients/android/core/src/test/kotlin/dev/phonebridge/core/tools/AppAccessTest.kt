@@ -72,15 +72,12 @@ class AppAccessTest {
         assertIs<ToolException>(e)
         assertEquals(whatsapp, e.packageName)
         val message = e.message!!
-        assertTrue(message.contains("'WhatsApp' ($whatsapp)"), message)
-        assertTrue(message.contains("blocked"), message)
-        assertTrue(message.contains("for this agent"), message)
+        assertTrue(message.startsWith("This agent isn't allowed to use WhatsApp ($whatsapp)."), message)
         assertTrue(message.contains("Do not try to work around"), message)
-        assertTrue(message.contains("allow it for this agent"), message)
+        assertTrue(message.contains("The user can allow it in PhoneBridge > Agents > this agent > Access."), message)
 
         val global = assertFailsWith<AppBlockedException> { access.require(bank, " ") }.message!!
-        assertTrue(global.contains("'$bank'"), global)
-        assertTrue(global.contains("for this agent"), global)
+        assertTrue(global.startsWith("$bank is on PhoneBridge's never-allow list"), global)
         assertTrue(global.contains("never-allow"), global)
         assertTrue(global.contains("Do not try to work around"), global)
     }

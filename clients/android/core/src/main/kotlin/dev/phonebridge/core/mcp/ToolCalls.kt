@@ -2,6 +2,7 @@ package dev.phonebridge.core.mcp
 
 import dev.phonebridge.core.audit.AuditEntry
 import dev.phonebridge.core.audit.AuditOutcome
+import dev.phonebridge.core.auth.GrantText
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.confirm.ConfirmationProvider
@@ -159,11 +160,8 @@ internal class ToolCalls(
         }
         if (!Scopes.allows(token.scopes, tool.scope)) {
             refuse(AuditOutcome.DENIED_SCOPE, name, args, "missing scope ${tool.scope}")
-            return JsonRpc.error(
-                id, JsonRpc.INVALID_PARAMS,
-                "Tool '$name' is not available to this token: it needs the '${tool.scope}' scope. " +
-                    "Ask the user to grant it to this token in the PhoneBridge app.",
-            )
+            // Outside the agent's grant: refused at once, never turned into a prompt.
+            return JsonRpc.error(id, JsonRpc.INVALID_PARAMS, GrantText.missingScope(token.name, tool.scope, name))
         }
 
         // What actually runs, and what the audit entry is about: the named tool, or what a DispatchTool resolved to.
@@ -179,10 +177,7 @@ internal class ToolCalls(
                             run(target, token, transport, handle)
                         } else {
                             Outcome(
-                                ToolResult.error(
-                                    "'${inner.name}' is not available to this token: it needs the '${inner.scope}' scope. " +
-                                        "Ask the user to grant it to this token in the PhoneBridge app.",
-                                ),
+                                ToolResult.error(GrantText.missingScope(token.name, inner.scope, target.alias ?: inner.name)),
                                 AuditOutcome.DENIED_SCOPE, "missing scope ${inner.scope}", refused = true,
                             )
                         }
@@ -323,11 +318,12 @@ internal class ToolCalls(
         scopes = token.scopes,
         transport = transport,
         requestId = newId(10),
-        appAccess = AppAccess.of(token.appPolicy, security.neverAllowApps),
+        appAccess = AppAccess.of(token.appPolicy, security.neverAllowApps, token.name),
         redactOneTimeCodes = security.redactOneTimeCodes,
         toolRules = token.toolRules,
         activeHours = token.activeHours,
         maxRisk = token.maxRisk,
+        confirmPolicy = token.confirmPolicy,
         stillAllowed = stillAllowed,
         activity = activity,
         confirmer = confirmer,
@@ -347,7 +343,7 @@ internal class ToolCalls(
 
         target.alias?.let { alias ->
             if (token.toolRules[alias] == ToolRule.BLOCK) {
-                val reason = PolicyEngine.blockedMessage(alias)
+                val reason = PolicyEngine.blockedMessage(alias, token.name)
                 return Outcome(ToolResult.error(reason), AuditOutcome.DENIED_POLICY, reason, refused = true)
             }
         }

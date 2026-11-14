@@ -77,7 +77,7 @@ class AppActionCatalog(
             is AppResolution.Blocked -> {
                 val app = resolution.app
                 access.require(app.packageName, app.label)
-                throw AppBlockedException(app.packageName, AppAccess.blockedMessage(app.packageName, app.label, globally = false))
+                throw AppBlockedException(app.packageName, AppAccess.blockedMessage(app.packageName, app.label, globally = false, agentName = access.agentName))
             }
             is AppResolution.Ambiguous -> throw ToolException(
                 "'$name' matches several apps: ${ActionText.appList(resolution.candidates)}. Call again with 'app' set to one " +

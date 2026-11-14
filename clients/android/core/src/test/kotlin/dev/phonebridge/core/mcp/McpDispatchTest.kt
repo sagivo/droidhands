@@ -203,7 +203,7 @@ class McpDispatchTest {
         val token = issue(scopes = setOf(Scopes.APPS))
         val result = server().run(token, """{"to":"com.app/send"}""")
         assertTrue(result.isError())
-        assertTrue("'messages.send' scope" in result.text(), result.text())
+        assertTrue("Claude isn't allowed to send messages or act on notifications ('com.app/send' needs that)" in result.text(), result.text())
         assertEquals(AuditOutcome.DENIED_SCOPE, lastAudit().outcome)
         assertEquals("com.app/send", lastAudit().tool)
         assertEquals("missing scope messages.send; via run_it", lastAudit().detail)
@@ -261,7 +261,7 @@ class McpDispatchTest {
         val token = issue { it.copy(toolRules = mapOf("com.app/play" to ToolRule.BLOCK)) }
         val result = server().run(token, """{"to":"com.app/play"}""")
         assertTrue(result.isError())
-        assertTrue("'com.app/play' is blocked" in result.text(), result.text())
+        assertTrue("blocked the tool 'com.app/play'" in result.text(), result.text())
         assertEquals(AuditOutcome.DENIED_POLICY, lastAudit().outcome)
         assertEquals("com.app/play", lastAudit().tool)
         assertEquals(0, sideEffects.get())
@@ -272,7 +272,7 @@ class McpDispatchTest {
         val token = issue { it.copy(toolRules = mapOf("com.app/song" to ToolRule.BLOCK)) }
         val result = server().run(token, """{"to":"com.app/play","alias":"com.app/song"}""")
         assertTrue(result.isError())
-        assertTrue("'com.app/song' is blocked" in result.text(), result.text())
+        assertTrue("blocked the tool 'com.app/song'" in result.text(), result.text())
         assertEquals(AuditOutcome.DENIED_POLICY, lastAudit().outcome)
         assertEquals(0, sideEffects.get())
     }
