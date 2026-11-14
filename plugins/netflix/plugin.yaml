@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: netflix
+name: Netflix
+description: Streaming movies and TV shows.
+category: video
+homepage: https://www.netflix.com
+status: experimental
+android:
+  packages: [com.netflix.mediaclient]
+
+actions:
+  - id: search
+    title: Search Netflix
+    description: >-
+      Opens Netflix's search results for a movie, show, actor or genre. Nothing plays until someone taps a title.
+      Netflix needs a signed-in account and may first ask which profile is watching.
+    keywords: [find, movie, film, show, series, tv, watch, stream, actor]
+    risk: action
+    params:
+      query:
+        description: What to look for, e.g. "Stranger Things" or "comedy".
+        required: true
+        max_length: 200
+    confirm: Search Netflix for "{{query}}"
+    android:
+      intent:
+        action: android.intent.action.VIEW
+        data: "https://www.netflix.com/search?q={{query}}"
+    examples:
+      - params: {query: Stranger Things}
+        expect:
+          intent:
+            action: android.intent.action.VIEW
+            package: com.netflix.mediaclient
+            data: "https://www.netflix.com/search?q=Stranger%20Things"
+      - params: {}
+        expect: {error: query}
+
+  - id: open_title
+    title: Open a movie or show
+    description: >-
+      Opens the page of a Netflix movie or show by its Netflix ID, the number in netflix.com/title/<id> links
+      (e.g. 80057281). It shows the title's page; playback does not start until someone taps Play.
+    keywords: [movie, film, show, series, title, link, watch]
+    risk: action
+    params:
+      title_id:
+        description: The numeric Netflix title ID, e.g. 80057281
+        required: true
+        pattern: "^[0-9]{1,12}$"
+    confirm: Open Netflix title {{title_id}}
+    android:
+      intent:
+        action: android.intent.action.VIEW
+        data: "https://www.netflix.com/title/{{title_id}}"
+    examples:
+      - params: {title_id: "80057281"}
+        expect:
+          intent: {action: android.intent.action.VIEW, data: "https://www.netflix.com/title/80057281"}
+      - params: {title_id: stranger-things}
+        expect: {error: title_id}

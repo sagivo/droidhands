@@ -51,3 +51,31 @@ actions:
     examples:
       - params: {query: daft punk}
         expect: {url: "spotify:search:daft%20punk"}
+
+  - id: open_item
+    title: Open a track, album, playlist or podcast
+    description: >-
+      Opens one item in Spotify by its type and Spotify ID, the 22-character code in open.spotify.com links and
+      spotify: URIs (from https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj use type album and id
+      0sNOF9WDwhWunNAHPD3Baj). It shows the item's page; playback may not start by itself. Use play to play by name.
+    keywords: [link, uri, track, song, album, playlist, artist, podcast, episode, show]
+    risk: action
+    params:
+      type:
+        description: What kind of item the ID is for.
+        required: true
+        enum: [track, album, artist, playlist, show, episode]
+      id:
+        description: The 22-character Spotify ID, e.g. 0sNOF9WDwhWunNAHPD3Baj
+        required: true
+        pattern: "^[0-9A-Za-z]{22}$"
+    confirm: Open Spotify {{type}} {{id}}
+    android:
+      url: "https://open.spotify.com/{{type}}/{{id}}"
+    examples:
+      - params: {type: album, id: 0sNOF9WDwhWunNAHPD3Baj}
+        expect: {url: "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj"}
+      - params: {type: playlist, id: "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"}
+        expect: {error: id}
+      - params: {type: song, id: 0sNOF9WDwhWunNAHPD3Baj}
+        expect: {error: type}

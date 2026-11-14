@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: youtube
+name: YouTube
+description: Video streaming and music videos.
+category: video
+homepage: https://www.youtube.com
+status: experimental
+android:
+  packages: [com.google.android.youtube]
+
+actions:
+  - id: search
+    title: Search videos
+    description: >-
+      Opens YouTube's search results for a query. Nothing plays until someone taps a video; use play_from_search
+      to play the best match directly.
+    keywords: [find, video, videos, look up, channel, watch, clip, tutorial]
+    risk: action
+    params:
+      query:
+        description: What to search for, e.g. "how to tie a tie" or a channel name.
+        required: true
+        max_length: 200
+    confirm: Search YouTube for "{{query}}"
+    android:
+      intent:
+        action: android.intent.action.SEARCH
+        extras:
+          query: "{{query}}"
+    examples:
+      - params: {query: how to tie a tie}
+        expect:
+          intent:
+            action: android.intent.action.SEARCH
+            package: com.google.android.youtube
+            extras: {query: how to tie a tie}
+      - params: {}
+        expect: {error: query}
+
+  # Replaces the discovered play_from_search action (same intent) with a better description.
+  - id: play_from_search
+    title: Play a video
+    description: >-
+      Searches YouTube and plays the best match for a query. YouTube picks the video; use search first if the
+      user wants to choose. If YouTube only shows results, tap the video with the screen tools.
+    keywords: [play, watch, video, music video, song, listen, clip]
+    risk: action
+    params:
+      query:
+        description: What to play, e.g. "lofi hip hop radio" or "Bohemian Rhapsody official video".
+        required: true
+        max_length: 200
+    confirm: Play "{{query}}" on YouTube
+    completes: true
+    android:
+      intent:
+        action: android.media.action.MEDIA_PLAY_FROM_SEARCH
+        extras:
+          query: "{{query}}"
+    examples:
+      - params: {query: lofi hip hop radio}
+        expect:
+          intent:
+            action: android.media.action.MEDIA_PLAY_FROM_SEARCH
+            package: com.google.android.youtube
+            extras: {query: lofi hip hop radio}
+      - params: {}
+        expect: {error: query}
+
+  - id: watch
+    title: Play a video by its ID
+    description: >-
+      Opens one YouTube video and plays it, given its 11-character video ID: the v= value of a
+      youtube.com/watch?v=… link or the code after youtu.be/. Use play_from_search to play by name.
+    keywords: [play, watch, video, link, url, youtu.be]
+    risk: action
+    params:
+      video_id:
+        description: The 11-character video ID, e.g. dQw4w9WgXcQ
+        required: true
+        pattern: "^[A-Za-z0-9_-]{11}$"
+    confirm: Play YouTube video {{video_id}}
+    completes: true
+    android:
+      url: "https://www.youtube.com/watch?v={{video_id}}"
+    examples:
+      - params: {video_id: dQw4w9WgXcQ}
+        expect: {url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
+      - params: {video_id: "https://youtu.be/dQw4w9WgXcQ"}
+        expect: {error: video_id}
