@@ -368,8 +368,8 @@ The validator, at build time and when a local plugin is imported, rejects:
 
 * risk below `sensitive` for scope `messages.send` or `calls`, and for any action whose `confirm`, `title`
   or `id` says it sends, posts, pays, buys, orders, books, calls, deletes or transfers;
-* risk `read` for any `steps` recipe that taps, types or scrolls, and for every `intent` and `url`
-  recipe (opening an app is at least an `action`);
+* risk `read` for any `steps` recipe that taps, types, scrolls, starts an intent or opens a link, and for
+  every `intent` and `url` recipe (opening an app is at least an `action`);
 * `risk` or `scope` on a `tool` recipe, or a `tool` name that doesn't exist (or is `intent_start`, a
   `ui_*` / `screen_*` tool, or one of the tools that list or run actions);
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,

@@ -339,9 +339,12 @@ class PluginValidationTest {
         assertValid(doc(action("risk: sensitive\n$url", id = "book_ride")))
         assertValid(doc(action("risk: action\n$url").replace("title: Do it", "title: Show recent calls")))
         val tap = "android:\n  steps:\n    - launch: true\n    - tap: Go"
-        assertProblem(doc(action("risk: read\n$tap")), "actions[0].risk: can't be read: the steps tap, type or scroll")
+        assertProblem(doc(action("risk: read\n$tap")), "actions[0].risk: can't be read: the steps tap, type, scroll, start an intent or open a link")
         assertProblem(doc(action("risk: read\nandroid:\n  steps:\n    - if_present: x\n      then: [{scroll: {direction: down}}]")), "can't be read")
         assertValid(doc(action("risk: read\nandroid:\n  steps:\n    - launch: true\n    - wait_for: Inbox")))
+        assertProblem(doc(action("risk: read\nandroid:\n  steps:\n    - open_url: \"https://example.com/inbox\"")), "can't be read: the steps tap")
+        assertProblem(doc(action("risk: read\nandroid:\n  steps:\n    - intent: {action: a.VIEW}")), "can't be read: the steps tap")
+        assertProblem(doc(action("risk: read\nandroid:\n  steps:\n    - if_present: x\n      then: [{open_url: \"https://example.com\"}]")), "can't be read")
         assertProblem(doc(action("risk: read\n$url")), "actions[0].risk: can't be read: url recipes open the app, which is at least an action")
         assertProblem(doc(action("risk: read\nandroid: {intent: {action: a.VIEW}}")), "can't be read: intent recipes open the app")
     }

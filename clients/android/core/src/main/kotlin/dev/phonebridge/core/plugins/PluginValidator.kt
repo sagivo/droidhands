@@ -89,7 +89,7 @@ object PluginValidator {
             }
             val recipe = action.android
             if (risk == Risk.READ && recipe is StepsRecipe && touches(recipe.steps)) {
-                problem("$path.risk", "can't be read: the steps tap, type or scroll")
+                problem("$path.risk", "can't be read: the steps tap, type, scroll, start an intent or open a link")
             }
             if (risk == Risk.READ && (recipe is IntentRecipe || recipe is UrlRecipe)) {
                 problem("$path.risk", "can't be read: ${recipe.kind} recipes open the app, which is at least an action")
@@ -98,7 +98,8 @@ object PluginValidator {
 
         private fun touches(steps: List<Step>): Boolean = steps.any { s ->
             when (val a = s.action) {
-                is StepAction.Tap, is StepAction.LongPress, is StepAction.TypeText, is StepAction.Scroll -> true
+                is StepAction.Tap, is StepAction.LongPress, is StepAction.TypeText, is StepAction.Scroll,
+                is StepAction.StartIntent, is StepAction.OpenUrl -> true
                 is StepAction.IfPresent -> touches(a.then)
                 else -> false
             }
