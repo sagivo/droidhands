@@ -257,6 +257,7 @@ class BridgeGraph private constructor(val app: Application) {
         val current = settings.state.value
         return linkedMapOf(
             "accessibility_enabled" to (BridgeAccessibilityService.instance != null),
+            "accessibility_problem" to BridgeAccessibilityService.healthCached(),
             "notification_access" to try {
                 BridgeNotificationListener.isEnabled(app)
             } catch (e: Exception) {

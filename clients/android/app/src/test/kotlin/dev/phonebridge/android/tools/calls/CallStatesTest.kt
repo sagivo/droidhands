@@ -90,7 +90,7 @@ class CallStatesTest {
     fun `status note explains a missing number and call waiting`() {
         assertNull(CallStates.statusNote(CallSnapshot(CallState.IN_CALL), numberKnown = false, canReadNumber = false))
         assertNull(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = true, canReadNumber = true))
-        assertTrue(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = false, canReadNumber = false)!!.contains("Setup"))
+        assertTrue(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = false, canReadNumber = false)!!.contains("Permissions & access"))
         assertTrue(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = false, canReadNumber = true)!!.contains("withheld"))
         val waiting = CallStates.statusNote(CallSnapshot(CallState.RINGING, callWaiting = true), numberKnown = true, canReadNumber = true)!!
         assertTrue(waiting.contains("on hold"))

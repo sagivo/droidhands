@@ -117,6 +117,8 @@ test('registration: redirect URI rules', async (t) => {
     'http://[::1]:8080/cb',
     'com.example.app:/oauth2redirect',
     'cursor.app://anysphere.cursor-retrieval/oauth/callback',
+    'cursor://anysphere.cursor-mcp/oauth/callback',
+    'myapp:/cb',
   ];
   for (const uri of accepted) {
     assert.equal((await postJson(`${relay.url}/oauth/register`, { redirect_uris: [uri] })).status, 201, uri);
@@ -129,7 +131,10 @@ test('registration: redirect URI rules', async (t) => {
     'https://user:pass@claude.ai/cb',
     'javascript:alert(1)',
     'data:text/html,hi',
-    'myapp:/cb',
+    'vbscript:msgbox(1)',
+    'blob:https://x/y',
+    'ws://localhost:1/cb',
+    'mailto:a@b.c',
     'intent://x#Intent;end',
     'file:///etc/passwd',
     '/relative',

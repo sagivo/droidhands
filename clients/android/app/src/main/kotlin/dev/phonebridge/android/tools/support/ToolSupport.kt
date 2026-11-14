@@ -23,7 +23,7 @@ object Perms {
         val missing = missing(context, *permissions)
         if (missing.isEmpty()) return null
         val names = missing.joinToString { it.substringAfterLast('.') }
-        return "Permission not granted on the phone: $names. Ask the user to open the PhoneBridge app > Setup and grant it."
+        return "Permission not granted on the phone: $names. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant it."
     }
 
     /** Throws [ToolException] if any permission is missing. */
@@ -35,9 +35,10 @@ object Perms {
 /** Accessibility-service helpers for availability checks. */
 object Accessibility {
     const val NOT_ENABLED =
-        "The PhoneBridge accessibility service is not enabled. Ask the user to open the PhoneBridge app > Setup > Accessibility and turn it on."
+        "The PhoneBridge accessibility service is not enabled. Ask the user to open the PhoneBridge app > Settings > Permissions & access > Accessibility and turn it on."
 
-    fun unavailableReason(): String? = if (BridgeAccessibilityService.instance == null) NOT_ENABLED else null
+    fun unavailableReason(): String? =
+        if (BridgeAccessibilityService.instance == null) NOT_ENABLED else BridgeAccessibilityService.healthCached()
 
     fun require(): BridgeAccessibilityService = BridgeAccessibilityService.instance ?: throw ToolException(NOT_ENABLED)
 }

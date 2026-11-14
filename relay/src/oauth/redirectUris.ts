@@ -4,16 +4,24 @@
  * Accepted:
  * * `https://<host>/…`
  * * loopback `http://localhost|127.0.0.1|[::1]:<port>/…` (native apps, RFC 8252 §7.3)
- * * private-use schemes containing a dot, e.g. `com.example.app:/cb` (RFC 8252 §7.1)
+ * * private-use schemes, e.g. `com.example.app:/cb` (RFC 8252 §7.1) or `cursor://anysphere.cursor-mcp/cb`
  *
- * Never: fragments, credentials, other `http://` hosts, or dot-less custom schemes (which rules out
- * `javascript:`, `data:`, `file:`, `intent:` and friends).
+ * Never: fragments, credentials, other `http://` hosts, or schemes that execute, read local data or
+ * hand off to other apps/protocols ([DENIED_SCHEMES]: `javascript:`, `data:`, `file:`, `intent:`, …).
  */
 
 /** Longest accepted redirect URI. */
 export const MAX_REDIRECT_URI_LENGTH = 512;
 
 const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** Schemes that could run script, read local data or reach other handlers/protocols. */
+const DENIED_SCHEMES: ReadonlySet<string> = new Set([
+  'javascript:', 'vbscript:', 'data:', 'file:', 'blob:', 'about:', 'filesystem:', 'view-source:', 'jar:',
+  'intent:', 'android-app:', 'content:', 'chrome:', 'chrome-extension:', 'moz-extension:', 'resource:',
+  'ws:', 'wss:', 'ftp:', 'ftps:', 'sftp:', 'ssh:', 'telnet:', 'smb:', 'mailto:', 'tel:', 'sms:', 'mms:',
+  'geo:', 'market:', 'itms:', 'itms-apps:', 'ms-settings:',
+]);
 
 /** RFC 3986 scheme syntax. */
 const SCHEME_REGEX = /^[a-z][a-z0-9+.-]*:$/;
@@ -54,8 +62,8 @@ export function classifyRedirectUri(uri: string): { kind: RedirectUriKind | null
     if (url.port === '') return fail('loopback redirect URIs must include a port, e.g. http://localhost:33418/callback');
     return { kind: 'loopback', problem: null };
   }
-  if (!SCHEME_REGEX.test(scheme) || !scheme.slice(0, -1).includes('.')) {
-    return fail('custom-scheme redirect URIs must use a reverse-domain scheme such as com.example.app:/callback');
+  if (!SCHEME_REGEX.test(scheme) || DENIED_SCHEMES.has(scheme)) {
+    return fail('custom-scheme redirect URIs must use the app\'s own scheme, such as com.example.app:/callback');
   }
   return { kind: 'private_use', problem: null };
 }

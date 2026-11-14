@@ -20,7 +20,7 @@ internal fun Cursor.longOr(index: Int, default: Long): Long = if (index < 0 || i
 internal fun Cursor.intOr(index: Int, default: Int): Int = if (index < 0 || isNull(index)) default else getInt(index)
 
 internal const val CONTACTS_ACCESS_DENIED =
-    "Android denied access to the contacts. Ask the user to open the PhoneBridge app > Setup and grant the Contacts permission."
+    "Android denied access to the contacts. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant the Contacts permission."
 
 /** Turns a provider SecurityException (permission revoked mid-call) into an agent-facing error. */
 internal inline fun <T> withProviderAccess(deniedMessage: String, block: () -> T): T =

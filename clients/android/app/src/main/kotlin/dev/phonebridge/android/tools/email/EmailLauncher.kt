@@ -66,7 +66,7 @@ object EmailLauncher {
     fun backgroundLaunchNote(context: Context): String? =
         if (BridgeAccessibilityService.instance == null && !Settings.canDrawOverlays(context)) {
             "If the compose screen did not appear, Android blocked opening it from the background: ask the user to enable " +
-                "the PhoneBridge accessibility service (or 'Display over other apps') in PhoneBridge > Setup."
+                "the PhoneBridge accessibility service (or 'Display over other apps') in PhoneBridge app > Settings > Permissions & access."
         } else {
             null
         }

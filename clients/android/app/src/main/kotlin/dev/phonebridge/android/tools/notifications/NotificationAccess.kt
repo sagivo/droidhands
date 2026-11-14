@@ -21,7 +21,7 @@ import java.util.concurrent.TimeoutException
  */
 internal object NotificationAccess {
     const val NOT_ENABLED =
-        "Notification access is not enabled for PhoneBridge. Ask the user to open PhoneBridge > Setup > Notification access."
+        "Notification access is not enabled for PhoneBridge. Ask the user to open PhoneBridge app > Settings > Permissions & access > Notification access."
 
     const val RECONNECTING =
         "Notification access is enabled for PhoneBridge, but Android has not connected its notification listener yet " +

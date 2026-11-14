@@ -23,6 +23,8 @@ object AuditPresentation {
         AuditOutcome.EXCEPTION,
         -> OutcomeCategory.ERROR
         AuditOutcome.DENIED_SCOPE,
+        AuditOutcome.DENIED_POLICY,
+        AuditOutcome.DENIED_APP,
         AuditOutcome.RATE_LIMITED,
         AuditOutcome.PAUSED,
         AuditOutcome.DENIED_BY_USER,
@@ -36,6 +38,8 @@ object AuditPresentation {
         AuditOutcome.TOOL_ERROR -> "Tool error"
         AuditOutcome.UNKNOWN_TOOL -> "Unknown tool"
         AuditOutcome.DENIED_SCOPE -> "Not in scope"
+        AuditOutcome.DENIED_POLICY -> "Blocked by rule"
+        AuditOutcome.DENIED_APP -> "App blocked"
         AuditOutcome.RATE_LIMITED -> "Rate limited"
         AuditOutcome.PAUSED -> "Paused"
         AuditOutcome.DENIED_BY_USER -> "Denied by you"

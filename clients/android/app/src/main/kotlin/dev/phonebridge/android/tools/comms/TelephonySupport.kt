@@ -30,7 +30,7 @@ internal object TelephonySupport {
         } catch (e: SecurityException) {
             throw ToolException(
                 "Android refused to place the call (CALL_PHONE permission missing or restricted). " +
-                    "Ask the user to open the PhoneBridge app > Setup and grant Phone access.",
+                    "Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant Phone access.",
             )
         }
     }

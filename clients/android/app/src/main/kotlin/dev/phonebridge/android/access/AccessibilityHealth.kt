@@ -76,7 +76,7 @@ class AccessibilityHealth(
 
         /** Agent-facing explanation when the service isn't connected at all. */
         const val NOT_RUNNING_MESSAGE =
-            "PhoneBridge's accessibility service is not running. Ask the user to turn it on in PhoneBridge > Setup > " +
+            "PhoneBridge's accessibility service is not running. Ask the user to turn it on in PhoneBridge app > Settings > Permissions & access > " +
                 "Accessibility (if Android already shows it as on, turn it off and on again in Settings > Accessibility)."
     }
 }

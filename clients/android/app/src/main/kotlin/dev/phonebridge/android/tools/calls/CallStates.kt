@@ -87,7 +87,7 @@ object CallStates {
                     if (canReadNumber) {
                         "Android did not reveal the caller's number (it may be withheld, or the call is in a calling app)."
                     } else {
-                        "To see the caller's number, the user must grant PhoneBridge Phone & call log access (PhoneBridge > Setup)."
+                        "To see the caller's number, the user must grant PhoneBridge Phone & call log access (PhoneBridge app > Settings > Permissions & access)."
                     },
                 )
             }

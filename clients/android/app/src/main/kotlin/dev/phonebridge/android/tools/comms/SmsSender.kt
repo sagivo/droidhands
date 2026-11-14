@@ -68,7 +68,7 @@ internal class SmsSender(private val context: Context) {
                 } catch (e: SecurityException) {
                     throw ToolException(
                         "Android refused to send the SMS (SEND_SMS permission missing or restricted). " +
-                            "Ask the user to open the PhoneBridge app > Setup and grant the SMS permission.",
+                            "Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant the SMS permission.",
                     )
                 } catch (e: IllegalArgumentException) {
                     throw ToolException("Android rejected the SMS: the number or the message is invalid.")

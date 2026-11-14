@@ -138,7 +138,7 @@ private fun JsonObjectBuilder.summary(draft: EmailDraft, pkg: String) {
 
 private fun manualSendNote(context: Context, label: String): String = buildString {
     append("Not sent — the user must tap Send. The PhoneBridge accessibility service is off, so $label was opened with ")
-    append("the email filled in. To send automatically, ask the user to enable it in PhoneBridge > Setup > Accessibility.")
+    append("the email filled in. To send automatically, ask the user to enable it in PhoneBridge app > Settings > Permissions & access > Accessibility.")
     if (DeviceState.isLocked(context)) append(" The phone is locked: the compose screen shows once the user unlocks it.")
     EmailLauncher.backgroundLaunchNote(context)?.let { append(' ').append(it) }
 }

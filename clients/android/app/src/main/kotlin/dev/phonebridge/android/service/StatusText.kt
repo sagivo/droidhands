@@ -78,6 +78,8 @@ object StatusText {
         AuditOutcome.TOOL_ERROR -> "failed"
         AuditOutcome.UNKNOWN_TOOL -> "unknown tool"
         AuditOutcome.DENIED_SCOPE -> "not allowed"
+        AuditOutcome.DENIED_POLICY -> "blocked by rule"
+        AuditOutcome.DENIED_APP -> "app blocked"
         AuditOutcome.RATE_LIMITED -> "rate limited"
         AuditOutcome.PAUSED -> "blocked: paused"
         AuditOutcome.DENIED_BY_USER -> "denied by you"

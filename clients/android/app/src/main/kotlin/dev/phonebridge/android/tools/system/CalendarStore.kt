@@ -93,7 +93,7 @@ internal class CalendarStore(private val context: Context) {
         block()
     } catch (e: SecurityException) {
         throw ToolException(
-            "Calendar permission not granted on the phone. Ask the user to open the PhoneBridge app > Setup and grant Calendar.",
+            "Calendar permission not granted on the phone. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant Calendar.",
         )
     }
 

@@ -172,7 +172,7 @@ private fun JsonObjectBuilder.recipient(target: WhatsAppTarget, pkg: String) {
 private fun manualSendNote(context: Context): String = buildString {
     append("The message was NOT sent. The PhoneBridge accessibility service is off, so WhatsApp was opened on the chat ")
     append("with the text prefilled and the user must tap Send. To send automatically, ask the user to enable it in ")
-    append("PhoneBridge > Setup > Accessibility.")
+    append("PhoneBridge app > Settings > Permissions & access > Accessibility.")
     if (DeviceState.isLocked(context)) append(" The phone is locked: the chat shows once the user unlocks it.")
     WhatsAppLauncher.backgroundLaunchNote(context)?.let { append(' ').append(it) }
 }

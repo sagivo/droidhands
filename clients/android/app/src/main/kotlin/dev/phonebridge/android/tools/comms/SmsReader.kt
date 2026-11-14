@@ -91,6 +91,6 @@ internal class SmsReader(private val context: Context) {
         const val COL_READ = 6
         const val CANCEL_CHECK_EVERY = 256
         const val SMS_ACCESS_DENIED =
-            "Android denied access to SMS. Ask the user to open the PhoneBridge app > Setup and grant the SMS permission."
+            "Android denied access to SMS. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant the SMS permission."
     }
 }

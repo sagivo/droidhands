@@ -29,7 +29,7 @@ import kotlin.math.roundToLong
 private const val GEOCODE_TIMEOUT_MS = 10_000L
 
 private const val NO_LOCATION_PERMISSION =
-    "Location permission not granted on the phone. Ask the user to open the PhoneBridge app > Setup and grant Location " +
+    "Location permission not granted on the phone. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant Location " +
         "(then \"Allow all the time\", because agent requests arrive while the app is in the background)."
 
 private const val LOCATION_OFF =
@@ -37,7 +37,7 @@ private const val LOCATION_OFF =
 
 private const val NO_BACKGROUND =
     "PhoneBridge does not have background location (\"Allow all the time\"), so Android may withhold the location while " +
-        "the PhoneBridge app is not open. Ask the user to grant it in the PhoneBridge app > Setup > Location while in background."
+        "the PhoneBridge app is not open. Ask the user to grant it in the PhoneBridge app > Settings > Permissions & access > Location while in background."
 
 /** Tools: location_get (docs/TOOLS.md). */
 fun locationTools(context: Context): List<Tool> = listOf(locationGet(context))

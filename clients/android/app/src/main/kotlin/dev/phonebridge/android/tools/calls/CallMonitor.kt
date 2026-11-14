@@ -73,7 +73,7 @@ internal class CallMonitor(private val context: Context) {
         const val NO_TELECOM = "This device has no phone-call service (Telecom), so PhoneBridge can't see or control calls."
 
         const val PERMISSION_DENIED =
-            "Android denied access to phone calls. Ask the user to open the PhoneBridge app > Setup and grant " +
+            "Android denied access to phone calls. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant " +
                 "Phone & call log (it includes answering and ending calls)."
     }
 }

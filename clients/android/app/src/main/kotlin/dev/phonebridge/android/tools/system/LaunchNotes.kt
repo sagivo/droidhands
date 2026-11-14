@@ -27,7 +27,7 @@ internal object LaunchNotes {
             if (!canStartFromBackground(context)) {
                 add(
                     "PhoneBridge's accessibility service is off, so Android may silently block opening apps from the " +
-                        "background. If nothing opened, ask the user to enable it in PhoneBridge > Setup > Accessibility.",
+                        "background. If nothing opened, ask the user to enable it in PhoneBridge app > Settings > Permissions & access > Accessibility.",
                 )
             }
         }

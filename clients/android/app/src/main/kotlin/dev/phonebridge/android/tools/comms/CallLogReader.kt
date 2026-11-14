@@ -72,6 +72,6 @@ internal class CallLogReader(private val context: Context) {
         const val COL_PRESENTATION = 5
         const val CANCEL_CHECK_EVERY = 256
         const val CALL_LOG_ACCESS_DENIED =
-            "Android denied access to the call log. Ask the user to open the PhoneBridge app > Setup and grant Phone & call log access."
+            "Android denied access to the call log. Ask the user to open the PhoneBridge app > Settings > Permissions & access and grant Phone & call log access."
     }
 }
