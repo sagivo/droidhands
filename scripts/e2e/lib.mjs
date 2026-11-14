@@ -56,10 +56,20 @@ export class McpClient {
     const raw = await this.rpc('tools/call', { name, arguments: args });
     const text = raw.content.filter((c) => c.type === 'text').map((c) => c.text).join('\n');
     const images = raw.content.filter((c) => c.type === 'image');
-    let json = null;
-    try { json = JSON.parse(text); } catch { /* plain text */ }
-    return { isError: !!raw.isError, text, json, images, raw };
+    return { isError: !!raw.isError, text, json: leadingJson(text), images, raw };
   }
+}
+
+/** Parses the JSON value a result starts with; tools may append a plain-text footer after it. */
+function leadingJson(text) {
+  try { return JSON.parse(text); } catch { /* maybe a footer follows */ }
+  const open = text.trimStart()[0];
+  const close = open === '[' ? ']' : open === '{' ? '}' : null;
+  if (!close) return null;
+  for (let end = text.lastIndexOf(close); end > 0; end = text.lastIndexOf(close, end - 1)) {
+    try { return JSON.parse(text.slice(0, end + 1)); } catch { /* keep shrinking */ }
+  }
+  return null;
 }
 
 const ADB = process.env.ADB || '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';

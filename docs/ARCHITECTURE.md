@@ -33,9 +33,10 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
 1. A transport (`RelayClient` or `LocalHttpServer`) produces a `TransportRequest`
    (authorization header, raw body, metadata) and calls `McpServer.handle()`.
 2. `McpServer` authenticates with `TokenManager` (401 on failure), parses JSON-RPC, and dispatches.
-3. `tools/call`: registry lookup and scope check, then the kill switch (`isAccessEnabled`), then
-   `PolicyEngine` (rate limits, and whether confirmation is needed under the token's policy), then
-   confirmation:
+3. `tools/call`: registry lookup and scope check, then the kill switch (`isAccessEnabled`), then the
+   global security settings (the call is refused if they can't be read), then `PolicyEngine`: the
+   per-tool BLOCK rule, then active hours, then rate limits, then whether confirmation is needed (tool rule
+   ASK/ALLOW, else the token's policy). Then confirmation:
    * `pre`-confirm tools: `ConfirmationProvider` is asked before the call, with `tool.describeCall(args)`.
    * `internal`-confirm tools (`confirmsInternally = true`): the tool resolves its targets and then
      calls `ctx.requireConfirmation(summary)`, which prompts only if policy requires it and throws
@@ -43,6 +44,10 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
 4. The tool runs with a timeout (`tool.timeoutMs`). `ToolException` and other errors become
    `isError` results.
 5. `AuditLog.record()` is called for every call (allowed, denied or failed) and every auth failure.
+   Outcomes include `DENIED_POLICY` (tool rule or active hours) and `DENIED_APP` (app access).
+   `TrackingAuditLog` also feeds `UsageTracker`, which holds the per-agent counters behind the usage
+   screens. `CallContext` carries the call's `appAccess` and `redactOneTimeCodes`, which every
+   app-facing tool enforces.
 
 ## Android components
 
@@ -53,7 +58,9 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
 | `BridgeAccessibilityService` | Reads the UI tree of any app, performs clicks, text entry, gestures, global actions and screenshots. Also exempts the app from background-activity-launch limits. |
 | `BridgeNotificationListener` | Mirrors active notifications. Replies through `RemoteInput`, triggers actions, dismisses. |
 | `NotificationConfirmationProvider` | Shows Allow/Deny prompts, plus `ConfirmationActivity` for full details. |
-| UI (`MainActivity`, Compose) | Setup checklist (permissions and special accesses), connection settings, tokens (create/revoke, show once, copy config snippets), activity log, pause switch. |
+| `PairingCoordinator` / `PairingActivity` | One-tap pairing: shows the agent's name, origin and code, lets the user choose the access level, and issues the token (`origin = "pairing"`). |
+| `UnlockPrompt` | "Unlock to continue": asks the user to unlock when a screen-based action arrives while the phone is locked. |
+| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, access level, app access, tool rules, active hours, revoke); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all). Handles `phonebridge://configure` links. |
 
 ## Concurrency
 

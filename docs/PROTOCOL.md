@@ -12,8 +12,9 @@ iOS/desktop later) and the relay MUST follow them exactly. All JSON is UTF-8.
 1. **Agent ⇄ endpoint**: MCP over *Streamable HTTP* (stateless subset). Served by the relay at
    `POST {relay}/mcp`, and by the phone itself at `POST http://<phone>:<port>/mcp` (local mode).
 2. **Device ⇄ relay**: a JSON WebSocket that tunnels HTTP requests (section 3).
-3. **Tokens & device identity**: formats in section 4. The relay never stores or validates agent
-   token secrets; the device is the only authority.
+3. **Tokens & device identity**: formats in section 2. The relay never stores or validates agent
+   token secrets; the device is the only authority. The one exception is pairing (§5): the relay holds
+   the newly minted token in memory until the agent exchanges its code, at most 120 s.
 
 ---
 
@@ -42,7 +43,8 @@ pb1.<deviceId>.<tokenId>.<tokenSecret>
 regex: ^pb1\.[a-z2-7]{26}\.[a-z2-7]{12}\.[A-Za-z0-9_-]{43}$
 ```
 
-* Issued **on the phone** by the user (Tokens screen). The plaintext is shown exactly once.
+* Issued **on the phone**, either through one-tap pairing (§5) or manually (Agents → Connect an AI agent →
+  *Use a token instead*). A manual token's plaintext is shown exactly once.
 * The device stores `SHA-256(tokenSecret_bytes)` as lowercase hex, never the plaintext, and compares
   with a constant-time comparison.
 * The relay only parses `deviceId` from the token to route the request. It never stores tokens.
@@ -198,7 +200,10 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
 |---|---|
 | `GET /.well-known/oauth-protected-resource/d/<id>/mcp` | RFC 9728: `{"resource":"{relay}/d/<id>/mcp","authorization_servers":["{relay}"],"bearer_methods_supported":["header"],"resource_name":"PhoneBridge"}` |
 | `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414: `issuer` `{relay}`, `authorization_endpoint` `{relay}/oauth/authorize`, `token_endpoint` `{relay}/oauth/token`, `registration_endpoint` `{relay}/oauth/register`, `response_types_supported` `["code"]`, `grant_types_supported` `["authorization_code"]`, `code_challenge_methods_supported` `["S256"]`, `token_endpoint_auth_methods_supported` `["none"]`, `scopes_supported` `["phone"]` |
-| `POST /oauth/register` | RFC 7591 dynamic registration for **public clients**. `redirect_uris` must be `https://…` or loopback `http://localhost|127.0.0.1|[::1]:<port>/…`. Private-use schemes (`com.example.app:/cb`) are allowed if they contain a dot. `client_id` is **stateless**: `base64url(json{n:client_name,r:redirect_uris,t:issuedAt}) + "." + base64url(HMAC-SHA256(relaySecret, payload))`. Answers `201` with `client_id`, `client_name`, `redirect_uris`, `token_endpoint_auth_method:"none"`, `grant_types`, `response_types`, `client_id_issued_at`. |
+| `POST /oauth/register` | RFC 7591 dynamic registration for **public clients**. `redirect_uris` must be `https://…` or loopback `http://localhost|127.0.0.1|[::1]:<port>/…`. Private-use schemes are allowed (`com.example.app:/cb`, `cursor://…`) except a denylist of schemes that
+  execute, read local data or reach other handlers (`javascript:`, `data:`, `file:`, `blob:`, `intent:`, `content:`, `ws:`,
+  `mailto:`, `tel:`, …). Unsupported `token_endpoint_auth_method`/`grant_types` values are replaced in the 201
+  response (RFC 7591 §3.2.1). `client_id` is **stateless**: `base64url(json{n:client_name,r:redirect_uris,t:issuedAt}) + "." + base64url(HMAC-SHA256(relaySecret, payload))`. Answers `201` with `client_id`, `client_name`, `redirect_uris`, `token_endpoint_auth_method:"none"`, `grant_types`, `response_types`, `client_id_issued_at`. |
 
 `relaySecret` comes from `RELAY_SECRET`, or is generated once and persisted to `{DATA_DIR}/relay-secret`.
 Discovery, registration and token endpoints send `Access-Control-Allow-Origin: *` (no
@@ -252,6 +257,19 @@ credentials) so browser-based clients work.
    before the phone answers, the relay sends `{ "type": "pair_cancel", "id": "p_…" }` and the phone
    removes its prompt.
 
+**Implementation notes** (relay ≥ wave 2). Denied and expired redirects also carry `iss` and
+`error_description` (RFC 9207). The status endpoint also returns `expiresAt`, and `&view=html` serves a
+reloadable page that 303-redirects once the pairing is decided. Repeating an identical authorization
+request reuses the pending (or approved) pairing instead of prompting the phone again. When a phone
+disconnects, its pending pairings become `expired`; no `pair_cancel` is sent, because the connection is
+gone. A late or foreign `pair_response` carrying a token gets `pair_abandoned` with its tokenId, and a
+duplicate approval is ignored. `pair_complete`/`pair_abandoned` notices for an offline phone are
+queued in memory and delivered when it reconnects. The device rejects malformed `pair_request`s
+(bad id, or a display code outside the alphabet) with `denied`. It answers `busy` beyond 5 open
+prompts. It interprets `expiresAt` in relay time, using the welcome's `serverTime` to correct for
+clock skew. It deletes a paired token that is still unused 15 min after approval if neither
+`pair_complete` nor `pair_abandoned` arrived.
+
 ### 5.4 Token endpoint
 
 `POST /oauth/token` (`application/x-www-form-urlencoded`), with `grant_type=authorization_code`, `code`,
@@ -261,7 +279,9 @@ sent). It then deletes the code and answers
 `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. There's no `expires_in`, because
 tokens live until revoked on the phone, and no refresh token. A revoked token triggers a `401` with
 `resource_metadata`, and the client simply pairs again. Errors follow RFC 6749 §5.2 (`invalid_grant`,
-`invalid_request`, `invalid_client`, `unsupported_grant_type`) with status 400.
+`invalid_request`, `invalid_client`, `unsupported_grant_type`, and `invalid_target` for a resource
+mismatch) with status 400. `client_id` may also arrive with HTTP Basic auth. Any failed exchange burns
+the code and sends `pair_abandoned`, so the phone deletes the token.
 
 ### 5.5 Phone setup link
 
@@ -271,8 +291,10 @@ tokens live until revoked on the phone, and no refresh token. A revoked token tr
 link. The access key is read from the page URL **fragment** (`/setup#key=…`), so it never reaches
 the server or its logs. On startup the relay prints the setup URL, with the fragment when
 `RELAY_ACCESS_KEY` is set, plus a terminal QR code. The app handles
-`phonebridge://configure?relay=…&key=…` by asking "Connect to relay <host>?" and then saving and
-connecting.
+`phonebridge://configure?relay=…&key=…` (both values percent-encoded) by asking "Connect to relay
+<host>?" and then saving and connecting. When an access key is set, the page draws its QR code
+through `POST /setup/qr` (`{"key"}` → SVG path; a wrong key gets 403 and counts as an auth failure),
+so the key never appears in a page served to someone who doesn't already have it.
 
 ## 6. Versioning
 

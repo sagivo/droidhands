@@ -20,11 +20,27 @@ Contact resolution: tools that accept `contact` (a name) resolve it with the sam
 `contacts_search`. If zero or several contacts match, the tool fails with an error that lists the
 candidates, so the agent can ask the user. It never guesses.
 
+## Common result conventions
+
+* List results are compact JSON, optionally followed by a short plain-text footer (for example
+  "more results not shown" or "N apps hidden by app access").
+* `codes_hidden: true` on an item means one-time codes in it were masked as `[code hidden]`.
+* `content_hidden_by_android: true` means Android 15+ hid that notification's content from PhoneBridge.
+* Long texts are cut with a `[truncated, N chars total]` marker.
+* `url_open` / `intent_start` results may include `chooser: true`. If some candidate apps are blocked,
+  the error lists the allowed apps to pass as `package`.
+* `notification_action` results may include `opens_screen` and `note`.
+* `alarm_set` → `{set, alarm, next_ring, rings_in, days?, label?, clock_app?, note?}`.
+  `timer_set` → `{set, timer, seconds, ends_at, label?, clock_app?, note?}`. `set: false` means
+  Android asked the user to pick a clock app.
+* Screen action tools (`ui_tap`, `ui_type`, `ui_scroll`, `ui_swipe`) ask the user to unlock first when
+  the phone is locked.
+
 ## Meta
 
 | tool | scope | risk | args | notes |
 |---|---|---|---|---|
-| `bridge_capabilities` | *(none, always allowed)* | READ | – | The token's name and scopes, and each visible tool with its availability (for example a missing permission, accessibility off, or phone locked). Agents should call it when unsure. |
+| `bridge_capabilities` | *(none, always allowed)* | READ | – | The token's name and scopes, its `app_access` (mode, summary, allowed apps for allowlists, blocked-app **count** only), `tool_rules`, `active_hours`, and `one_time_codes_hidden`. Also each visible tool with its availability (for example a missing permission, accessibility off or stuck, or phone locked) and its `rule`. BLOCKed tools are omitted. Agents should call it when unsure. |
 
 ## Device — scope `device`
 
@@ -68,12 +84,12 @@ candidates, so the agent can ask the user. It never guesses.
 | `sms_list` | messages.read | READ | `box`: `inbox\|sent\|all` (default all), `address` or `contact`, `query` (text contains), `since_hours`, `limit` (default 20, max 200) |
 | `call_log_list` | messages.read | READ | `type`: `incoming\|outgoing\|missed\|all`, `address` or `contact`, `since_hours`, `limit` (default 20) |
 | `sms_send` | messages.send | SENSITIVE (internal) | `to` (phone) or `contact` (name), `message` (req) → waits up to 30 s for the radio's sent status |
-| `whatsapp_send` | messages.send | SENSITIVE (internal) | `to` (phone, international format preferred) or `contact` (name), `message` (req), `business` bool (use WhatsApp Business). Needs accessibility for the automatic Send tap. Without it, the chat opens with the text prefilled and the result says the user must tap Send. Fails if the phone is locked. |
+| `whatsapp_send` | messages.send | SENSITIVE (internal) | `to` (phone, international format preferred) or `contact` (name), `message` (req), `business` bool (use WhatsApp Business). Needs accessibility for the automatic Send tap. Without it, the chat opens with the text prefilled and the result is `{sent:false, opened:true, …, note}`. If the phone is locked, asks the user to unlock (up to 60 s). Result: `{sent:true, to, number, app}`. |
 | `phone_call` | calls | SENSITIVE (internal) | `to` (phone) or `contact` (name) – places a call |
-| `call_status` | calls | READ | – → `{state: idle\|ringing\|in_call, incoming_number?, contact_name?}` (number/name only with READ_CALL_LOG/READ_CONTACTS) |
-| `call_answer` | calls | SENSITIVE (pre) | – answers the ringing call (Android 15 hides call-notification actions from listeners, so this uses the telephony API) |
-| `call_end` | calls | ACTION | – ends the current call or rejects a ringing one |
-| `email_send` | messages.send | SENSITIVE (internal) | `to` (email address(es), comma-separated) or `contact` (name, resolved to the contact's email), `cc`, `subject`, `body` (req), `app` (package, default: the default email app, preferring Gmail) – opens the app's compose screen pre-filled and taps Send with accessibility. Without accessibility, the compose screen is left open and the result says the user must tap Send. To reply to a received email: use `notification_reply` when the mail notification has an inline reply, otherwise `notification_action` "Reply" plus screen tools, or the mail app via screen tools. |
+| `call_status` | calls | READ | – → `{state: idle\|ringing\|in_call, incoming_number?, contact_name?, call_waiting?, app_call?, note?}` (number/name only with READ_CALL_LOG/READ_CONTACTS) |
+| `call_answer` | calls | SENSITIVE (pre) | – answers the ringing call → `{answered, state, app_call?, note}` (Android 15 hides call-notification actions from listeners, so this uses the telephony API) |
+| `call_end` | calls | ACTION | – ends the current call or rejects a ringing one → `{ended, rejected?, was, state, note?}` |
+| `email_send` | messages.send | SENSITIVE (internal) | `to` (email address(es), comma-separated) or `contact` (name, resolved to the contact's email), `cc`, `subject`, `body` (req), `app` (package, default: the default email app, preferring Gmail) – opens the app's compose screen pre-filled and taps Send with accessibility. Without accessibility, the compose screen is left open and the result is `{sent:false, opened:true, to, subject, app, note}`. On success, `{sent:true, to, cc?, subject, app}`. `to`/`cc` may also be JSON arrays. If the phone is locked, asks the user to unlock (up to 60 s). To reply to a received email: use `notification_reply` when the mail notification has an inline reply, otherwise `notification_action` "Reply" plus screen tools, or the mail app via screen tools. |
 
 ## Notifications — scopes `notifications.read`, `notifications.act`
 

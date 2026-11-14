@@ -11,7 +11,7 @@ rate-limited, optionally approved by you, and logged on the device itself.
 | Someone on the internet calls your MCP endpoint | 256-bit bearer tokens issued on the phone. Only `SHA-256(secret)` is stored, with constant-time comparison. Unknown, revoked or expired tokens get an identical `401`. |
 | A token leaks from an agent's config | Scopes limit what it can do. Expiry. One-tap revoke on the phone. Per-token rate limits. On-phone confirmation for sensitive actions (default). An audit log on the phone. A global **pause** switch in the app and in the persistent notification. |
 | The agent (LLM) is prompt-injected, e.g. by a message it reads | The confirmation policy shows the **resolved** action ("Send WhatsApp to Tania Cohen +972…: '…'") on the phone for every `SENSITIVE` tool. The user taps Allow or Deny. With no answer in 60 s, the request is denied. |
-| Relay operator or relay compromise | The relay holds no token secrets and cannot mint tokens: every token is verified on the phone. It can still read traffic in transit, because MCP clients terminate TLS at the relay. **Self-host the relay** (one small Node process or Docker container). End-to-end encryption between agent and phone would need MCP client support, so it is future work. |
+| Relay operator or relay compromise | The relay cannot mint tokens: every token is verified on the phone. It stores one secret (`DATA_DIR/relay-secret`, used only to sign OAuth client ids), and during a pairing it holds the new token in memory for at most 120 s, until the agent exchanges its code. It can still read traffic in transit, because MCP clients terminate TLS at the relay. **Self-host the relay** (one small Node process or Docker container). End-to-end encryption between agent and phone would need MCP client support, so it is future work. |
 | Device impersonation at the relay | The device id is `base32(SHA-256(deviceSecret))[:26]`, so it is self-certifying. Only the holder of the 32-byte secret can register that id. Operators can also require `RELAY_ACCESS_KEY` so strangers cannot use the relay. |
 | Malicious website hits the local-mode server (DNS rebinding / CSRF) | Local mode binds to `127.0.0.1` by default (reach it with `adb forward`). Requests with a non-allowlisted `Origin` header get `403`. A bearer token is still required. There is no CORS. |
 | Other apps on the phone | Services are not exported, except system-bound ones protected by `BIND_*` permissions. Confirmation broadcasts use explicit, immutable `PendingIntent`s carrying a random nonce. Tokens and the device secret live in app-private storage. |
@@ -47,7 +47,8 @@ Presets offered in the app: **Read-only** (`device`, `apps`, `contacts.read`,
   replies and actions, raw intents).
 * `ALL_ACTIONS`: prompts for every `ACTION` and `SENSITIVE` tool.
 
-Prompts appear as a high-priority notification with **Allow** and **Deny** buttons. Tapping the
+Prompts appear as a high-priority notification with **Allow** and **Deny** buttons. Each prompt is
+its own notification group, so Android never collapses it and hides the buttons. Tapping the
 notification opens a screen with the full details. A tool that resolves its targets first
 (`confirm: internal`) shows the resolved recipient and number.
 
@@ -70,6 +71,19 @@ These are set per agent (token) in **Agents > (agent) > Advanced**, except where
 * Opening apps: `app_open`, `url_open`, `intent_start`, and `whatsapp_*` / `email_send`. Refused when the target or the resolved handling app is blocked.
 * `apps_list` hides blocked apps.
 
+When Android would show its app chooser and some candidate apps are blocked, `url_open` and
+`intent_start` pin the intent to the single allowed app, or refuse and list the allowed apps. The
+chooser is never shown with blocked apps in it. After a `ui_*` action that brings a blocked app to the
+foreground, PhoneBridge presses Home and the call fails. Under app restrictions, screenshots are also
+refused on the lock screen, in Quick Settings, and while any blocked app's notification is visible
+(for example a heads-up). System UI, the home app, keyboards, framework dialogs, the chooser and
+permission dialogs are part of the OS, not apps. They stay usable under an allowlist unless named in
+a blocklist or the never-allow list.
+
+Approval and pairing screens use `FLAG_SECURE`, hide other apps' overlays (Android 12+) and ignore
+obscured touches. PhoneBridge's own screens and notification buttons cannot be read or tapped by
+its screen tools, so an agent cannot approve its own requests.
+
 Data scopes such as `contacts.read`, `messages.send` (SMS through the system API) and `calendar.*` are governed by **scopes**, not by app access, because they go through Android system APIs rather than an app's UI.
 
 ## Rate limits (per token, sliding 60 s window)
@@ -79,8 +93,15 @@ refused with an `isError` result and are audit-logged.
 
 ## Known platform limits
 
-* Android doesn't let apps unlock the phone. Screen tools and `whatsapp_send` need it unlocked.
-  Notification replies work while locked.
+* Android doesn't let apps unlock the phone. Screen tools, `whatsapp_send` and `email_send` need it
+  unlocked, so they post *"Unlock your phone to let <agent> <action>"* and continue as soon as you
+  unlock (or fail after 60 s). Notification replies work while locked.
+* Android 15+ hides the content of notifications it classifies as sensitive (and sometimes their
+  action buttons) from notification listeners. Replies still work; SMS are read via `sms_list`, and
+  calls are handled with `call_status` / `call_answer` / `call_end`.
+* Screen tools show whatever is on screen. *Hide one-time codes* covers SMS and notification text,
+  but not codes visible inside an app's UI. Block your SMS and authenticator apps for agents that
+  have screen access.
 * In Doze, Android may delay network access for apps that aren't exempt from battery
   optimization. Grant the exemption in the setup screen. Push wakeups (FCM) are future work.
 * Accessibility gives the app broad power over every app. That is how "control any app" works,

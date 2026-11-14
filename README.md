@@ -37,14 +37,19 @@ About 40 tools (full list: [docs/TOOLS.md](docs/TOOLS.md)):
 
 The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
-* **Tokens are created on the phone**: 256-bit, shown once, stored only as a hash. Each one is
-  revocable, can expire, and is limited to **scopes** (Read-only / Assistant / Full control, or
-  pick scopes individually).
+* **One-tap pairing**: paste your connection URL into Claude.ai, Claude Code, ChatGPT or any MCP
+  client, check the 4-letter code on the phone, choose an access level, and tap **Allow**. The token
+  is minted on the phone (256-bit, stored only as a hash). Manual tokens are available too.
+* **Per-agent control**: access level (Read-only / Assistant / Full control, or custom scopes),
+  **which apps** it may see and operate, per-tool **Allow / Ask / Block** rules, **active hours**,
+  expiry, and instant **revoke**. A global never-allow list pre-selects banking, password-manager
+  and authenticator apps, and one-time codes are hidden from agents by default.
 * **On-phone approval** of sensitive actions (default). Approval shows the *resolved* recipient and
   text, needs an unlocked phone, and auto-denies after 60 s.
-* Per-token rate limits, a full **audit log** on the phone, and a global **pause** switch (in the
-  app and in the notification).
-* The relay is a stateless tunnel. It can't mint or verify tokens and stores nothing. Device ids
+* Per-token rate limits, a full **audit log** with per-agent usage charts, and a global **pause**
+  switch (in the app and in the notification).
+* The relay is a tunnel. It can't mint or verify tokens. Its only state is one secret file used to
+  sign OAuth client ids, plus, during a pairing, the new token held in memory for at most 120 s. Device ids
   are self-certifying, so nobody can impersonate your phone at the relay.
 
 ## Repository layout
@@ -52,7 +57,10 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 | Path | What |
 |---|---|
 | `docs/` | Platform-neutral contracts: [PROTOCOL.md](docs/PROTOCOL.md), [TOOLS.md](docs/TOOLS.md), [SECURITY.md](docs/SECURITY.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| `relay/` | The relay (TypeScript / Node, one dependency). [relay/README.md](relay/README.md) |
+| `relay/` | The relay (TypeScript / Node; deps: `ws`, `qrcode`), including one-tap OAuth pairing. [relay/README.md](relay/README.md) |
+| `scripts/setup-phone.sh` | One-command USB setup: install, grant every permission and special access, connect to the relay |
+| `scripts/e2e/` | End-to-end scenarios (real MCP calls through the relay to a device/emulator) and the pairing flow test |
+| `clients/android/fixtures` | Emulator-only stand-ins for WhatsApp and a mail app used by the E2E tests |
 | `clients/android/core` | Bridge core in pure Kotlin: MCP server, tokens, policy, audit, relay client, local HTTP server. Platform-neutral. |
 | `clients/android/app` | The Android app: services, setup UI, tool implementations |
 
