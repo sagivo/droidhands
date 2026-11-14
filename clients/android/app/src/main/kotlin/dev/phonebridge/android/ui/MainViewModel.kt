@@ -104,6 +104,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 transportConfigured = StatusPresentation.userTransportConfigured(settings.value),
             )
         }
+    }
+
+    /**
+     * Asks for a newer release if "Check for updates" is on (at most once a day: [dev.phonebridge.android.update.UpdateChecker.refresh] skips
+     * the network otherwise). The UI calls it each time the app comes to the foreground, so a phone that keeps
+     * the app alive for days still learns about releases.
+     */
+    fun checkForUpdates() {
         if (settings.value.checkForUpdates) viewModelScope.launch(Dispatchers.IO) { graph.updates.refresh() }
     }
 

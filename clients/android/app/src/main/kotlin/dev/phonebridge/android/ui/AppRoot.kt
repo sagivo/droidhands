@@ -163,6 +163,7 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
         if (links.pending.value == null) main.applyDefaultRelayIfNeeded()
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { setup.refresh(activity) }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { main.checkForUpdates() }
     // Only for people who never see the wizard this session (it asks for notifications itself).
     val skipsWizard = remember(onboarding != null) { onboarding == false }
     if (skipsWizard) FirstLaunchNotificationPrompt(setup)
