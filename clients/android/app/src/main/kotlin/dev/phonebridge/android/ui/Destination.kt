@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
+import dev.phonebridge.android.ui.components.AppsIcon
 import dev.phonebridge.android.ui.nav.NavState
 import dev.phonebridge.android.ui.nav.Screen
 
@@ -13,6 +14,7 @@ import dev.phonebridge.android.ui.nav.Screen
 enum class Destination(val route: String, val label: String, val icon: ImageVector) {
     HOME("home", "Home", Icons.Filled.Home),
     AGENTS("agents", "Agents", Icons.Filled.Face),
+    APPS("apps", "Apps", AppsIcon),
     ACTIVITY("activity", "Activity", Icons.AutoMirrored.Filled.List),
     SETTINGS("settings", "Settings", Icons.Filled.Settings),
     ;

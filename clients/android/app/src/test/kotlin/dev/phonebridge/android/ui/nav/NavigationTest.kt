@@ -28,13 +28,16 @@ class NavigationTest {
         assertEquals(state, NavState.decode(state.encode()))
         val pages = NavState(Destination.SETTINGS, listOf(Screen.Permissions, Screen.NeverAllowApps, Screen.ConnectAgent))
         assertEquals(pages, NavState.decode(pages.encode()))
+        val app = NavState(Destination.APPS, listOf(Screen.AppDetail("com.spotify.music")))
+        assertEquals(listOf("apps", "app/com.spotify.music"), app.encode())
+        assertEquals(app, NavState.decode(app.encode()))
     }
 
     @Test
     fun decodeIsLenient() {
         assertEquals(NavState(), NavState.decode(null))
         assertEquals(NavState(), NavState.decode(emptyList()))
-        assertEquals(NavState(Destination.HOME, listOf(Screen.ConnectAgent)), NavState.decode(listOf("nope", "agent/", "connect", "??")))
+        assertEquals(NavState(Destination.HOME, listOf(Screen.ConnectAgent)), NavState.decode(listOf("nope", "agent/", "connect", "app/", "??")))
         // Wave-1 tab names still work.
         assertEquals(Destination.AGENTS, NavState.decode(listOf("tokens")).tab)
     }
@@ -54,6 +57,7 @@ class NavigationTest {
         assertEquals(NavState(Destination.HOME, listOf(Screen.ConnectAgent)), Destination.navStateFor("connect"))
         assertEquals(NavState(Destination.AGENTS), Destination.navStateFor("Tokens"))
         assertEquals(NavState(Destination.ACTIVITY), Destination.navStateFor("activity"))
+        assertEquals(NavState(Destination.APPS), Destination.navStateFor("apps"))
         assertNull(Destination.navStateFor("bogus"))
         assertNull(Destination.navStateFor(null))
     }
