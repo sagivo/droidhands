@@ -1,0 +1,107 @@
+package dev.phonebridge.android.tools.screen
+
+import android.content.Context
+import dev.phonebridge.android.access.BridgeAccessibilityService
+import dev.phonebridge.android.access.Bounds
+import dev.phonebridge.android.access.NodeQueries
+import dev.phonebridge.android.access.TreeSerializer
+import dev.phonebridge.core.tools.Risk
+import dev.phonebridge.core.tools.Scopes
+import dev.phonebridge.core.tools.Tool
+import dev.phonebridge.core.tools.ToolException
+import dev.phonebridge.core.tools.ToolResult
+import dev.phonebridge.core.tools.objectSchema
+import dev.phonebridge.core.tools.optString
+import dev.phonebridge.core.tools.reqString
+import dev.phonebridge.core.tools.tool
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/** ui_scroll: scrolls a container (the largest one by default). */
+internal fun uiScrollTool(context: Context): Tool = tool(
+    name = "ui_scroll",
+    title = "Scroll",
+    description = "Scrolls a list or page in any app. direction is where you want to move in the content: 'down' " +
+        "shows what is further down (like a mouse wheel), 'right' shows what is further right. Target: ref of a " +
+        "[scrollable] element (or any element inside one), default the largest scrollable on screen. Says so " +
+        "when the end is reached. Refs of the scrolled content may change: call screen_read afterwards.",
+    scope = Scopes.SCREEN_CONTROL,
+    risk = Risk.ACTION,
+    schema = objectSchema {
+        string("direction", "Where to move in the content", required = true, enum = ScrollDirection.entries.map { it.name.lowercase() })
+        string("ref", "Ref of the scrollable element (default: the largest scrollable)")
+    },
+    timeoutMs = 30_000,
+    unavailable = { UiAutomation.actionUnavailableReason(context) },
+    describe = { args -> "Scroll ${args.optString("direction") ?: ""} on screen" },
+) { args, _ ->
+    val direction = ScrollDirection.parse(args.reqString("direction"))
+        ?: throw ToolException("direction must be one of up, down, left, right.")
+    val service = UiAutomation.service()
+    UiAutomation.requireUnlocked(context)
+    UiAutomation.exclusive {
+        val message = scroll(context, service, direction, args.optString("ref")?.trim())
+        ToolResult.text(UiAutomation.report(service, message))
+    }
+}
+
+private suspend fun scroll(context: Context, service: BridgeAccessibilityService, direction: ScrollDirection, ref: String?): String {
+    val dir = direction.name.lowercase()
+    val screen = service.screenBounds()
+    val container: ScreenSession.Live? = withContext(Dispatchers.IO) {
+        if (ref != null) {
+            val live = ScreenSession.resolve(ref)
+            if (NodeQueries.isScrollContainer(live.fresh)) {
+                live
+            } else {
+                // A ref inside a list scrolls that list; a ref with no scrollable ancestor is swiped directly.
+                live.node.ancestors().firstOrNull(NodeQueries::isScrollContainer)
+                    ?.let { anc -> NodeActions.refresh(anc)?.let { ScreenSession.Live(ScreenSession.refs.register(anc), anc, it) } }
+                    ?: live
+            }
+        } else {
+            val state = ScreenCapture.capture(context, service)
+            val node = NodeQueries.largestScrollable(listOfNotNull(state.primaryRoot)) ?: NodeQueries.largestScrollable(state.roots)
+            node?.let { n -> NodeActions.refresh(n)?.let { ScreenSession.Live(ScreenSession.refs.register(n), n, it) } }
+        }
+    }
+    if (container == null) {
+        val plan = ScrollPlanner.swipe(direction, inset(screen))
+        swipe(context, service, plan)
+        return "No scrollable element found; swiped $dir across the screen."
+    }
+    val label = "${container.ref} ${TreeSerializer.label(container.fresh)}"
+    withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, container.fresh) }
+    val area = container.fresh.bounds.intersect(screen)
+    return when (val plan = ScrollPlanner.plan(container.fresh.actions, container.fresh.className, direction, area)) {
+        is ScrollPlan.Action -> {
+            if (withContext(Dispatchers.IO) { NodeActions.scroll(container.fresh, plan.action) }) {
+                "Scrolled $dir in $label."
+            } else {
+                swipeWithin(context, service, direction, area, label)
+            }
+        }
+        ScrollPlan.AtEnd -> "Can't scroll $dir in $label: already at the end in that direction."
+        is ScrollPlan.Swipe -> swipeWithin(context, service, direction, area, label)
+    }
+}
+
+private suspend fun swipeWithin(context: Context, service: BridgeAccessibilityService, direction: ScrollDirection, area: Bounds, label: String): String {
+    if (area.isEmpty) throw ToolException("Element $label is not visible on screen, so it can't be scrolled. Call screen_read again.")
+    swipe(context, service, ScrollPlanner.swipe(direction, area))
+    return "Swiped ${direction.name.lowercase()} inside $label."
+}
+
+private suspend fun swipe(context: Context, service: BridgeAccessibilityService, plan: ScrollPlan.Swipe) {
+    withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, plan.x1, plan.y1) }
+    if (!service.swipe(plan.x1, plan.y1, plan.x2, plan.y2, ScrollPlanner.SWIPE_MS)) {
+        throw ToolException("Android cancelled the swipe gesture. Retry.")
+    }
+}
+
+/** The screen minus 10% margins, so swipes avoid the system's edge gestures (back/home). */
+private fun inset(screen: Bounds): Bounds {
+    val dx = screen.width / 10
+    val dy = screen.height / 10
+    return Bounds(screen.left + dx, screen.top + dy, screen.right - dx, screen.bottom - dy)
+}
