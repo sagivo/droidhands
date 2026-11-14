@@ -1,7 +1,9 @@
 package dev.phonebridge.android.pairing
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,8 +15,6 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -24,9 +24,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,7 +37,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -47,7 +46,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.phonebridge.core.auth.ConfirmPolicy
+import dev.phonebridge.android.ui.apps.AppListing
+import dev.phonebridge.android.ui.grant.GrantAppPicker
+import dev.phonebridge.android.ui.grant.GrantApps
+import dev.phonebridge.android.ui.grant.GrantDraftSaver
+import dev.phonebridge.android.ui.grant.GrantEditor
+import dev.phonebridge.android.ui.grant.GrantPresentation
+import dev.phonebridge.core.auth.GrantDraft
 import dev.phonebridge.core.transport.PairingRequest
 import kotlinx.coroutines.delay
 
@@ -55,16 +60,22 @@ import kotlinx.coroutines.delay
 private const val ARM_DELAY_MS = 700L
 
 /**
- * Approve a new agent: who it is, the code to compare with the browser, what it may do, when it
- * must ask, and its name. [onAllow] gets the user's choice; [approving] shows progress.
+ * Approve a new agent: who it is, the code to compare with the browser, the grant ("Give <agent> access":
+ * Everything, or chosen apps and abilities, and whether it asks first) and its name. The app picker opens in
+ * place of the grant, in this same window. [onAllow] gets the user's choice; [approving] shows progress.
+ * [apps] are the installed apps for the picker (null while loading); [onChangeNeverAllow] opens the
+ * never-allow list.
  */
 @Composable
 internal fun PairingScreen(
     request: PairingRequest,
     approving: Boolean,
     error: String?,
+    apps: List<AppListing>?,
+    neverAllow: Set<String>,
     onAllow: (PairingChoice) -> Unit,
     onDeny: () -> Unit,
+    onChangeNeverAllow: () -> Unit,
 ) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(request.expiresAt) {
@@ -74,13 +85,44 @@ internal fun PairingScreen(
         }
     }
     val secondsLeft = PairingPresentation.secondsRemaining(request.expiresAt, now)
-    var levelName by rememberSaveable(request.id) { mutableStateOf(PairingPresentation.DEFAULT_LEVEL) }
-    var policy by rememberSaveable(request.id) { mutableStateOf(ConfirmPolicy.SENSITIVE) }
+    var grant by rememberSaveable(request.id, stateSaver = GrantDraftSaver) { mutableStateOf(GrantDraft.forNewAgent()) }
+    var pickingApps by rememberSaveable(request.id) { mutableStateOf(false) }
+    var appQuery by rememberSaveable(request.id) { mutableStateOf("") }
     var name by rememberSaveable(request.id) { mutableStateOf(request.clientName) }
     var armed by remember(request.id) { mutableStateOf(false) }
     LaunchedEffect(request.id) {
         delay(ARM_DELAY_MS)
         armed = true
+    }
+
+    BackHandler(enabled = pickingApps) { pickingApps = false }
+    if (pickingApps) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 16.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Apps ${PairingPresentation.tokenName(name, request)} may use",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.weight(1f).semantics { heading() },
+                    )
+                    TextButton(onClick = { pickingApps = false }) { Text("Done") }
+                }
+                GrantAppPicker(
+                    apps = apps,
+                    selected = grant.apps.packages,
+                    neverAllow = neverAllow,
+                    query = appQuery,
+                    onQueryChange = { appQuery = it },
+                    onToggle = { pkg -> grant = grant.toggleApp(pkg) },
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        return
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -112,47 +154,24 @@ internal fun PairingScreen(
                 CodeCard(request.displayCode)
                 Spacer(Modifier.height(24.dp))
 
-                SectionTitle("What may it do?")
-                Column(Modifier.selectableGroup()) {
-                    PairingPresentation.ACCESS_LEVELS.forEach { level ->
-                        ChoiceRow(
-                            title = if (level.recommended) "${level.name} (recommended)" else level.name,
-                            description = level.description,
-                            selected = level.name == levelName,
-                            enabled = !approving,
-                            onSelect = { levelName = level.name },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-
-                SectionTitle("When should it ask you first?")
-                Column(Modifier.selectableGroup()) {
-                    PairingPresentation.POLICIES.forEach { option ->
-                        ChoiceRow(
-                            title = PairingPresentation.policyLabel(option),
-                            description = PairingPresentation.policyDescription(option),
-                            selected = option == policy,
-                            enabled = !approving,
-                            onSelect = { policy = option },
-                        )
-                    }
-                }
-                if (policy == ConfirmPolicy.NEVER) {
-                    Text(
-                        PairingPresentation.NEVER_POLICY_WARNING,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = 48.dp, top = 4.dp),
-                    )
-                }
+                SectionTitle(GrantPresentation.title(PairingPresentation.tokenName(name, request)))
+                GrantEditor(
+                    grant = grant,
+                    original = null,
+                    appLabels = GrantApps.labels(apps),
+                    neverAllowCount = neverAllow.size,
+                    enabled = !approving,
+                    onChange = { grant = it },
+                    onChooseApps = { pickingApps = true },
+                    onChangeNeverAllow = onChangeNeverAllow,
+                )
                 Spacer(Modifier.height(16.dp))
 
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it.take(PairingRules.MAX_CLIENT_NAME) },
                     label = { Text("Name in PhoneBridge") },
-                    supportingText = { Text("Shown in your agents list and in approval prompts.") },
+                    supportingText = { Text("Shown in your agents list and the activity log.") },
                     singleLine = true,
                     enabled = !approving,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
@@ -182,11 +201,8 @@ internal fun PairingScreen(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = onDeny, enabled = !approving, modifier = Modifier.weight(1f)) { Text("Deny") }
                 Button(
-                    onClick = {
-                        val level = PairingPresentation.level(levelName)
-                        onAllow(PairingChoice.of(name, level, policy))
-                    },
-                    enabled = armed && secondsLeft > 0 && !approving,
+                    onClick = { onAllow(PairingChoice(name, grant)) },
+                    enabled = armed && secondsLeft > 0 && !approving && grant.isValid,
                     modifier = Modifier.weight(1f),
                 ) {
                     if (approving) {
@@ -229,23 +245,4 @@ private fun SectionTitle(text: String) {
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(bottom = 4.dp).semantics { heading() },
     )
-}
-
-@Composable
-private fun ChoiceRow(title: String, description: String, selected: Boolean, enabled: Boolean, onSelect: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onSelect)
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        // The row handles clicks, so the button itself is not separately focusable.
-        RadioButton(selected = selected, onClick = null, enabled = enabled)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
 }

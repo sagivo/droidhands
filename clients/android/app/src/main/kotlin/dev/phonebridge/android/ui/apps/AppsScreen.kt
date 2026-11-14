@@ -78,7 +78,7 @@ fun AppsScreen(vm: AppsViewModel, onOpenApp: (String) -> Unit) {
                 Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         apps?.let { AppsPresentation.summary(it, blocked) + " Agents pick an app and one of its actions; " +
-                            "each action is checked and approved like any other request." }
+                            "each action follows the access you gave the agent." }
                             ?: "Looking at the apps on this phone…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

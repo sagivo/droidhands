@@ -10,6 +10,7 @@ import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.confirm.NotificationConfirmationProvider
 import dev.phonebridge.android.live.AgentActivityTracker
+import dev.phonebridge.android.notify.AppLabels
 import dev.phonebridge.android.notify.BridgeNotificationListener
 import dev.phonebridge.android.pairing.PairingCoordinator
 import dev.phonebridge.android.pairing.PairingNotifications
@@ -189,6 +190,8 @@ class BridgeGraph private constructor(val app: Application) {
             confirmationTimeoutMs = NotificationConfirmationProvider.DEFAULT_TIMEOUT_MS,
             globalSecurity = ::globalSecurity,
             activity = agentActivity,
+            // Names the agent's allowed apps in its access summary (initialize instructions).
+            appLabel = { pkg -> AppLabels.of(app, pkg) },
         )
     }
 

@@ -35,9 +35,10 @@ import dev.phonebridge.android.ui.components.LocalSnackbarHostState
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.ScreenScaffold
-import dev.phonebridge.android.ui.components.SecureWindowEffect
 import dev.phonebridge.android.ui.components.SectionHeader
+import dev.phonebridge.android.ui.components.SecureWindowEffect
 import dev.phonebridge.android.ui.components.padded
+import dev.phonebridge.android.ui.grant.GrantPresentation
 import dev.phonebridge.android.ui.settings.RelayUrls
 import dev.phonebridge.core.auth.IssuedToken
 import dev.phonebridge.core.transport.RelayStatus
@@ -96,7 +97,7 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                 Notice(
                     title = "Copy it now: it's shown only once",
                     text = "PhoneBridge keeps only a hash of the token. If you lose it, revoke it and create a new one. " +
-                        "Treat it like a password: anyone holding it can use this phone within its scopes.",
+                        "Treat it like a password: anyone holding it can use this phone within its access.",
                     kind = NoticeKind.WARNING,
                 )
             }
@@ -104,8 +105,7 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SectionHeader("\"${token.record.name}\"")
                     Text(
-                        "${TokenPresentation.scopeSummary(token.record.scopes, token.record.maxRisk)} · " +
-                            "${TokenPresentation.policyLabel(token.record.confirmPolicy)} · " +
+                        "${GrantPresentation.shortSummary(token.record)} · " +
                             TokenPresentation.expiryText(token.record.expiresAt, System.currentTimeMillis()),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

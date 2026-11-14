@@ -9,6 +9,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.phonebridge.android.graph.BridgeGraph
+import dev.phonebridge.android.ui.GraphAdapters
+import dev.phonebridge.android.ui.apps.AppListing
 import dev.phonebridge.core.auth.IssuedToken
 import dev.phonebridge.core.auth.TokenRecord
 import kotlinx.coroutines.CancellationException
@@ -16,9 +18,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -40,13 +45,22 @@ sealed interface TokenScreen {
  * so it runs on IO. Revoking and deleting live with the agents (`AgentsViewModel`).
  */
 class TokensViewModel(app: Application) : AndroidViewModel(app) {
-    private val tokenManager = BridgeGraph.get(app).tokenManager
+    private val graph = BridgeGraph.get(app)
+    private val tokenManager = graph.tokenManager
     private val _screen = MutableStateFlow<TokenScreen>(TokenScreen.List)
     private val _messages = Channel<String>(Channel.BUFFERED)
 
     val tokens: StateFlow<List<TokenRecord>> = tokenManager.tokens
     val screen: StateFlow<TokenScreen> = _screen.asStateFlow()
     val messages: Flow<String> = _messages.receiveAsFlow()
+
+    /** Installed apps for the grant's app picker; null until loaded ([startCreate] loads them). */
+    val apps: StateFlow<List<AppListing>?> = graph.appDirectory.apps
+
+    /** Global never-allow list (shown locked in the picker, counted on the grant screen). */
+    val neverAllowApps: StateFlow<Set<String>> = graph.settings.state
+        .map { GraphAdapters.neverAllowApps(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, GraphAdapters.neverAllowApps(graph.settings.state.value))
 
     /** The "New token" form (Compose state, main thread only). */
     var draft by mutableStateOf(TokenDraft())
@@ -58,6 +72,7 @@ class TokensViewModel(app: Application) : AndroidViewModel(app) {
     @MainThread
     fun startCreate() {
         draft = TokenDraft(name = TokenPresentation.defaultName(tokens.value.map { it.name }))
+        graph.appDirectory.refresh()
         _screen.value = TokenScreen.Editor
     }
 
@@ -91,24 +106,10 @@ class TokensViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * Issues the token, then applies the draft's risk cap. Nobody holds the plaintext before this
-     * returns, so the token can't be used uncapped; if the cap can't be saved, the token is deleted
-     * rather than handed out without the limit the user chose. Blocking (disk).
-     */
+    /** Issues the token with the draft's whole grant (scopes, apps, approvals) in one save. Blocking (disk). */
     private fun issue(d: TokenDraft): IssuedToken {
-        val issued = tokenManager.issue(d.trimmedName, d.scopes, d.policy, d.expiry.ttlMillis)
-        val cap = d.maxRisk ?: return issued
-        return try {
-            issued.copy(record = tokenManager.update(issued.record.id) { it.copy(maxRisk = cap) })
-        } catch (e: Exception) {
-            try {
-                tokenManager.delete(issued.record.id)
-            } catch (cleanup: Exception) {
-                e.addSuppressed(cleanup)
-            }
-            throw e
-        }
+        val g = d.grant.settings()
+        return tokenManager.issue(d.trimmedName, g.scopes, g.confirmPolicy, d.expiry.ttlMillis, appPolicy = g.appPolicy, maxRisk = g.maxRisk)
     }
 
     /** Leaves the "Token created" screen and forgets the plaintext. */

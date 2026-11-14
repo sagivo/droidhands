@@ -56,8 +56,8 @@ internal fun ActionRulesHeader(summary: String, available: Boolean, loading: Boo
             )
             when {
                 !available -> Text(
-                    "This agent can't run app actions: it needs the Apps capability and an access level above Read-only " +
-                        "(and no Block rule on app_action_run).",
+                    "This agent can't run app actions: its access needs \"Use apps\" (and no read-only limit or Block rule " +
+                        "on app_action_run).",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 else -> {

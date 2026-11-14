@@ -211,7 +211,7 @@ private fun ActionCard(action: ActionInfo, appBlocked: Boolean) {
                     Risk.SENSITIVE -> colors.warning
                 }
                 StatusPill(AppsPresentation.riskLabel(action.risk), riskColor)
-                if (AppsPresentation.needsApproval(action)) StatusPill("Needs approval", colors.warning)
+                if (AppsPresentation.needsApproval(action)) StatusPill("Always asks", colors.warning)
                 if (action.discovered) StatusPill("Discovered", MaterialTheme.colorScheme.onSurfaceVariant)
                 if (appBlocked) StatusPill("Blocked", colors.error)
             }

@@ -105,6 +105,14 @@ class GrantTest {
     }
 
     @Test
+    fun aBlocklistNeverBecomesAnAllowlist() {
+        val legacy = GrantDraft.from(record(Scopes.ALL, apps = AppPolicy(AppAccessMode.BLOCKLIST, setOf("com.bank"))))
+        assertEquals(AppPolicy(AppAccessMode.ALLOWLIST), legacy.withAppMode(AppAccessMode.ALLOWLIST).apps)
+        assertEquals(AppPolicy(), legacy.withAppMode(AppAccessMode.ALL).settings().appPolicy)
+        assertSame(legacy, legacy.withAppMode(AppAccessMode.BLOCKLIST))
+    }
+
+    @Test
     fun validation() {
         val empty = GrantDraft(GrantMode.CHOSEN, emptySet())
         assertEquals("Choose at least one thing it can do.", empty.error)

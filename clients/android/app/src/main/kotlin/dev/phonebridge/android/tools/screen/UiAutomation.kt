@@ -135,9 +135,9 @@ object UiAutomation {
     /** The error after an action opened a blocked app (pure). */
     fun blockedAfterAction(done: String, label: String, wentHome: Boolean): String = buildString {
         append(done).append(' ')
-        append("This brought $label to the foreground, but the user blocked $label for this agent, so ")
+        append("This brought $label to the foreground, but this agent isn't allowed to use $label, so ")
         append(if (wentHome) "PhoneBridge went back to the home screen." else "PhoneBridge tried to go back to the home screen.")
-        append(" Don't try to open $label another way; ask the user if it is needed.")
+        append(" Don't try to open $label another way. If it is needed, tell the user: they can allow it in PhoneBridge > Agents > (this agent) > Access.")
     }
 
     /** Sentence for the descriptions of the screen-control tools. */

@@ -162,7 +162,16 @@ data class GrantDraft(
 
     fun withAsk(ask: Boolean): GrantDraft = copy(confirmPolicy = if (ask) ConfirmPolicy.SENSITIVE else ConfirmPolicy.NEVER)
 
-    fun withAppMode(mode: AppAccessMode): GrantDraft = copy(apps = apps.copy(mode = mode))
+    /**
+     * Picks all apps or only chosen ones. Chosen packages survive switching to "All apps" and back; an older
+     * token's blocklist does not turn into an allowlist (its packages mean the opposite), so leaving or entering
+     * BLOCKLIST starts from no packages.
+     */
+    fun withAppMode(mode: AppAccessMode): GrantDraft = when {
+        mode == apps.mode -> this
+        mode == AppAccessMode.BLOCKLIST || apps.mode == AppAccessMode.BLOCKLIST -> copy(apps = AppPolicy(mode))
+        else -> copy(apps = apps.copy(mode = mode))
+    }
 
     fun toggleApp(packageName: String): GrantDraft {
         val packages = apps.packages

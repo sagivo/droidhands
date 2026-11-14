@@ -5,66 +5,84 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import dev.phonebridge.android.ui.Destination
+import dev.phonebridge.android.ui.MainActivity
+import dev.phonebridge.android.ui.apps.AppListing
 import dev.phonebridge.android.ui.components.BottomActionBar
-import dev.phonebridge.android.ui.components.Notice
-import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.padded
-import dev.phonebridge.android.ui.setup.SetupLogic
-import dev.phonebridge.android.ui.theme.statusColors
-import dev.phonebridge.core.auth.ConfirmPolicy
-import dev.phonebridge.core.tools.Scopes
+import dev.phonebridge.android.ui.grant.GrantAppPicker
+import dev.phonebridge.android.ui.grant.GrantApps
+import dev.phonebridge.android.ui.grant.GrantEditor
+import dev.phonebridge.android.ui.grant.GrantPresentation
 
-/** Policies in the order offered: recommended first, the dangerous one last. */
-internal val POLICY_ORDER = listOf(ConfirmPolicy.SENSITIVE, ConfirmPolicy.ALL_ACTIONS, ConfirmPolicy.NEVER)
-
-/** "New token" form: name, scopes (presets + per-scope), approval policy and expiry. */
+/**
+ * "New token" form: name, the same grant as pairing ("Give <name> access": Everything, or chosen apps and
+ * abilities, and whether it asks first) and expiry. The app picker opens in place of the form.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TokenEditorScreen(
     draft: TokenDraft,
     creating: Boolean,
+    apps: List<AppListing>?,
+    neverAllow: Set<String>,
     onChange: ((TokenDraft) -> TokenDraft) -> Unit,
     onCancel: () -> Unit,
     onCreate: () -> Unit,
 ) {
-    BackHandler(onBack = onCancel)
+    var pickingApps by rememberSaveable { mutableStateOf(false) }
+    var appQuery by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
+    BackHandler { if (pickingApps) pickingApps = false else onCancel() }
+
+    if (pickingApps) {
+        ScreenScaffold(
+            title = "Apps ${draft.trimmedName.ifEmpty { "it" }} may use",
+            navigationIcon = { IconButton(onClick = { pickingApps = false }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
+            actions = { TextButton(onClick = { pickingApps = false }) { Text("Done") } },
+        ) { padding ->
+            GrantAppPicker(
+                apps = apps,
+                selected = draft.grant.apps.packages,
+                neverAllow = neverAllow,
+                query = appQuery,
+                onQueryChange = { appQuery = it },
+                onToggle = { pkg -> onChange { it.copy(grant = it.grant.toggleApp(pkg)) } },
+                contentPadding = padding.padded(horizontal = 0.dp),
+            )
+        }
+        return
+    }
+
     ScreenScaffold(
         title = "New token",
         navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Filled.Close, contentDescription = "Cancel") } },
@@ -86,7 +104,7 @@ internal fun TokenEditorScreen(
                     value = draft.name,
                     onValueChange = { value -> onChange { it.copy(name = value) } },
                     label = { Text("Name") },
-                    supportingText = { Text(draft.nameError ?: "Shown in approval prompts and the activity log.") },
+                    supportingText = { Text(draft.nameError ?: "Shown in your agents list and the activity log.") },
                     isError = draft.nameError != null,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
@@ -94,60 +112,19 @@ internal fun TokenEditorScreen(
                 )
             }
 
-            item(key = "scopes-header") {
+            item(key = "grant") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SectionHeader("What the agent may do")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Scopes.PRESETS.keys.forEach { preset ->
-                            val selected = draft.selectedPreset == preset
-                            FilterChip(
-                                selected = selected,
-                                onClick = { onChange { it.withPreset(preset) } },
-                                label = { Text(preset) },
-                                leadingIcon = if (selected) {
-                                    { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(FilterChipDefaults.IconSize)) }
-                                } else {
-                                    null
-                                },
-                            )
-                        }
-                    }
-                    TokenPresentation.capNotice(draft.scopes, draft.maxRisk)?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    draft.scopesError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
-                }
-            }
-            items(Scopes.DESCRIPTIONS.entries.toList(), key = { "scope-${it.key}" }) { (scope, description) ->
-                ScopeRow(
-                    scope = scope,
-                    description = description,
-                    checked = scope in draft.scopes,
-                    highRisk = scope in TokenPresentation.HIGH_RISK_SCOPES,
-                    onToggle = { onChange { it.toggle(scope) } },
-                )
-            }
-            if (draft.highRiskScopes.isNotEmpty()) {
-                item(key = "high-risk") {
-                    Notice(
-                        "${draft.highRiskScopes.joinToString(" and ")} give the agent full control of any app on this " +
-                            "phone. Keep approvals on.",
-                        kind = NoticeKind.WARNING,
+                    SectionHeader(GrantPresentation.title(draft.trimmedName))
+                    GrantEditor(
+                        grant = draft.grant,
+                        original = null,
+                        appLabels = GrantApps.labels(apps),
+                        neverAllowCount = neverAllow.size,
+                        enabled = !creating,
+                        onChange = { grant -> onChange { it.copy(grant = grant) } },
+                        onChooseApps = { pickingApps = true },
+                        onChangeNeverAllow = { context.startActivity(MainActivity.intent(context, Destination.NEVER_ALLOW_ROUTE)) },
                     )
-                }
-            }
-
-            item(key = "policy") {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SectionHeader("Ask me before")
-                    Column(Modifier.selectableGroup()) {
-                        POLICY_ORDER.forEach { policy ->
-                            PolicyRow(policy, selected = draft.policy == policy, onSelect = { onChange { it.copy(policy = policy) } })
-                        }
-                    }
-                    if (draft.policy == ConfirmPolicy.NEVER) {
-                        Notice(TokenPresentation.NEVER_POLICY_WARNING, kind = NoticeKind.DANGER, title = "No approvals")
-                    }
                 }
             }
 
@@ -165,70 +142,6 @@ internal fun TokenEditorScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-/** A scope checkbox row: short label, scope id, description, and a warning icon for [highRisk]. */
-@Composable
-internal fun ScopeRow(scope: String, description: String, checked: Boolean, highRisk: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() })
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = checked, onCheckedChange = null)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(SetupLogic.shortLabel(scope), style = MaterialTheme.typography.bodyLarge)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    scope,
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (highRisk) {
-            Icon(
-                Icons.Filled.Warning,
-                contentDescription = "High risk",
-                tint = statusColors().warning,
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
-    }
-}
-
-/** A confirmation-policy radio row with its explanation. */
-@Composable
-internal fun PolicyRow(policy: ConfirmPolicy, selected: Boolean, onSelect: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            val label = TokenPresentation.policyLabel(policy) + if (policy == ConfirmPolicy.SENSITIVE) " (recommended)" else ""
-            Text(
-                label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (policy == ConfirmPolicy.NEVER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                TokenPresentation.policyDescription(policy),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

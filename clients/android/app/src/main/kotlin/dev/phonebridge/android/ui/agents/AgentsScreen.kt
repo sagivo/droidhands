@@ -38,6 +38,8 @@ import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.StatusPill
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberNow
+import dev.phonebridge.android.ui.grant.GrantApps
+import dev.phonebridge.android.ui.grant.GrantPresentation
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.android.ui.tokens.TokenState
@@ -51,6 +53,8 @@ import java.time.ZoneId
 fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: () -> Unit) {
     val tokens by vm.tokens.collectAsStateWithLifecycle()
     val usage by vm.usage.collectAsStateWithLifecycle()
+    val appActions by vm.appActions.collectAsStateWithLifecycle()
+    val appLabels = remember(appActions) { GrantApps.labels(appActions) }
     val now by rememberNow()
     var revoking by remember { mutableStateOf<TokenRecord?>(null) }
     val sorted = remember(tokens, usage, now) { AgentPresentation.sorted(tokens, usage, now) }
@@ -72,7 +76,7 @@ fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: 
         LazyColumn(contentPadding = padding.padded(extraBottom = 80.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "intro") {
                 Text(
-                    "Each AI agent you connect appears here. Tap one to see what it did, change what it may do, or revoke it.",
+                    "Each AI agent you connect appears here, with the access you gave it. Tap one to see what it did, change its access, or revoke it.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -98,6 +102,7 @@ fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: 
                     usage = usage[record.id],
                     now = now,
                     callsToday = AgentPresentation.callsOn(usage[record.id], today),
+                    appLabels = appLabels,
                     restrictions = AgentPresentation.restrictions(record) { Schedule.range(it, is24h) },
                     onOpen = { onOpenAgent(record.id) },
                     onRevoke = { revoking = record },
@@ -117,13 +122,13 @@ private fun AgentCard(
     usage: TokenUsage?,
     now: Long,
     callsToday: Long,
+    appLabels: Map<String, String>,
     restrictions: List<String>,
     onOpen: () -> Unit,
     onRevoke: () -> Unit,
 ) {
     val colors = statusColors()
     val state = TokenPresentation.state(record, now)
-    val level = AccessLevel.of(record)
     OutlinedCard(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,7 +155,7 @@ private fun AgentCard(
                 )
             }
             Text(
-                "${level.label} · ${TokenPresentation.policyLabel(record.confirmPolicy)}",
+                GrantPresentation.shortSummary(record, appLabels),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(

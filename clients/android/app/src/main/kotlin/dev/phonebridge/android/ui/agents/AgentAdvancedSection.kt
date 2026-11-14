@@ -3,18 +3,12 @@ package dev.phonebridge.android.ui.agents
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -26,89 +20,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import dev.phonebridge.android.ui.apps.AppInfo
-import dev.phonebridge.android.ui.apps.AppSelection
-import dev.phonebridge.android.ui.components.Notice
-import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.components.TimePickerDialog
 import dev.phonebridge.android.ui.setup.SetupLogic
 import dev.phonebridge.core.auth.ActiveHours
-import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.ConfirmPolicy
-
-/** App access mode choices, in the order offered. */
-private val APP_MODES = listOf(
-    AppAccessMode.ALL to "All apps",
-    AppAccessMode.ALLOWLIST to "Only selected apps",
-    AppAccessMode.BLOCKLIST to "All apps except selected",
-)
-
-/**
- * "App access": which apps this agent may see and operate (screen, notifications, opening apps).
- * Apps on the global never-allow list stay blocked whatever is chosen here.
- */
-@Composable
-internal fun AppAccessCard(
-    draft: AgentDraft,
-    apps: List<AppInfo>?,
-    neverAllowCount: Int,
-    onChange: ((AgentDraft) -> AgentDraft) -> Unit,
-    onChooseApps: () -> Unit,
-) {
-    val policy = draft.appPolicy
-    AdvancedCard(
-        title = "App access",
-        subtitle = "Which apps this agent may read and operate on screen, in notifications and when opening apps. " +
-            "Contacts, SMS and calendar are controlled by the capabilities above.",
-    ) {
-        Column(Modifier.selectableGroup()) {
-            APP_MODES.forEach { (mode, label) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(selected = policy.mode == mode, role = Role.RadioButton) { onChange { it.withAppMode(mode) } }
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = policy.mode == mode, onClick = null)
-                    Spacer(Modifier.width(12.dp))
-                    Text(label, style = MaterialTheme.typography.bodyLarge)
-                }
-            }
-        }
-        if (policy.mode != AppAccessMode.ALL) {
-            val count = policy.packages.size
-            Text(
-                (if (policy.mode == AppAccessMode.ALLOWLIST) "Allowed: " else "Blocked: ") +
-                    if (apps == null) "$count ${if (count == 1) "app" else "apps"}" else AppSelection.summary(policy.packages, apps),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            FilledTonalButton(onClick = onChooseApps) { Text("Choose apps") }
-            draft.appPolicyWarning?.let { Notice(it, kind = NoticeKind.WARNING) }
-        }
-        if (neverAllowCount > 0) {
-            Text(
-                "${if (neverAllowCount == 1) "1 app is" else "$neverAllowCount apps are"} blocked for every agent " +
-                    "(Settings > Security > Never-allow apps).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
 
 /** Header of the per-tool rules list; the rows themselves are separate list items ([ToolRuleRow]). */
 @Composable
 internal fun ToolRulesHeader(summary: String, expanded: Boolean, toolCount: Int, onToggle: () -> Unit) {
     AdvancedCard(
         title = "Tool rules",
-        subtitle = "Override the approval setting for single tools: Allow never asks, Ask always asks, Block hides the tool from this agent.",
+        subtitle = "Exceptions for single tools: Block hides a tool from this agent, Ask makes it ask you first every time " +
+            "(even inside its access), Allow never asks.",
     ) {
         Text(summary, style = MaterialTheme.typography.bodyMedium)
         OutlinedButton(onClick = onToggle, enabled = toolCount > 0) {
@@ -210,7 +138,7 @@ internal fun ActiveHoursCard(
 }
 
 @Composable
-private fun AdvancedCard(title: String, subtitle: String, content: @Composable () -> Unit) {
+internal fun AdvancedCard(title: String, subtitle: String, content: @Composable () -> Unit) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)

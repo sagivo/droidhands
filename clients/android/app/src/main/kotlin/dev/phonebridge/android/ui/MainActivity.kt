@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         /**
          * Optional String extra selecting where to open: "home", "agents", "activity", "settings",
-         * "permissions" (or the wave-1 names "tokens" and "setup") and "connect". Unknown values are
+         * "permissions" (or the wave-1 names "tokens" and "setup"), "connect" and "never-allow". Unknown values are
          * ignored (the activity is exported as the launcher entry).
          */
         const val EXTRA_DESTINATION = "dev.phonebridge.android.extra.DESTINATION"

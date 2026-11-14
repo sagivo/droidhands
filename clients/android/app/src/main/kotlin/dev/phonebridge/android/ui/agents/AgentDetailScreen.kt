@@ -51,9 +51,11 @@ import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberNow
 import dev.phonebridge.android.ui.components.rememberShortDayFormatter
 import dev.phonebridge.android.ui.components.rememberTimestampFormatter
+import dev.phonebridge.android.ui.grant.GrantApps
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.android.ui.tokens.TokenState
+import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.tools.AppAccess
 import java.time.Instant
@@ -62,14 +64,15 @@ import java.time.ZoneId
 /** Navigation callbacks of the agent detail page. */
 class AgentDetailActions(
     val onBack: () -> Unit,
+    /** Opens the agent's Access page (the grant editor; the route keeps its older name, agent-apps). */
     val onChooseApps: () -> Unit,
     val onSeeActivity: () -> Unit,
 )
 
 /**
- * One agent: usage chart and totals, recent activity, access (level, approvals, expiry), advanced
- * controls (app access, tool rules, active hours), then revoke / delete. Edits collect in a draft
- * and are saved together from the bottom bar.
+ * One agent: usage chart and totals, recent activity, its access (the grant; "Change access" opens the grant
+ * editor, which saves at once), advanced controls (tool rules, app action rules, active hours, expiry), then
+ * revoke / delete. Advanced edits collect in a draft and are saved together from the bottom bar.
  */
 @Composable
 fun AgentDetailScreen(vm: AgentsViewModel, tokenId: String, actions: AgentDetailActions) {
@@ -90,7 +93,6 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     val usageMap by vm.usage.collectAsStateWithLifecycle()
     val entries by vm.auditEntries.collectAsStateWithLifecycle()
     val tools by vm.tools.collectAsStateWithLifecycle()
-    val apps by vm.apps.collectAsStateWithLifecycle()
     val neverAllow by vm.neverAllowApps.collectAsStateWithLifecycle()
     val appActions by vm.appActions.collectAsStateWithLifecycle()
     val appActionsLoading by vm.appActionsLoading.collectAsStateWithLifecycle()
@@ -113,23 +115,24 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     val dirty = vm.isDirty()
     val today = remember(now) { Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate() }
     val recent = remember(entries, record.id) { entries.asSequence().filter { it.tokenId == record.id }.take(RECENT_ROWS).toList() }
-    val groups = remember(tools, draft.scopes, draft.maxRisk) { ToolRules.groups(tools, draft.scopes, draft.maxRisk) }
+    // The agent's access is edited on its own page and saved at once, so the stored record is current.
+    val scopes = record.scopes
+    val maxRisk = record.maxRisk
+    val groups = remember(tools, scopes, maxRisk) { ToolRules.groups(tools, scopes, maxRisk) }
     val visibleToolNames = remember(groups) { groups.flatMap { g -> g.tools.map { it.name } }.toSet() }
-    val access = remember(draft.appPolicy, neverAllow) { AppAccess.of(draft.appPolicy, neverAllow) }
-    val actionsAvailable = ActionRules.canRunActions(draft.scopes, draft.maxRisk, draft.toolRules)
-    val actionGroups = remember(appActions, draft.scopes, draft.maxRisk, draft.toolRules, access) {
-        ActionRules.groups(appActions.orEmpty(), draft.scopes, draft.maxRisk, draft.toolRules, access)
+    val access = remember(record.appPolicy, neverAllow) { AppAccess.of(record.appPolicy, neverAllow) }
+    val actionsAvailable = ActionRules.canRunActions(scopes, maxRisk, draft.toolRules)
+    val actionGroups = remember(appActions, scopes, maxRisk, draft.toolRules, access) {
+        ActionRules.groups(appActions.orEmpty(), scopes, maxRisk, draft.toolRules, access)
     }
-    val shownActionGroups = remember(actionGroups, appActions, draft.scopes, draft.maxRisk, draft.toolRules, access, actionQuery) {
-        if (actionQuery.isBlank()) actionGroups else ActionRules.groups(appActions.orEmpty(), draft.scopes, draft.maxRisk, draft.toolRules, access, actionQuery)
+    val shownActionGroups = remember(actionGroups, appActions, scopes, maxRisk, draft.toolRules, access, actionQuery) {
+        if (actionQuery.isBlank()) actionGroups else ActionRules.groups(appActions.orEmpty(), scopes, maxRisk, draft.toolRules, access, actionQuery)
     }
+    val appLabels = remember(appActions) { GrantApps.labels(appActions) }
     val actionToolNames = remember(actionGroups) { ActionRules.names(actionGroups) }
     val colors = statusColors()
 
-    LaunchedEffect(Unit) {
-        if (vm.apps.value == null) vm.loadApps()
-        vm.loadAppActions()
-    }
+    LaunchedEffect(Unit) { vm.loadAppActions() }
     val leave: () -> Unit = { if (dirty) confirm = DISCARD else actions.onBack() }
     BackHandler(enabled = dirty) { confirm = DISCARD }
 
@@ -181,12 +184,9 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
                     }
                 }
             }
+            item(key = "access") { AgentAccessCard(record, appLabels, editable, onChange = actions.onChooseApps) }
             if (editable) {
-                item(key = "access") { AgentAccessSection(draft, record.expiresAt, now, onChange = vm::edit) }
                 item(key = "advanced-header") { SectionHeader("Advanced") }
-                item(key = "apps") {
-                    AppAccessCard(draft, apps, neverAllow.size, onChange = vm::edit, onChooseApps = actions.onChooseApps)
-                }
                 item(key = "rules") {
                     ToolRulesHeader(
                         summary = ToolRules.summary(draft.toolRules, visibleToolNames),
@@ -195,7 +195,7 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
                         onToggle = { showTools = !showTools },
                     )
                 }
-                if (showTools) toolRuleItems(groups, draft, vm)
+                if (showTools) toolRuleItems(groups, draft, record.confirmPolicy, vm)
                 item(key = "action-rules") {
                     ActionRulesHeader(
                         summary = ToolRules.summary(draft.toolRules, actionToolNames),
@@ -214,12 +214,14 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
                         expanded = expandedApps.toSet(),
                         onToggleApp = { pkg -> expandedApps = ArrayList(if (pkg in expandedApps) expandedApps - pkg else expandedApps + pkg) },
                         draft = draft,
+                        policy = record.confirmPolicy,
                         vm = vm,
                     )
                 }
                 item(key = "hours") {
                     ActiveHoursCard(draft.activeHours, is24h, draft.activeHoursError, onChange = { hours -> vm.edit { it.copy(activeHours = hours) } })
                 }
+                item(key = "expiry") { ExpiryCard(draft, record.expiresAt, now, onChange = vm::edit) }
             }
             item(key = "danger") {
                 DangerZone(
@@ -260,7 +262,7 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     }
 }
 
-private fun LazyListScope.toolRuleItems(groups: List<ToolGroup>, draft: AgentDraft, vm: AgentsViewModel) {
+private fun LazyListScope.toolRuleItems(groups: List<ToolGroup>, draft: AgentDraft, policy: ConfirmPolicy, vm: AgentsViewModel) {
     groups.forEach { group ->
         item(key = "rules-${group.scope}") { ToolGroupHeader(group.scope) }
         group.tools.forEach { tool ->
@@ -268,7 +270,7 @@ private fun LazyListScope.toolRuleItems(groups: List<ToolGroup>, draft: AgentDra
                 ToolRuleRow(
                     tool = tool,
                     choice = RuleChoice.of(draft.toolRules[tool.name]),
-                    policy = draft.policy,
+                    policy = policy,
                     onChoose = { choice -> vm.edit { it.withRule(tool.name, choice) } },
                 )
             }
@@ -287,6 +289,7 @@ private fun LazyListScope.actionRuleItems(
     expanded: Set<String>,
     onToggleApp: (String) -> Unit,
     draft: AgentDraft,
+    policy: ConfirmPolicy,
     vm: AgentsViewModel,
 ) {
     item(key = "action-rules-search") { ActionRulesSearch(query, onQueryChange) }
@@ -306,7 +309,7 @@ private fun LazyListScope.actionRuleItems(
                     ActionRuleRow(
                         action = action,
                         choice = RuleChoice.of(draft.toolRules[action.toolName]),
-                        policy = draft.policy,
+                        policy = policy,
                         onChoose = { choice -> vm.edit { it.withRule(action.toolName, choice) } },
                     )
                 }
@@ -321,7 +324,7 @@ private fun AgentHeader(record: TokenRecord, lastCallAt: Long?, state: TokenStat
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                AgentPresentation.clientLabel(record) + " · " + AccessLevel.of(record).label,
+                AgentPresentation.clientLabel(record),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -347,7 +350,7 @@ private fun AgentHeader(record: TokenRecord, lastCallAt: Long?, state: TokenStat
                 kind = NoticeKind.WARNING,
             )
             TokenState.EXPIRED -> Notice(
-                "This agent expired and can't act. Pick a new expiry under Access and save to let it back in.",
+                "This agent expired and can't act. Pick a new expiry under Advanced > Expires and save to let it back in.",
                 kind = NoticeKind.WARNING,
             )
             TokenState.ACTIVE -> Unit

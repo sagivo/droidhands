@@ -72,7 +72,7 @@ internal fun RenameAgentDialog(name: String, onRename: (String) -> Unit, onDismi
                 onValueChange = { value = it.take(TokenDraft.MAX_NAME_LENGTH + 10) },
                 label = { Text("Name") },
                 isError = error != null,
-                supportingText = { Text(error ?: "Shown in approval prompts and the activity log.") },
+                supportingText = { Text(error ?: "Shown in your agents list and the activity log.") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
             )

@@ -1,7 +1,6 @@
 package dev.phonebridge.android.ui.agents
 
 import dev.phonebridge.android.ui.tokens.ExpiryOption
-import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.core.auth.ActiveHours
 import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.AppPolicy
@@ -37,26 +36,32 @@ class AgentDraftTest {
     @Test
     fun appliesEveryEditableField() {
         val edited = AgentDraft.from(record)
-            .copy(name = "  Claude laptop ", policy = ConfirmPolicy.ALL_ACTIONS, expiry = ExpiryOption.DAYS_7)
-            .withLevel(AccessLevel.READ_ONLY)
+            .copy(name = "  Claude laptop ", expiry = ExpiryOption.DAYS_7)
             .withRule("sms_send", RuleChoice.BLOCK)
-            .withAppMode(AppAccessMode.ALLOWLIST)
-            .toggleApp("com.whatsapp")
             .copy(activeHours = ActiveHours(480, 1380))
         assertTrue(edited.differsFrom(record))
         val applied = edited.applyTo(record, now)
         assertEquals("Claude laptop", applied.name)
-        assertEquals(Scopes.PRESET_READ_ONLY, applied.scopes)
-        assertEquals(Risk.READ, applied.maxRisk)
-        assertEquals(ConfirmPolicy.ALL_ACTIONS, applied.confirmPolicy)
         assertEquals(now + 7 * day, applied.expiresAt)
         assertEquals(mapOf("sms_send" to ToolRule.BLOCK), applied.toolRules)
-        assertEquals(AppPolicy(AppAccessMode.ALLOWLIST, setOf("com.whatsapp")), applied.appPolicy)
         assertEquals(ActiveHours(480, 1380), applied.activeHours)
-        // Immutable fields are left alone.
-        assertEquals(record.copy(name = applied.name, scopes = applied.scopes, confirmPolicy = applied.confirmPolicy,
-            expiresAt = applied.expiresAt, toolRules = applied.toolRules, appPolicy = applied.appPolicy, activeHours = applied.activeHours,
-            maxRisk = applied.maxRisk), applied)
+        // Everything else, access included, is left alone.
+        assertEquals(record.copy(name = applied.name, expiresAt = applied.expiresAt, toolRules = applied.toolRules, activeHours = applied.activeHours), applied)
+    }
+
+    @Test
+    fun savingNeverOverwritesAccessChangedMeanwhile() {
+        val draft = AgentDraft.from(record).copy(name = "Renamed")
+        // The user saved a new grant on the Access page while this draft was open.
+        val regranted = record.copy(
+            scopes = setOf(Scopes.LOCATION), appPolicy = AppPolicy(AppAccessMode.ALLOWLIST, setOf("com.whatsapp")),
+            confirmPolicy = ConfirmPolicy.NEVER, maxRisk = Risk.ACTION,
+        )
+        val saved = draft.applyTo(regranted, now)
+        assertEquals("Renamed", saved.name)
+        assertEquals(regranted.copy(name = "Renamed"), saved)
+        // And a grant change alone doesn't make the draft dirty.
+        assertFalse(AgentDraft.from(record).differsFrom(regranted))
     }
 
     @Test
@@ -70,67 +75,12 @@ class AgentDraftTest {
     }
 
     @Test
-    fun appModeSwitchesKeepSelectionButAllStoresNoPackages() {
-        val allow = AgentDraft.from(record).withAppMode(AppAccessMode.ALLOWLIST).toggleApp("a").toggleApp("b").toggleApp("a")
-        assertEquals(setOf("b"), allow.appPolicy.packages)
-        val back = allow.withAppMode(AppAccessMode.ALL)
-        assertEquals(setOf("b"), back.appPolicy.packages)
-        assertFalse(back.differsFrom(record))
-        assertEquals(AppPolicy(), back.applyTo(record, now).appPolicy)
-        assertEquals(AppPolicy(AppAccessMode.ALLOWLIST, setOf("b")), back.withAppMode(AppAccessMode.ALLOWLIST).applyTo(record, now).appPolicy)
-    }
-
-    @Test
     fun validation() {
         val draft = AgentDraft.from(record)
         assertNotNull(draft.copy(name = "  ").nameError)
         assertNotNull(draft.copy(name = "x".repeat(41)).nameError)
-        assertNotNull(draft.copy(scopes = emptySet()).scopesError)
         assertNotNull(draft.copy(activeHours = ActiveHours(600, 600)).activeHoursError)
-        assertFalse(draft.copy(scopes = emptySet()).canSave)
         assertFalse(draft.copy(activeHours = ActiveHours(600, 600)).canSave)
         assertNull(AgentDraft.nameError("Claude"))
-        assertNotNull(draft.withAppMode(AppAccessMode.ALLOWLIST).appPolicyWarning)
-        assertNull(draft.withAppMode(AppAccessMode.BLOCKLIST).appPolicyWarning)
-    }
-
-    @Test
-    fun levelsAndScopes() {
-        val draft = AgentDraft.from(record)
-        assertEquals(AccessLevel.ASSISTANT, draft.accessLevel)
-        assertEquals(AccessLevel.FULL, draft.withLevel(AccessLevel.FULL).accessLevel)
-        assertEquals(draft, draft.withLevel(AccessLevel.CUSTOM))
-        val custom = draft.toggleScope(Scopes.CALLS)
-        assertEquals(AccessLevel.CUSTOM, custom.accessLevel)
-        assertEquals(AccessLevel.ASSISTANT, custom.toggleScope(Scopes.CALLS).accessLevel)
-    }
-
-    @Test
-    fun theReadOnlyLevelCarriesItsRiskCap() {
-        val readOnly = AgentDraft.from(record).withLevel(AccessLevel.READ_ONLY)
-        assertEquals(Risk.READ, readOnly.maxRisk)
-        assertEquals(AccessLevel.READ_ONLY, readOnly.accessLevel)
-        // Other presets lift it; a hand-picked selection has none unless it is exactly a preset's scopes.
-        assertNull(readOnly.withLevel(AccessLevel.ASSISTANT).maxRisk)
-        val custom = readOnly.toggleScope(Scopes.LOCATION)
-        assertNull(custom.maxRisk)
-        assertEquals(AccessLevel.CUSTOM, custom.accessLevel)
-        assertEquals(AccessLevel.READ_ONLY, custom.toggleScope(Scopes.LOCATION).accessLevel)
-        // Saved and read back.
-        val saved = readOnly.applyTo(record, now)
-        assertEquals(Risk.READ, saved.maxRisk)
-        assertEquals(readOnly.copy(expiry = null), AgentDraft.from(saved))
-        assertFalse(AgentDraft.from(saved).differsFrom(saved))
-        assertTrue(AgentDraft.from(saved).withLevel(AccessLevel.ASSISTANT).differsFrom(saved))
-    }
-
-    @Test
-    fun readOnlyScopesWithoutTheCapAreCustomAndSaySo() {
-        // Agents saved before the cap existed: same scopes, no cap, so they can still act.
-        val legacy = AgentDraft.from(record.copy(scopes = Scopes.PRESET_READ_ONLY))
-        assertEquals(AccessLevel.CUSTOM, legacy.accessLevel)
-        assertEquals(TokenPresentation.UNCAPPED_READ_ONLY, legacy.capNotice)
-        assertEquals(TokenPresentation.READ_ONLY_CAP, legacy.withLevel(AccessLevel.READ_ONLY).capNotice)
-        assertNull(AgentDraft.from(record).capNotice)
     }
 }

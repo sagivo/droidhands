@@ -5,54 +5,8 @@ import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.android.ui.tokens.TokenState
 import dev.phonebridge.core.audit.TokenUsage
 import dev.phonebridge.core.auth.ActiveHours
-import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.TokenRecord
-import dev.phonebridge.core.tools.Risk
-import dev.phonebridge.core.tools.Scopes
 import java.time.LocalDate
-
-/**
- * The access levels offered for an agent: a preset is its scopes plus its risk cap
- * ([TokenRecord.maxRisk]); [CUSTOM] is anything else.
- */
-enum class AccessLevel(val label: String, val description: String) {
-    READ_ONLY(
-        "Read-only",
-        "Can look but never act: reads messages, notifications, contacts, calendar, location and the screen. Tools " +
-            "that change anything are blocked.",
-    ),
-    ASSISTANT(
-        "Assistant",
-        "Can also act: send messages, call, reply, create events, open apps and links, and change volume, alarms and " +
-            "the clipboard. Sensitive actions ask you first.",
-    ),
-    FULL("Full control", "Everything, including tapping and typing in any app and raw intents."),
-    CUSTOM("Custom", "You pick exactly which capabilities the agent gets."),
-    ;
-
-    /** The preset's scopes; null for [CUSTOM]. */
-    val scopes: Set<String>?
-        get() = when (this) {
-            READ_ONLY -> Scopes.PRESET_READ_ONLY
-            ASSISTANT -> Scopes.PRESET_ASSISTANT
-            FULL -> Scopes.PRESET_FULL
-            CUSTOM -> null
-        }
-
-    /** The preset's risk cap (Read-only: READ); null for no cap, and for [CUSTOM]. */
-    val maxRisk: Risk? get() = if (this == CUSTOM) null else TokenPresentation.presetCap(label)
-
-    companion object {
-        /**
-         * The preset whose scopes and cap equal [scopes] and [maxRisk] exactly, otherwise [CUSTOM]: the
-         * Read-only scopes without the Read-only cap can still act, so they are not "Read-only".
-         */
-        fun of(scopes: Set<String>, maxRisk: Risk?): AccessLevel =
-            entries.firstOrNull { it != CUSTOM && it.scopes == scopes && it.maxRisk == maxRisk } ?: CUSTOM
-
-        fun of(record: TokenRecord): AccessLevel = of(record.scopes, record.maxRisk)
-    }
-}
 
 /** Pure text and ordering helpers for the Agents screens (unit-tested). */
 object AgentPresentation {
@@ -92,14 +46,11 @@ object AgentPresentation {
                 .thenByDescending { it.createdAt },
         )
 
-    /** Short list of the advanced restrictions in force, e.g. ["Only 3 apps", "2 tool rules", "08:00–23:00"]. */
+    /**
+     * Short list of the advanced restrictions in force beyond the grant (whose apps and abilities the access
+     * summary shows), e.g. ["2 tool rules", "08:00–23:00"].
+     */
     fun restrictions(record: TokenRecord, formatHours: (ActiveHours) -> String): List<String> = buildList {
-        val apps = record.appPolicy.packages.size
-        when (record.appPolicy.mode) {
-            AppAccessMode.ALL -> Unit
-            AppAccessMode.ALLOWLIST -> add(if (apps == 1) "Only 1 app" else "Only $apps apps")
-            AppAccessMode.BLOCKLIST -> add(if (apps == 1) "1 app blocked" else "$apps apps blocked")
-        }
         val rules = record.toolRules.size
         if (rules > 0) add(if (rules == 1) "1 tool rule" else "$rules tool rules")
         record.activeHours?.let { add(formatHours(it)) }
