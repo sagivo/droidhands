@@ -1,9 +1,7 @@
 package dev.phonebridge.android.ui.components
 
 import android.text.format.DateFormat
-import android.view.WindowManager
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableLongStateOf
@@ -16,6 +14,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.phonebridge.android.ui.format.TimeFormat
 import kotlinx.coroutines.delay
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -64,23 +63,50 @@ fun rememberTimestampFormatter(): (Long, Long) -> String {
     }
 }
 
+/** Formatter for a time of day ("14:03:27" / "2:03:27 PM"), honoring the 12/24-hour setting. */
+@Composable
+fun rememberTimeOfDayFormatter(): (Long) -> String {
+    val context = LocalContext.current
+    val locale: Locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    val is24h = DateFormat.is24HourFormat(context)
+    return remember(locale, is24h) {
+        val formatter = pattern(locale, if (is24h) "Hms" else "hmsa") ?: DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM)
+        val format: (Long) -> String = { ts -> formatter.format(Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault())) }
+        format
+    }
+}
+
+/**
+ * Formatter for a calendar day, e.g. "Mon, Nov 10" (with the year when it isn't the current
+ * one) in the user's locale.
+ */
+@Composable
+fun rememberDayFormatter(): (LocalDate) -> String {
+    val locale: Locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    return remember(locale) {
+        val thisYear = pattern(locale, "EEEMMMd") ?: DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+        val older = pattern(locale, "yMMMd") ?: DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+        val format: (LocalDate) -> String = { date ->
+            (if (date.year == LocalDate.now().year) thisYear else older).format(date)
+        }
+        format
+    }
+}
+
+/** Short day label for chart axes and summaries, e.g. "Nov 10". */
+@Composable
+fun rememberShortDayFormatter(): (LocalDate) -> String {
+    val locale: Locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    return remember(locale) {
+        val formatter = pattern(locale, "MMMd") ?: DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT)
+        val format: (LocalDate) -> String = { date -> formatter.format(date) }
+        format
+    }
+}
+
 /** ICU best pattern for [skeleton] as a java.time formatter, or null if java.time can't parse it. */
 private fun pattern(locale: Locale, skeleton: String): DateTimeFormatter? = try {
     DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, skeleton), locale)
 } catch (_: IllegalArgumentException) {
     null
-}
-
-/**
- * Sets FLAG_SECURE on the window while in composition: no screenshots, screen recording or
- * Recents thumbnail of secrets (the freshly created token).
- */
-@Composable
-fun SecureWindowEffect() {
-    val activity = LocalContext.current.findActivity()
-    DisposableEffect(activity) {
-        val window = activity?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-    }
 }

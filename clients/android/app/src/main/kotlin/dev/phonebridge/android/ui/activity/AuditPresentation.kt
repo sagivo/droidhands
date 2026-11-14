@@ -6,8 +6,8 @@ import dev.phonebridge.core.audit.AuditOutcome
 /** Coarse outcome groups; each has its own chip color. */
 enum class OutcomeCategory { SUCCESS, ERROR, DENIED }
 
-/** Filter chips on the Activity screen. */
-enum class AuditFilter(val label: String) { ALL("All"), ERRORS("Errors"), DENIED("Denied") }
+/** Outcome filter chips on the Activity screen. */
+enum class AuditFilter(val label: String) { ALL("All"), OK("OK"), ERRORS("Errors"), DENIED("Denied") }
 
 /** Pure classification and labels for audit entries (unit-tested). */
 object AuditPresentation {
@@ -47,6 +47,7 @@ object AuditPresentation {
 
     fun matches(entry: AuditEntry, filter: AuditFilter): Boolean = when (filter) {
         AuditFilter.ALL -> true
+        AuditFilter.OK -> category(entry.outcome) == OutcomeCategory.SUCCESS
         AuditFilter.ERRORS -> category(entry.outcome) == OutcomeCategory.ERROR
         AuditFilter.DENIED -> category(entry.outcome) == OutcomeCategory.DENIED
     }

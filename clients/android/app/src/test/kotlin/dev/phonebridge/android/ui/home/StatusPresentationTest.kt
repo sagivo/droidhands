@@ -46,12 +46,12 @@ class StatusPresentationTest {
     }
 
     @Test
-    fun gettingStarted() {
-        val steps = StatusPresentation.gettingStarted(setupComplete = true, transportConfigured = false, hasActiveToken = false)
-        assertEquals(listOf(true, false, false), steps.map { it.done })
-        assertTrue(StatusPresentation.showGettingStarted(transportConfigured = false, hasActiveToken = true))
-        assertTrue(StatusPresentation.showGettingStarted(transportConfigured = true, hasActiveToken = false))
-        assertFalse(StatusPresentation.showGettingStarted(transportConfigured = true, hasActiveToken = true))
+    fun connectedRelayPrefersTheConnectorUrl() {
+        val withConnector = RelayStatus.Connected("https://r.example.com/mcp", "https://r.example.com/d/abc/mcp")
+        val line = StatusPresentation.relay(withConnector, true)
+        assertEquals(listOf("https://r.example.com/d/abc/mcp"), line.urls)
+        assertEquals("Your connection URL:", line.detail)
+        assertEquals("https://r.example.com/mcp", StatusPresentation.connectionUrl(RelayStatus.Connected("https://r.example.com/mcp", " ")))
     }
 
     @Test

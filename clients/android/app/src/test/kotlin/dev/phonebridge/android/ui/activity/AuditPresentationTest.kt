@@ -43,7 +43,11 @@ class AuditPresentationTest {
             listOf(AuditOutcome.DENIED_BY_USER, AuditOutcome.AUTH_FAILED),
             AuditPresentation.filter(entries, AuditFilter.DENIED).map { it.outcome },
         )
-        assertEquals(mapOf(AuditFilter.ALL to 5, AuditFilter.ERRORS to 1, AuditFilter.DENIED to 2), AuditPresentation.counts(entries))
+        assertEquals(listOf(AuditOutcome.OK, AuditOutcome.OK), AuditPresentation.filter(entries, AuditFilter.OK).map { it.outcome })
+        assertEquals(
+            mapOf(AuditFilter.ALL to 5, AuditFilter.OK to 2, AuditFilter.ERRORS to 1, AuditFilter.DENIED to 2),
+            AuditPresentation.counts(entries),
+        )
     }
 
     @Test

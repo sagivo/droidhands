@@ -8,8 +8,9 @@ import kotlinx.coroutines.withContext
 
 /**
  * Small UI-only state persisted across launches (not settings, no secrets): which runtime
- * permissions were requested at least once (to detect "don't ask again") and whether the
- * first-launch notification prompt was shown. All disk access happens on [Dispatchers.IO].
+ * permissions were requested at least once (to detect "don't ask again"), whether the
+ * first-launch notification prompt was shown, and whether the onboarding wizard was finished or
+ * skipped. All disk access happens on [Dispatchers.IO].
  */
 internal class UiPrefs(context: Context) {
     private val appContext = context.applicationContext
@@ -39,9 +40,17 @@ internal class UiPrefs(context: Context) {
         }
     }
 
+    suspend fun onboardingCompleted(): Boolean = withContext(Dispatchers.IO) { prefs.getBoolean(KEY_ONBOARDING_DONE, false) }
+
+    /** Finished or skipped (true); false re-arms it (Settings > About > Run setup again). */
+    suspend fun setOnboardingCompleted(done: Boolean) = withContext(Dispatchers.IO) {
+        prefs.edit { putBoolean(KEY_ONBOARDING_DONE, done) }
+    }
+
     private companion object {
         const val FILE = "phonebridge_ui"
         const val KEY_ASKED = "asked_permissions"
         const val KEY_NOTIFICATION_PROMPTED = "notification_prompted"
+        const val KEY_ONBOARDING_DONE = "onboarding_done"
     }
 }

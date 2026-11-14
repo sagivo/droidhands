@@ -99,9 +99,9 @@ private fun AccessHeader(accessEnabled: Boolean, onAccessChange: (Boolean) -> Un
                 Text(state, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 Text(
                     if (accessEnabled) {
-                        "Agents holding a valid token can use this phone."
+                        "Agents you connected can use this phone, within what you allowed."
                     } else {
-                        "Every tool call is refused until you turn access back on. Tokens stay valid."
+                        "Every agent request is refused until you turn access back on. Agents stay connected."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )

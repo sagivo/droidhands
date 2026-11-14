@@ -43,6 +43,8 @@ internal object GraphWarmup {
                     graph.confirmations.pendingRequests
                     graph.relayStatus
                     graph.localServerStatus
+                    GraphAdapters.usage(graph)
+                    GraphAdapters.pendingPairings(graph)
                 }
                 isReady = true
                 WarmupState.Ready

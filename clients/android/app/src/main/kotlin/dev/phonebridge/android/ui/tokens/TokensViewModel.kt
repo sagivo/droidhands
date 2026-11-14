@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Which part of the Tokens flow is visible. */
+/** Which part of the manual token flow is visible; [List] means the flow is closed. */
 sealed interface TokenScreen {
     data object List : TokenScreen
     data object Editor : TokenScreen
@@ -34,9 +34,10 @@ sealed interface TokenScreen {
 }
 
 /**
- * Tokens list, the "New token" form and the one-time display of a new token. The plaintext lives
- * only in [screen] while [TokenScreen.Created] is shown (it survives rotation but not process
- * death), and is dropped by [finish]. TokenManager calls persist to disk, so they run on IO.
+ * The manual token path ("Use a token instead"): the "New token" form and the one-time display of
+ * a new token. The plaintext lives only in [screen] while [TokenScreen.Created] is shown (it
+ * survives rotation but not process death), and is dropped by [finish]. Issuing persists to disk,
+ * so it runs on IO. Revoking and deleting live with the agents (`AgentsViewModel`).
  */
 class TokensViewModel(app: Application) : AndroidViewModel(app) {
     private val tokenManager = BridgeGraph.get(app).tokenManager
@@ -96,28 +97,6 @@ class TokensViewModel(app: Application) : AndroidViewModel(app) {
     @MainThread
     fun finish() {
         _screen.value = TokenScreen.List
-    }
-
-    fun revoke(record: TokenRecord) = io("Couldn't revoke \"${record.name}\"", "\"${record.name}\" revoked") {
-        tokenManager.revoke(record.id)
-    }
-
-    fun delete(record: TokenRecord) = io("Couldn't delete \"${record.name}\"", "\"${record.name}\" deleted") {
-        tokenManager.delete(record.id)
-    }
-
-    private fun io(failure: String, success: String, block: () -> Unit) {
-        viewModelScope.launch {
-            try {
-                withContext(Dispatchers.IO) { block() }
-                _messages.send(success)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "$failure: ${e.javaClass.name}")
-                _messages.send("$failure: ${e.message ?: e.javaClass.simpleName}")
-            }
-        }
     }
 
     override fun onCleared() {

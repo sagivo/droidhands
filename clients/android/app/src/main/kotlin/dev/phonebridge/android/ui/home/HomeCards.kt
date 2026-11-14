@@ -1,22 +1,17 @@
 package dev.phonebridge.android.ui.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -25,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.ui.components.StatusPill
+import dev.phonebridge.android.ui.connect.PairingWatch
 import dev.phonebridge.android.ui.setup.SetupProgress
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.core.confirm.ConfirmationRequest
@@ -42,6 +37,8 @@ import dev.phonebridge.core.tools.Risk
 @Composable
 internal fun PendingApprovalCard(
     request: ConfirmationRequest,
+    expiresAt: Long?,
+    now: Long,
     onAllow: () -> Unit,
     onDeny: () -> Unit,
     modifier: Modifier = Modifier,
@@ -69,7 +66,8 @@ internal fun PendingApprovalCard(
             Text(request.summary, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
             Text(
                 "Requested by \"${request.tokenName}\" via ${request.transport} · ${request.toolName}. " +
-                    "Unanswered requests are denied after 60 s.",
+                    (expiresAt?.let { "Denied automatically if unanswered (${PairingWatch.timeLeft(it, now)})." }
+                        ?: "Unanswered requests are denied automatically."),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
@@ -81,7 +79,7 @@ internal fun PendingApprovalCard(
     }
 }
 
-/** Shown while essential Setup items are missing; tapping opens Setup. */
+/** Shown while essential permissions are missing; tapping opens Settings > Permissions & access. */
 @Composable
 internal fun SetupHintCard(progress: SetupProgress, onOpenSetup: () -> Unit, modifier: Modifier = Modifier) {
     val warning = statusColors().warning
@@ -107,61 +105,39 @@ internal fun SetupHintCard(progress: SetupProgress, onOpenSetup: () -> Unit, mod
                         .semantics { contentDescription = summary },
                 )
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open Setup")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open permissions")
         }
     }
 }
 
-/** Onboarding: three numbered steps with a shortcut to the screen that completes each. */
+/** The main call to action: connect an AI agent (one URL + Allow). */
 @Composable
-internal fun GetStartedCard(
-    steps: List<GettingStartedStep>,
-    actions: List<Pair<String, () -> Unit>>,
-    modifier: Modifier = Modifier,
-) {
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Get started", style = MaterialTheme.typography.titleLarge)
+internal fun ConnectAgentCard(hasActiveAgents: Boolean, onConnect: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = onConnect, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text("Connect an AI agent")
+        }
+        if (!hasActiveAgents) {
             Text(
-                "PhoneBridge lets AI agents you authorize use this phone, for example telling Claude " +
-                    "\"send a WhatsApp to Tania\". The phone stays in charge: every agent needs a token you create " +
-                    "here, sensitive actions ask you first, and everything is logged.",
+                "Paste one URL into Claude, ChatGPT or any MCP client, then tap Allow on this phone.",
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            steps.forEachIndexed { index, step ->
-                StepRow(number = index + 1, step = step, action = actions.getOrNull(index))
-            }
         }
     }
 }
 
+/** "Today: 23 actions by 2 agents · 1 denied", tapping opens the Agents tab. */
 @Composable
-private fun StepRow(number: Int, step: GettingStartedStep, action: Pair<String, () -> Unit>?) {
-    Row(verticalAlignment = Alignment.Top) {
-        if (step.done) {
-            Icon(
-                Icons.Filled.CheckCircle,
-                contentDescription = "Done",
-                tint = statusColors().ok,
-                modifier = Modifier.size(28.dp),
-            )
-        } else {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("$number", color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+internal fun TodayCard(summary: TodaySummary, onOpenAgents: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedCard(onClick = onOpenAgents, modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Today", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(TodaySummary.text(summary), style = MaterialTheme.typography.titleMedium)
             }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(step.title, style = MaterialTheme.typography.titleSmall)
-            Text(step.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (!step.done && action != null) {
-                TextButton(onClick = action.second, modifier = Modifier.padding(top = 2.dp)) { Text(action.first) }
-            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open agents")
         }
     }
 }

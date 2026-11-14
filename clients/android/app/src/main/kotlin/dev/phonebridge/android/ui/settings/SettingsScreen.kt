@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -42,11 +43,25 @@ import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
+import dev.phonebridge.android.ui.setup.SetupUiState
 
-/** Connection settings (relay, local server, boot) plus device info and docs. */
+/** Navigation callbacks of the Settings tab. */
+class SettingsActions(
+    val onOpenPermissions: () -> Unit,
+    val onOpenNeverAllow: () -> Unit,
+    val onRevokeAll: () -> Unit,
+    val onRunSetupAgain: () -> Unit,
+)
+
+/**
+ * Settings: Connection (relay, local server, boot; saved together from the bottom bar),
+ * Permissions & access, Security (never-allow apps, hidden one-time codes, revoke all) and About.
+ */
 @Composable
-fun SettingsScreen(vm: SettingsViewModel) {
+fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int, actions: SettingsActions) {
     val current by vm.settings.collectAsStateWithLifecycle()
+    val neverAllow by vm.neverAllowApps.collectAsStateWithLifecycle()
+    val redact by vm.redactOneTimeCodes.collectAsStateWithLifecycle()
     val form = vm.form
     val validation = remember(form) { form.validate() }
     val dirty = form.differsFrom(current)
@@ -69,11 +84,9 @@ fun SettingsScreen(vm: SettingsViewModel) {
         },
     ) { padding ->
         LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item(key = "relay-header") { SectionHeader("Relay") }
+            item(key = "connection-header") { SectionHeader("Connection") }
             item(key = "relay") { RelaySection(form, validation, vm::edit) }
-            item(key = "local-header") { SectionHeader("Local server") }
             item(key = "local") { LocalServerSection(form, validation, vm::edit) }
-            item(key = "general-header") { SectionHeader("General") }
             item(key = "general") {
                 SettingsCard {
                     SwitchRow(
@@ -84,8 +97,21 @@ fun SettingsScreen(vm: SettingsViewModel) {
                     )
                 }
             }
+            item(key = "permissions-header") { SectionHeader("Permissions & access") }
+            item(key = "permissions") { PermissionsRow(setup, actions.onOpenPermissions) }
+            item(key = "security-header") { SectionHeader("Security") }
+            item(key = "security") {
+                SecuritySection(
+                    neverAllowCount = neverAllow.size,
+                    redactOneTimeCodes = redact,
+                    activeAgents = activeAgents,
+                    onOpenNeverAllow = actions.onOpenNeverAllow,
+                    onRedactChange = vm::setRedactOneTimeCodes,
+                    onRevokeAll = actions.onRevokeAll,
+                )
+            }
             item(key = "about-header") { SectionHeader("About") }
-            item(key = "about") { AboutSection(vm.deviceId) }
+            item(key = "about") { AboutSection(vm.deviceId, actions.onRunSetupAgain) }
         }
     }
 }
@@ -162,10 +188,12 @@ private fun LocalServerSection(form: SettingsForm, validation: SettingsForm.Vali
 }
 
 @Composable
-private fun AboutSection(deviceId: String) {
+private fun AboutSection(deviceId: String, onRunSetupAgain: () -> Unit) {
     val copy = rememberCopier()
     SettingsCard {
-        Text("Device ID", style = MaterialTheme.typography.labelLarge)
+        Text("Version", style = MaterialTheme.typography.labelLarge)
+        Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.bodyMedium)
+        Text("Device ID", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
         CodeBlock(deviceId)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -176,8 +204,7 @@ private fun AboutSection(deviceId: String) {
             )
             TextButton(onClick = { copy("Device ID", deviceId, false) }) { Text("Copy") }
         }
-        Text("Version", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-        Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.bodyMedium)
+        OutlinedButton(onClick = onRunSetupAgain, modifier = Modifier.padding(top = 8.dp)) { Text("Run setup again") }
         Text("Documentation", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
         Text(
             DOCS,
@@ -195,7 +222,7 @@ private const val DOCS = """In the PhoneBridge repository:
 • relay/: self-host the relay (Node.js or Docker)"""
 
 @Composable
-private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
     OutlinedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
