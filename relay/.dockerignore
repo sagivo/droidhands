@@ -15,3 +15,10 @@ Dockerfile
 README.md
 fly.toml
 render.yaml
+# Cloudflare Worker relay (not part of the Node image); .dev.vars holds local secrets
+.wrangler
+.dev.vars*
+wrangler.toml
+CLOUDFLARE.md
+conformance
+test-worker
