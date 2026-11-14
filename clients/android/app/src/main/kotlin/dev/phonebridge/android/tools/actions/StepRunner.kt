@@ -19,6 +19,7 @@ import dev.phonebridge.android.tools.screen.scrollWith
 import dev.phonebridge.android.tools.screen.tapNode
 import dev.phonebridge.android.tools.screen.typeInto
 import dev.phonebridge.android.tools.support.Accessibility
+import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.android.tools.system.LaunchGate
 import dev.phonebridge.core.plugins.ActionRequest
 import dev.phonebridge.core.plugins.ActionResult
@@ -34,7 +35,9 @@ import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -348,6 +351,9 @@ internal class StepRunner private constructor(
         /** Leaves time under the action's own timeout to say which step was running. */
         private const val DEADLINE_MARGIN_MS = 3_000L
 
+        /** How long a recipe waits for an approval screen to close before its first step. */
+        private const val APPROVAL_CLOSE_WAIT_MS = 3_000L
+
         private const val MISPINNED = "Internal error: a step of this recipe is not pinned to its app, so it was not run."
 
         /** Runs [recipe] for [request] (its app is [ActionRequest.app]); see the class documentation. */
@@ -361,6 +367,9 @@ internal class StepRunner private constructor(
             }
             UiAutomation.awaitUsable(context, ctx, "use ${app.label} (${request.action.title})", nothingDone = "Nothing was done.")
             return UiAutomation.exclusive(access) {
+                // Right after the user approved this action, the approval screen may still be closing: wait for it
+                // (never act during it: every step's beforeAction still refuses while an approval is pending or shown).
+                withTimeoutOrNull(APPROVAL_CLOSE_WAIT_MS) { ApprovalGuard.active.first { !it } }
                 UiAutomation.requireUnlocked(context)
                 if (StepScreens.startsByOpening(recipe.steps)) {
                     // The first step brings the app to the front, so whatever is in front now is never touched.

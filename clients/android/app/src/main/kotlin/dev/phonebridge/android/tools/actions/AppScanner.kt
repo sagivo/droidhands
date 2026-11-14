@@ -47,7 +47,8 @@ internal class AppScan(
  *
  * * one [AppScan] of the launchable apps and of the handlers of each standard intent (each queried once across
  *   all packages), rebuilt when Android reports installed, updated or removed packages
- *   ([PackageManager.getChangedPackages], checked on every use) and at least every [MAX_SCAN_AGE_MS];
+ *   ([PackageManager.getChangedPackages], checked on use, at most every [RECHECK_MS]) and at least every
+ *   [MAX_SCAN_AGE_MS];
  * * per package, its `shortcuts.xml` (static shortcuts, App Actions capabilities) and the actions built from it,
  *   kept while the package's [VersionKey] and handlers are unchanged.
  *
@@ -92,6 +93,7 @@ internal class AppScanner(context: Context) {
     /** Scans every app once in the background, so the first agent request finds the cache warm. */
     suspend fun warmUp(log: (String, Throwable) -> Unit) {
         for (app in scan().apps) {
+            if (app.entry.packageName == context.packageName) continue
             try {
                 actions(app.entry.packageName)
             } catch (e: CancellationException) {
@@ -102,9 +104,16 @@ internal class AppScanner(context: Context) {
         }
     }
 
+    /** When packages were last found unchanged; a search over every app checks at most once per [RECHECK_MS]. */
+    @Volatile private var checkedAt = 0L
+
     private fun isFresh(scan: AppScan): Boolean {
-        if (SystemClock.elapsedRealtime() - scan.takenAt > MAX_SCAN_AGE_MS) return false
-        return changedSince(scan.sequence) == null
+        val now = SystemClock.elapsedRealtime()
+        if (now - scan.takenAt > MAX_SCAN_AGE_MS) return false
+        if (now - checkedAt < RECHECK_MS) return true
+        if (changedSince(scan.sequence) != null) return false
+        checkedAt = now
+        return true
     }
 
     /** The new sequence number if packages changed since [sequence], else null. */
@@ -199,5 +208,8 @@ internal class AppScanner(context: Context) {
     companion object {
         /** A safety net for changes [PackageManager.getChangedPackages] doesn't report (e.g. components turned off). */
         const val MAX_SCAN_AGE_MS = 10 * 60_000L
+
+        /** How long "no package changed" is trusted before asking Android again. */
+        const val RECHECK_MS = 2_000L
     }
 }
