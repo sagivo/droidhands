@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: teams
+name: Microsoft Teams
+description: Microsoft's work chat and meetings app.
+category: messaging
+homepage: https://www.microsoft.com/microsoft-teams
+status: experimental
+android:
+  packages: [com.microsoft.teams]
+
+actions:
+  - id: start_chat
+    title: Start a chat with a message typed in
+    description: >-
+      Opens a Teams chat with one or more people by their work email addresses (an existing chat, or a new one in
+      draft state), optionally with a message typed into the compose box. Nothing is sent: the user (or you,
+      with screen_read and ui_tap) must tap Send. Some Teams versions for Android show "can't navigate to the
+      destination" for this link; then use the screen tools.
+    keywords: [chat, message, dm, colleague, coworker, draft, compose, work]
+    risk: action
+    params:
+      users:
+        description: >-
+          Work email address(es) of the people to chat with, comma-separated without spaces, e.g.
+          dana@contoso.com,lee@contoso.com
+        required: true
+        max_length: 1000
+        pattern: "^[^@\\s,]+@[^@\\s,]+(,[^@\\s,]+@[^@\\s,]+)*$"
+      message:
+        description: Optional text to type into the compose box (not sent)
+        max_length: 4000
+    completes: false
+    android:
+      url: "https://teams.microsoft.com/l/chat/0/0?users={{users}}&message={{message}}"
+    examples:
+      - params: {users: dana@contoso.com, message: "Do you have 5 minutes?"}
+        expect: {url: "https://teams.microsoft.com/l/chat/0/0?users=dana%40contoso.com&message=Do%20you%20have%205%20minutes%3F"}
+      - params: {users: "dana@contoso.com,lee@contoso.com"}
+        expect: {url: "https://teams.microsoft.com/l/chat/0/0?users=dana%40contoso.com%2Clee%40contoso.com&message="}
+      - params: {users: Dana Levi}
+        expect: {error: users}
+      - params: {}
+        expect: {error: users}

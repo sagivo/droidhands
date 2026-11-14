@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: viber
+name: Viber
+description: Messaging and calling app.
+category: messaging
+homepage: https://www.viber.com
+status: experimental
+android:
+  packages: [com.viber.voip]
+
+actions:
+  - id: open_bot_chat
+    title: Open a chat with a business or bot
+    description: >-
+      Opens the Viber chat with a business account or bot by its URI (from the business's Viber link, e.g.
+      viber://pa?chatURI=examplebot). Opening the chat tells the business that the user started a conversation
+      and shares their Viber name, picture, language and country with it, so the user approves this first.
+      Optional text is typed into the message box but not sent. Does not work for people's phone numbers.
+    keywords: [chat, business, bot, support, customer service, company]
+    risk: sensitive
+    params:
+      chat_uri:
+        description: The bot's or business's Viber URI, e.g. examplebot
+        required: true
+        pattern: "^[A-Za-z0-9_.-]{1,100}$"
+      text:
+        description: Optional message to type into the chat box (not sent)
+        max_length: 1000
+    confirm: Open a Viber chat with "{{chat_uri}}" (it will see your Viber name and picture)
+    completes: true
+    android:
+      url: "viber://pa?chatURI={{chat_uri}}&text={{text}}"
+    examples:
+      - params: {chat_uri: examplebot}
+        expect: {url: "viber://pa?chatURI=examplebot&text="}
+      - params: {chat_uri: examplebot, text: Where is my order?}
+        expect: {url: "viber://pa?chatURI=examplebot&text=Where%20is%20my%20order%3F"}
+      - params: {chat_uri: "viber://pa?chatURI=examplebot"}
+        expect: {error: chat_uri}

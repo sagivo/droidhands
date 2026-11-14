@@ -1,0 +1,59 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: discord
+name: Discord
+description: Chat app for communities, with servers, channels, voice and direct messages.
+category: messaging
+homepage: https://discord.com
+status: experimental
+android:
+  packages: [com.discord]
+
+actions:
+  - id: open_channel
+    title: Open a server channel
+    description: >-
+      Opens a channel of a Discord server the user is in, by the numeric IDs from its link
+      (discord.com/channels/<server id>/<channel id>). Nothing is typed or sent. Names don't work: copy the IDs
+      from a channel link.
+    keywords: [channel, server, guild, chat, community, open]
+    risk: action
+    params:
+      server_id:
+        description: The server's numeric ID, e.g. 613425648685547541
+        required: true
+        pattern: "^[0-9]{15,21}$"
+      channel_id:
+        description: The channel's numeric ID, e.g. 697138785317814292
+        required: true
+        pattern: "^[0-9]{15,21}$"
+    completes: true
+    android:
+      url: "https://discord.com/channels/{{server_id}}/{{channel_id}}"
+    examples:
+      - params: {server_id: "613425648685547541", channel_id: "697138785317814292"}
+        expect: {url: "https://discord.com/channels/613425648685547541/697138785317814292"}
+      - params: {server_id: "613425648685547541", channel_id: general}
+        expect: {error: channel_id}
+      - params: {channel_id: "697138785317814292"}
+        expect: {error: server_id}
+
+  - id: open_invite
+    title: Open a server invite
+    description: >-
+      Opens a Discord invite (discord.gg/<code>) in the app, which shows the server and a button to accept the
+      invite. The user is not added to the server until someone taps it.
+    keywords: [invite, server, join, community, discord.gg]
+    risk: action
+    params:
+      code:
+        description: The invite code, the part after discord.gg/, e.g. AbCd123
+        required: true
+        pattern: "^[A-Za-z0-9-]{2,32}$"
+    completes: false
+    android:
+      url: "https://discord.gg/{{code}}"
+    examples:
+      - params: {code: AbCd123}
+        expect: {url: "https://discord.gg/AbCd123"}
+      - params: {code: "https://discord.gg/AbCd123"}
+        expect: {error: code}
