@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: play_store
+name: Google Play Store
+description: Google's store for Android apps and games.
+category: system
+homepage: https://play.google.com
+status: experimental
+android:
+  packages: [com.android.vending]
+
+actions:
+  - id: app_page
+    title: Open an app's store page
+    description: >-
+      Opens an app's Google Play page (description, rating, reviews and its Install, Update or Open button) by its
+      package name. Nothing is installed, updated or bought until someone taps the button.
+    keywords: [app, install, download, update, reviews, rating, store, listing, get app]
+    risk: action
+    params:
+      package:
+        description: The app's package name, e.g. com.spotify.music (apps_list shows it for installed apps).
+        required: true
+        max_length: 200
+        pattern: '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
+    confirm: Open the Play Store page of {{package}}
+    android:
+      url: "https://play.google.com/store/apps/details?id={{package}}"
+    examples:
+      - params: {package: com.spotify.music}
+        expect: {url: "https://play.google.com/store/apps/details?id=com.spotify.music"}
+      - params: {package: Spotify Music}
+        expect: {error: package}
+
+  - id: search
+    title: Search for apps
+    description: >-
+      Opens Google Play's search results for apps and games matching a query. Nothing is installed until someone
+      opens a result and taps Install.
+    keywords: [find, app, apps, game, games, install, download, store]
+    risk: action
+    params:
+      query:
+        description: What to look for, e.g. "pdf scanner" or an app's name.
+        required: true
+        max_length: 200
+    confirm: Search Google Play for "{{query}}"
+    android:
+      url: "https://play.google.com/store/search?q={{query}}&c=apps"
+    examples:
+      - params: {query: pdf scanner}
+        expect: {url: "https://play.google.com/store/search?q=pdf%20scanner&c=apps"}
+      - params: {}
+        expect: {error: query}
+
+  - id: subscriptions
+    title: Open subscriptions
+    description: >-
+      Opens the list of the user's Google Play subscriptions, where they can be renewed, paused or cancelled.
+      Nothing changes until the user does it there.
+    keywords: [subscription, subscriptions, renew, cancel, membership, billing, recurring]
+    risk: action
+    android:
+      url: "https://play.google.com/store/account/subscriptions"
+    examples:
+      - params: {}
+        expect: {url: "https://play.google.com/store/account/subscriptions"}
