@@ -18,7 +18,8 @@ import java.math.BigInteger
  * * the Core schema (strings, integers, floats, booleans, null, maps, lists); custom tags such as
  *   `!!java.…` are errors (snakeyaml-engine never instantiates classes);
  * * at most [MAX_CHARS] characters, one document, no duplicate keys, at most [MAX_ALIASES] aliases
- *   (no alias bombs) and no recursive keys; too-deep nesting is an error, not a crash.
+ *   and at most [MAX_NODES] values once aliases are expanded (no alias bombs), and no recursive keys;
+ *   too-deep nesting is an error, not a crash.
  *
  * The result is a [JsonElement] tree that keeps key order and tells quoted strings (`"5"`) from
  * numbers (`5`). Errors are [PluginFormatException]s with the line and column when known.
@@ -29,6 +30,12 @@ object PluginYaml {
 
     /** Most aliases (`*name`) a file may use. */
     const val MAX_ALIASES = 20
+
+    /**
+     * Most values (scalars, maps and lists) in the expanded tree. Aliases share nodes, so a few nested
+     * ones in a small file could otherwise expand to millions of values and exhaust memory.
+     */
+    const val MAX_NODES = 200_000
 
     private fun settings(): LoadSettings = LoadSettings.builder()
         .setSchema(CoreSchema())
@@ -53,11 +60,13 @@ object PluginYaml {
             // Anything else the engine throws (it should only throw YamlEngineException) is still a bad file.
             throw PluginFormatException("not valid YAML: ${e.message ?: e.javaClass.simpleName}")
         }
-        return toJson(raw, "", 0)
+        return toJson(raw, "", 0, intArrayOf(0))
     }
 
-    private fun toJson(value: Any?, path: String, depth: Int): JsonElement {
+    /** [count] holds the number of values converted so far (see [MAX_NODES]). */
+    private fun toJson(value: Any?, path: String, depth: Int, count: IntArray): JsonElement {
         if (depth > MAX_DEPTH) throw PluginFormatException("${where(path)}nested too deeply")
+        if (++count[0] > MAX_NODES) throw PluginFormatException("too many values (aliases expand too far)")
         return when (value) {
             null -> JsonNull
             is String -> JsonPrimitive(value)
@@ -72,11 +81,11 @@ object PluginYaml {
                 buildMap {
                     for ((k, v) in value) {
                         val key = k as? String ?: throw PluginFormatException("${where(path)}keys must be text, found ${describe(k)}")
-                        put(key, toJson(v, PluginPath.key(path, key), depth + 1))
+                        put(key, toJson(v, PluginPath.key(path, key), depth + 1, count))
                     }
                 },
             )
-            is List<*> -> JsonArray(value.mapIndexed { i, v -> toJson(v, PluginPath.index(path, i), depth + 1) })
+            is List<*> -> JsonArray(value.mapIndexed { i, v -> toJson(v, PluginPath.index(path, i), depth + 1, count) })
             else -> throw PluginFormatException("${where(path)}unsupported YAML value (${describe(value)}); use text, numbers, booleans, lists and maps")
         }
     }

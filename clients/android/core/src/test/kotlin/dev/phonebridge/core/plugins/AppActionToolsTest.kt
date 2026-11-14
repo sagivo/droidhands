@@ -344,7 +344,7 @@ class AppActionToolsTest {
         val local = catalog.toolFor(catalog.action(maps, "directions")!!)!!
         assertTrue(local.alwaysConfirm)
         assertEquals("Maps: Get directions (unreviewed plugin)", local.title)
-        assertEquals("Show directions to Paris [opens https://maps.example/dir?to=Paris]", local.describeCall(buildJsonObject { put("to", "Paris") }))
+        assertEquals("Opens https://maps.example/dir?to=Paris. Plugin says: Show directions to Paris", local.describeCall(buildJsonObject { put("to", "Paris") }))
 
         // Tool recipes run the built-in tool itself, marked unreviewed for local plugins.
         assertEquals("whatsapp_send", catalog.toolFor(catalog.action(whatsapp, "send_message")!!)!!.name)
@@ -539,7 +539,7 @@ class AppActionToolsTest {
         val prompt = prompts.single()
         assertEquals("com.maps/directions", prompt.toolName)
         assertEquals("Maps: Get directions (unreviewed plugin)", prompt.toolTitle)
-        assertEquals("Show directions to Paris [opens https://maps.example/dir?to=Paris]", prompt.summary)
+        assertEquals("Opens https://maps.example/dir?to=Paris. Plugin says: Show directions to Paris", prompt.summary)
         assertTrue("local plugin that has not been reviewed" in result.json()["integration_note"]!!.jsonPrimitive.content)
 
         call(token, "app_action_run", """{"app":"Maps","action":"message_owner","params":{"message":"hello"}}""")

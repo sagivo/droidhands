@@ -26,7 +26,18 @@ internal object SetupChecks {
      * @param showRationale `Activity.shouldShowRequestPermissionRationale`, for "don't ask again" detection.
      */
     @WorkerThread
-    fun read(context: Context, asked: Set<String>, showRationale: (String) -> Boolean): List<SetupItem> = buildList {
+    fun read(context: Context, asked: Set<String>, showRationale: (String) -> Boolean): List<SetupItem> {
+        val items = readAll(context, asked, showRationale)
+        // Android let the user grant something restricted, so restricted settings are allowed: drop the hints.
+        if (!RestrictedSettings.likelyAllowed(items, Build.VERSION.SDK_INT)) return items
+        return items.map { it.copy(restrictedSettingsHelp = false, restrictedSettingsGuide = false) }
+    }
+
+    /** True when Android likely restricts settings for this install ([RestrictedSettings.likelyRestricted]). */
+    @WorkerThread
+    fun installRestricted(context: Context): Boolean = RestrictedSettings.likelyRestricted(Build.VERSION.SDK_INT, installSource(context))
+
+    private fun readAll(context: Context, asked: Set<String>, showRationale: (String) -> Boolean): List<SetupItem> = buildList {
         val source = installSource(context)
         PermissionCatalog.RUNTIME.forEach { group ->
             add(

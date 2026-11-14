@@ -60,6 +60,17 @@ class PluginYamlTest {
     }
 
     @Test
+    fun aliasesMayNotExpandTooFar() {
+        // 18 aliases (under the engine's limit) over 6 levels: 3^6 copies of a 1000-value list.
+        val bomb = buildString {
+            append("l0: &l0 [").append((1..1000).joinToString(", ") { "x" }).append("]\n")
+            for (i in 1..6) append("l$i: &l$i [*l${i - 1}, *l${i - 1}, *l${i - 1}]\n")
+        }
+        val e = assertFailsWith<PluginFormatException> { PluginYaml.load(bomb) }
+        assertEquals("too many values (aliases expand too far)", e.message)
+    }
+
+    @Test
     fun largeFilesAreRejected() {
         val big = "a: \"" + "x".repeat(PluginYaml.MAX_CHARS) + "\"\n"
         val e = assertFailsWith<PluginFormatException> { PluginYaml.load(big) }

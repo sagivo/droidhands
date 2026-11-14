@@ -5,6 +5,7 @@ import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Tool
+import dev.phonebridge.core.tools.ToolNames
 
 /** UI snapshot of a registered [Tool] (decoupled from the live registry). */
 data class ToolInfo(val name: String, val title: String, val scope: String, val risk: Risk) {
@@ -72,6 +73,24 @@ object ToolRules {
         RuleChoice.ALLOW -> "Never asks (still rate-limited)"
         RuleChoice.ASK -> "Always asks you first"
         RuleChoice.BLOCK -> "Hidden from the agent and refused"
+    }
+
+    /**
+     * The choices that mean something for [tool]. `app_action_run` runs other tools, each approved by its own
+     * rule and risk: Ask there asks before every app action, but Allow would not skip those approvals, so it
+     * isn't offered (an Allow rule already set stays visible so it can be changed).
+     */
+    fun choices(tool: ToolInfo, current: RuleChoice): List<RuleChoice> = when {
+        tool.name != ToolNames.APP_ACTION_RUN || current == RuleChoice.ALLOW -> RuleChoice.entries
+        else -> listOf(RuleChoice.DEFAULT, RuleChoice.ASK, RuleChoice.BLOCK)
+    }
+
+    /** What [choice] means for [tool] under [policy]. */
+    fun meaning(choice: RuleChoice, tool: ToolInfo, policy: ConfirmPolicy): String = when {
+        tool.name != ToolNames.APP_ACTION_RUN -> choiceMeaning(choice, tool.risk, policy)
+        choice == RuleChoice.ASK -> "Asks you first before every app action"
+        choice == RuleChoice.BLOCK -> choiceMeaning(choice, tool.risk, policy)
+        else -> "Each app action's own rule and risk decide"
     }
 
     /** Rules with [tool] set to [choice] ([RuleChoice.DEFAULT] removes the rule). */

@@ -11,8 +11,9 @@ Three steps, about five minutes, all on the phone (Android 11 or newer):
 On the phone, download **`PhoneBridge.apk`** from the project website or from the latest GitHub
 release (*Releases › Latest › Assets › PhoneBridge.apk*), then open the downloaded file.
 
-* Android asks whether your browser (or file manager) may install apps. Tap **Settings**, turn on
-  **Allow from this source**, go back, and tap **Install**.
+* Chrome warns "File might be harmful" for every APK. Tap **Download anyway**.
+* The first time, Android asks whether your browser (or Files app) may install unknown apps. Tap
+  **Settings**, turn on **Allow from this source**, go back, and tap **Install**.
 * Google Play Protect may offer to scan the app or warn that it comes from an unknown developer.
   Scan it, or choose **Install anyway**.
 * Optional: each release lists the APK's SHA-256 in `SHA256SUMS`, if you want to check the file.
@@ -32,8 +33,9 @@ The wizard has four short steps. Every step can be skipped and reopened later fr
    (to operate apps for you), notification access, battery (so the phone stays reachable), and two
    optional ones.
 
-   **Android 13 and newer** block accessibility for apps installed from a download until you allow
-   it. The wizard notices and shows a card with the three steps:
+   **Android 13 and newer** block accessibility and notification access (and Android 15 also SMS)
+   for apps installed from a download until you allow restricted settings. The wizard notices and
+   shows a card with the three steps first:
 
    1. Tap **Open Accessibility** and try to turn PhoneBridge on. Android says it's a restricted
       setting: tap **OK**.
@@ -150,6 +152,7 @@ the other way round): uninstall one first. Building and publishing signed releas
 |---|---|
 | "App not installed" when installing the APK | Another PhoneBridge signed with a different key is installed (e.g. a debug build). Uninstall it first. |
 | Accessibility toggle is greyed out ("Restricted setting") | Android 13+ protection for downloaded apps. Try to turn it on once, then open App info → ⋮ → *Allow restricted settings*, and try again. The wizard's card walks you through it. |
+| "App was denied access to SMS" | The same Android 15 protection. Allow restricted settings as above, then App info → Permissions → SMS → Allow. |
 | Agent says the accessibility service is stuck | After an app update Android sometimes leaves it half-connected. Turn PhoneBridge off and on in Settings → Accessibility. |
 | Notifications show "Sensitive notification content hidden" | Android 15 hides content that it classifies as sensitive from apps like PhoneBridge. Replies still work. For SMS the agent uses `sms_list`, and for calls `call_status` / `call_answer`. |
 | Agent can't reach the phone after a while | Exempt PhoneBridge from battery optimization (Settings → Permissions & access). Check that the relay shows the phone as connected. |

@@ -73,8 +73,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * unresolvable call TOOL_ERROR, both as refusals). From there the resolved tool goes through the
  * pipeline above exactly as if it had been called by name: its scope, policy and rate limits, rules
  * (also on [Dispatch.alias]), confirmation by its risk, its timeout and stop checks (which also require
- * the dispatching tool to stay allowed). Its audit entry carries the resolved tool's name and arguments
- * and notes "via <dispatching tool>".
+ * the dispatching tool to stay allowed). An ASK rule on the dispatching tool makes every call it runs need
+ * approval (one prompt, by the resolved tool's own means); an ALLOW rule on it never skips the resolved
+ * tool's approval. Its audit entry carries the resolved tool's name and arguments and notes
+ * "via <dispatching tool>".
  *
  * Every call ends with exactly one audit entry, cancelled ones included. Requests refused before
  * anything ran (missing name, bad arguments, unknown tool, missing scope, paused, policy and rate-limit
@@ -343,7 +345,9 @@ internal class ToolCalls(
             val audit = if (decision.rateLimited) AuditOutcome.RATE_LIMITED else AuditOutcome.DENIED_POLICY
             return Outcome(ToolResult.error(decision.reason), audit, decision.reason, refused = true)
         }
-        val needsConfirmation = decision == PolicyDecision.RequireConfirmation
+        // ASK on the dispatching tool asks before every call it runs; ALLOW on it never skips the resolved tool's approval.
+        val viaAsks = target.via?.let { token.toolRules[it.name] == ToolRule.ASK } == true
+        val needsConfirmation = decision == PolicyDecision.RequireConfirmation || viaAsks
 
         val state = CallState()
 

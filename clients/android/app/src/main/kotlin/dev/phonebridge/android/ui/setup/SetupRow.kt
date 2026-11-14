@@ -1,5 +1,6 @@
 package dev.phonebridge.android.ui.setup
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,8 +17,10 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
@@ -98,14 +101,21 @@ private fun RowNotes(item: SetupItem, onOpenAppInfo: () -> Unit) {
 /**
  * The numbered "Allow restricted settings" steps for an app installed from an APK file on Android
  * 13+ ([RestrictedSettings.showGuide]), with the Open App info button. The caller places it above
- * the accessibility row's own "Open Accessibility" button, which step 1 refers to.
+ * the accessibility row's own "Open Accessibility" button, which step 1 refers to, or passes
+ * [onOpenAccessibility] to show that button here. [unlocks] is what Android blocks until then.
+ * The buttons use the content color the caller's container sets, so they read on any container.
  */
 @Composable
-internal fun RestrictedSettingsGuide(onOpenAppInfo: () -> Unit, modifier: Modifier = Modifier) {
+internal fun RestrictedSettingsGuide(
+    onOpenAppInfo: () -> Unit,
+    modifier: Modifier = Modifier,
+    unlocks: String = "accessibility",
+    onOpenAccessibility: (() -> Unit)? = null,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Installed from the web? One extra step", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Android blocks accessibility for apps installed outside an app store until you allow it:",
+            "Android blocks $unlocks for apps installed outside an app store until you allow restricted settings:",
             style = MaterialTheme.typography.bodyMedium,
         )
         RestrictedSettings.GUIDE_STEPS.forEachIndexed { index, step ->
@@ -114,8 +124,20 @@ internal fun RestrictedSettingsGuide(onOpenAppInfo: () -> Unit, modifier: Modifi
                 Text(step, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            OutlinedButton(onClick = onOpenAppInfo) { Text("Open App info") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            val content = LocalContentColor.current
+            if (onOpenAccessibility != null) {
+                OutlinedButton(
+                    onClick = onOpenAccessibility,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = content),
+                    border = BorderStroke(1.dp, content),
+                ) { Text("Open Accessibility") }
+            }
+            // Filled in the card's own on-color: an outlined button in the theme's accent was unreadable on it.
+            Button(
+                onClick = onOpenAppInfo,
+                colors = ButtonDefaults.buttonColors(containerColor = content, contentColor = MaterialTheme.colorScheme.surface),
+            ) { Text("Open App info") }
         }
     }
 }

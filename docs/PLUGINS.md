@@ -282,7 +282,9 @@ than `index`. `id` may be short (`search_src_text`, which gets the app's package
 parameter left out) matches nothing.
 
 **Confinement:** before every tap, long-press, type, scroll or Back, PhoneBridge checks that the
-plugin's app is in the foreground. If another app is, the action stops with an error naming it.
+plugin's app is in the foreground. If another app is, the action stops with an error naming it. A tap
+or swipe made by coordinates must also land on the app's own window, not on a keyboard, notification or
+other app covering the element.
 Recipes can't press Home, open the notification shade, or touch other apps or PhoneBridge itself.
 
 **Limits:** 40 steps in total (nested ones included), and 90 s per action.
@@ -368,8 +370,8 @@ The validator, at build time and when a local plugin is imported, rejects:
 
 * risk below `sensitive` for scope `messages.send` or `calls`, and for any action whose `confirm`, `title`
   or `id` says it sends, posts, pays, buys, orders, books, calls, deletes or transfers;
-* risk `read` for any `steps` recipe that taps, types or scrolls, and for every `intent` and `url`
-  recipe (opening an app is at least an `action`);
+* risk `read` for any `steps` recipe that taps, types, scrolls, starts an intent or opens a link, and for
+  every `intent` and `url` recipe (opening an app is at least an `action`);
 * `risk` or `scope` on a `tool` recipe, or a `tool` name that doesn't exist (or is `intent_start`, a
   `ui_*` / `screen_*` tool, or one of the tools that list or run actions);
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,
@@ -393,8 +395,9 @@ At run time:
   `<package>/<action id>` (e.g. `com.spotify.music/play`), against the agent's scopes, risk cap
   and per-tool rules. It is approved according to its `risk`, rate-limited, and audited under that
   name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
-  Read-only agent can't run app actions). Parameters are checked, and the recipe rendered, before
-  any approval prompt. In the app, these rules are set per agent under *Agents → (agent) → Advanced →
+  Read-only agent can't run app actions). An *Ask* rule on `app_action_run` makes every app action ask
+  first; an *Allow* rule on it never skips the approval an action needs, so the app doesn't offer it there.
+  Parameters are checked, and the recipe rendered, before any approval prompt. In the app, these rules are set per agent under *Agents → (agent) → Advanced →
   App action rules* (grouped by app); the global never-allow list also has a switch on each app's page,
   *Apps → (app) → Block for all agents*.
 * **Pinned and confined:** intents and links are pinned to the app's package, and recipes act only

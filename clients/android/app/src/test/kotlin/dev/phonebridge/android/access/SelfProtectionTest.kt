@@ -59,6 +59,24 @@ class SelfProtectionTest {
     }
 
     @Test
+    fun `a recipe's gesture must land on its own app's window`() {
+        val app = "com.chat"
+        assertFalse(SelfProtection.coversConfinedApp(WindowKind.APPLICATION, app, app))
+        assertTrue(SelfProtection.coversConfinedApp(WindowKind.INPUT_METHOD, "com.google.android.inputmethod.latin", app))
+        assertTrue(SelfProtection.coversConfinedApp(WindowKind.SYSTEM, sysui, app)) // The shade or a heads-up.
+        assertTrue(SelfProtection.coversConfinedApp(WindowKind.APPLICATION, "com.other", app))
+        assertTrue(SelfProtection.coversConfinedApp(WindowKind.APPLICATION, null, app))
+        assertTrue(SelfProtection.coversConfinedApp(null, null, app)) // No window there: fail closed.
+        val e = SelfProtection.CoveredTouchException(540, 1200)
+        assertTrue(e.javaClass != ToolException::class.java) // Not a plain step failure.
+        assertEquals(
+            "Stopped before touching (540,1200): another window (keyboard, notification or another app) covers the element. " +
+                "Nothing was done there.",
+            e.message,
+        )
+    }
+
+    @Test
     fun `only the top-most non-overlay window at the point counts`() {
         val overlay = W(WindowKind.OVERLAY, SCREEN, readable = false, name = "overlay")
         val dialog = W(WindowKind.APPLICATION, rect(100, 800, 980, 1600), readable = true, name = "dialog")

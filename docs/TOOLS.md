@@ -79,8 +79,9 @@ against the action's JSON Schema (unknown parameters are refused), then runs the
 named `<package>/<action id>`** (e.g. `com.spotify.music/play`) through the normal pipeline: that
 name's scope (usually `apps`), risk, per-tool rules, risk cap, active hours, rate limits, approval and
 audit entry (noting "via app_action_run"). `app_action_run`'s own scope, rule and risk cap must allow
-the call too. Actions whose recipe is a built-in tool (`tool` recipes) run exactly as that tool, e.g.
-`whatsapp_send`, with its rules and audit entry. Actions of unreviewed local plugins always need
+the call too. An `ASK` rule on `app_action_run` makes every app action ask first; an `ALLOW` rule on it
+does not skip the approval an action needs. Actions whose recipe is a built-in tool (`tool` recipes) run
+exactly as that tool, e.g. `whatsapp_send`, with its rules and audit entry. Actions of unreviewed local plugins always need
 approval on the phone.
 
 Results of intent, link and screen-recipe actions:

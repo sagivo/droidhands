@@ -79,7 +79,10 @@ class ConfigureLinksTest {
     fun applyTurnsTheRelayOnAndHandlesTheKey() {
         val current = BridgeSettings(relayEnabled = false, relayUrl = "https://old.example.com", relayAccessKey = "oldkey", localServerEnabled = true)
         val withKey = ConfigureLinks.applyTo(current, valid("phonebridge://configure?relay=https://new.example.com&key=newkey"))
-        assertEquals(current.copy(relayEnabled = true, relayUrl = "https://new.example.com", relayAccessKey = "newkey"), withKey)
+        assertEquals(
+            current.copy(relayEnabled = true, relayUrl = "https://new.example.com", relayAccessKey = "newkey", defaultRelayDecided = true),
+            withKey,
+        )
 
         // Another relay without a key: the old key is meaningless and is cleared.
         val other = ConfigureLinks.applyTo(current, valid("phonebridge://configure?relay=https://new.example.com"))
@@ -99,6 +102,14 @@ class ConfigureLinksTest {
         assertEquals("https://mine.example.com", applied.relayUrl)
         assertFalse(applied.relayFromDefault)
         assertTrue(applied.defaultRelayDecided)
+    }
+
+    @Test
+    fun aSetupLinkOnFirstLaunchRecordsTheDefaultRelayDecision() {
+        // Opened before the first-run default relay was decided: the default relay must not switch itself on later.
+        val applied = ConfigureLinks.applyTo(BridgeSettings(), valid("phonebridge://configure?relay=https://mine.example.com"))
+        assertTrue(applied.defaultRelayDecided)
+        assertTrue(ConfigureLinks.isAlreadyApplied(applied.copy(defaultRelayDecided = false), valid("phonebridge://configure?relay=https://mine.example.com")))
     }
 
     @Test

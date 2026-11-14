@@ -73,7 +73,8 @@ interface Tool {
  * rules keyed by the resolved tool's name, risk cap, active hours, rate limits), confirmation by its
  * risk, its timeout, stop checks and the audit entry, all under the resolved tool's name and arguments.
  * The dispatching tool's own scope, BLOCK rule and risk cap are checked first, and again by every stop
- * check while the call runs.
+ * check while the call runs. An ASK rule on the dispatching tool forces approval of the resolved call;
+ * an ALLOW rule on it does not skip the approval the resolved tool needs.
  *
  * Dispatch does not nest: resolving to another [DispatchTool] is refused. The server never uses [call].
  */

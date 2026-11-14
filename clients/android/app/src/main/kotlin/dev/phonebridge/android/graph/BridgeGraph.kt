@@ -231,7 +231,9 @@ class BridgeGraph private constructor(val app: Application) {
      * comes from outside the app.
      */
     fun applyConfigureLink(link: ConfigureLink) {
-        settings.update { it.copy(relayEnabled = true, relayUrl = link.relayUrl, relayAccessKey = link.accessKey, relayFromDefault = false) }
+        settings.update {
+            it.copy(relayEnabled = true, relayUrl = link.relayUrl, relayAccessKey = link.accessKey, relayFromDefault = false, defaultRelayDecided = true)
+        }
         applySettings()
     }
 

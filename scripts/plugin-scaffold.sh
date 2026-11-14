@@ -213,7 +213,8 @@ current == "" { next }
 /^ +Category: "/ { cats = cats "|" value($0); next }
 /^ +Scheme: "/ { schemes = schemes "|" value($0); next }
 /^ +Authority: "/ { hosts = hosts "|" value($0); next }
-/^ +Type: "/ { types = types "|" value($0); next }
+# Android 11+ prints declared MIME types as StaticType; older versions as Type.
+/^ +(Static)?Type: "/ { types = types "|" value($0); next }
 
 END {
   flush()
@@ -221,7 +222,8 @@ END {
     c = cls[i]
     if (c != "" && substr(c, 1, 1) == ".") c = pkg c
     if (has(act[i], "android.intent.action.MAIN") && has(cat[i], "android.intent.category.LAUNCHER") && launcher == "") launcher = c
-    textType = has(typ[i], "text/plain") || has(typ[i], "text/*") || has(typ[i], "*/*")
+    # Wildcards may be printed without their subtype ("text", "*").
+    textType = has(typ[i], "text/plain") || has(typ[i], "text/*") || has(typ[i], "*/*") || has(typ[i], "text") || has(typ[i], "*")
     if (has(act[i], "android.intent.action.SEND") && textType && share == "") share = c
     if (has(act[i], "android.intent.action.PROCESS_TEXT") && processText == "") processText = c
     if (has(act[i], "android.media.action.MEDIA_PLAY_FROM_SEARCH") && play == "") play = c

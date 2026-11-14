@@ -86,6 +86,20 @@ object SelfProtection {
     }
 
     /**
+     * True if a touch confined to [confineTo] (a screen recipe's app) must not land on the touched window: one of
+     * [kind] whose root belongs to [pkg], or none at all (null [kind]). Only that app's own application windows
+     * qualify; a keyboard, the notification shade or another app's window covering the element does not.
+     */
+    fun coversConfinedApp(kind: WindowKind?, pkg: String?, confineTo: String): Boolean =
+        kind != WindowKind.APPLICATION || pkg != confineTo
+
+    /** Thrown by [coversConfinedApp] refusals; not a step failure, so an optional recipe step doesn't ignore it. */
+    class CoveredTouchException(x: Int, y: Int) : ToolException(
+        "Stopped before touching ($x,$y): another window (keyboard, notification or another app) covers the element. " +
+            "Nothing was done there.",
+    )
+
+    /**
      * [root] without PhoneBridge's own content, whatever window it is in: every subtree whose node belongs to
      * [ownPackage], and the element hosting it (its nearest clickable or long-clickable ancestor within
      * [NodeQueries.MAX_CLICK_ANCESTORS] levels, e.g. the System UI notification row), so agents can neither read our

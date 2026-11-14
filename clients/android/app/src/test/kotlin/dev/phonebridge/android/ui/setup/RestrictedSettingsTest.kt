@@ -58,6 +58,54 @@ class RestrictedSettingsTest {
         assertFalse(RestrictedSettings.showGuide(SetupLogic.ACCESSIBILITY, SetupStatus.MISSING, 32, browserDownload))
     }
 
+    private fun item(id: String, status: SetupStatus, blocked: Boolean = false) =
+        SetupItem(id, id.uppercase(), "d", "u", essential = true, status = status, blocked = blocked)
+
+    private val freshItems = listOf(
+        item(RestrictedSettings.SMS_ID, SetupStatus.MISSING),
+        item(SetupLogic.ACCESSIBILITY, SetupStatus.MISSING),
+        item(SetupLogic.NOTIFICATION_ACCESS, SetupStatus.MISSING),
+    )
+
+    private fun with(id: String, status: SetupStatus) = freshItems.map { if (it.id == id) it.copy(status = status) else it }
+
+    @Test
+    fun aRestrictedInstallGetsTheGuideFirstUntilSomethingRestrictedIsGranted() {
+        val android15 = RestrictedSettings.advice(restricted = true, sdkInt = 35, items = freshItems)
+        assertTrue(android15.guideFirst)
+        assertEquals("SMS, notification access and accessibility", android15.unlocks)
+        val android13 = RestrictedSettings.advice(restricted = true, sdkInt = 33, items = freshItems)
+        assertTrue(android13.guideFirst)
+        assertEquals("notification access and accessibility", android13.unlocks)
+        assertFalse(RestrictedSettings.advice(restricted = false, sdkInt = 35, items = freshItems).guideFirst)
+
+        // Only an app with restricted settings allowed can be granted these.
+        assertFalse(RestrictedSettings.advice(true, 35, with(SetupLogic.ACCESSIBILITY, SetupStatus.PENDING)).guideFirst)
+        assertFalse(RestrictedSettings.advice(true, 35, with(SetupLogic.ACCESSIBILITY, SetupStatus.DONE)).guideFirst)
+        assertFalse(RestrictedSettings.advice(true, 35, with(SetupLogic.NOTIFICATION_ACCESS, SetupStatus.DONE)).guideFirst)
+        assertFalse(RestrictedSettings.advice(true, 35, with(RestrictedSettings.SMS_ID, SetupStatus.PARTIAL)).guideFirst)
+        // Before Android 15, SMS isn't restricted, so granting it proves nothing.
+        assertTrue(RestrictedSettings.advice(true, 34, with(RestrictedSettings.SMS_ID, SetupStatus.DONE)).guideFirst)
+        assertFalse(RestrictedSettings.likelyAllowed(freshItems, 35))
+    }
+
+    @Test
+    fun aRefusedSmsPermissionOnARestrictedInstallPointsToTheGuide() {
+        val sms = item(RestrictedSettings.SMS_ID, SetupStatus.MISSING, blocked = true)
+        val contacts = item("contacts", SetupStatus.MISSING, blocked = true)
+        val advice = RestrictedSettings.advice(true, 35, freshItems)
+        assertEquals(
+            "Android blocks SMS for apps installed from the web. Do the \"Allow restricted settings\" steps above first, " +
+                "then allow SMS in App info > Permissions.",
+            RestrictedSettings.blockedNotice(listOf(sms), advice),
+        )
+        assertTrue(RestrictedSettings.blockedNotice(listOf(contacts, sms), advice).startsWith("Android won't ask again for: CONTACTS. "))
+        assertEquals(
+            "Android won't ask again for: SMS. Allow them in App info > Permissions.",
+            RestrictedSettings.blockedNotice(listOf(sms), RestrictedSettings.Advice()),
+        )
+    }
+
     @Test
     fun guideStepsStartWithTheAttemptAndTeachTheMenu() {
         val steps = RestrictedSettings.GUIDE_STEPS
