@@ -1,8 +1,11 @@
 package dev.phonebridge.android.confirm
 
+import android.accessibilityservice.AccessibilityService
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.graph.BridgeGraph
 
 /**
@@ -20,7 +23,22 @@ class ConfirmationReceiver : BroadcastReceiver() {
         val id = intent.getStringExtra(EXTRA_ID) ?: return
         val nonce = intent.getStringExtra(EXTRA_NONCE) ?: return
         // After a process restart the request is gone and this is a no-op.
-        BridgeGraph.get(context).confirmations.resolveWithNonce(id, nonce, approved)
+        val resolved = BridgeGraph.get(context).confirmations.resolveWithNonce(id, nonce, approved)
+        if (resolved && approved) collapseNotificationShade(context)
+    }
+
+    /**
+     * Android leaves the notification shade open after a notification button, so the approved action
+     * would open its app behind the shade (and screen steps would see System UI in front). Close it.
+     */
+    private fun collapseNotificationShade(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            BridgeAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+        } else {
+            // Allowed for apps until Android 12, which replaced it with the accessibility action above.
+            @Suppress("DEPRECATION")
+            context.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
+        }
     }
 
     companion object {
