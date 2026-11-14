@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.ui.components.Notice
@@ -134,9 +135,13 @@ internal fun RestrictedSettingsGuide(
                 ) { Text("Open Accessibility") }
             }
             // Filled in the card's own on-color: an outlined button in the theme's accent was unreadable on it.
+            // The label takes black or white, whichever contrasts with that fill.
             Button(
                 onClick = onOpenAppInfo,
-                colors = ButtonDefaults.buttonColors(containerColor = content, contentColor = MaterialTheme.colorScheme.surface),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = content,
+                    contentColor = if (content.luminance() > 0.5f) Color.Black else Color.White,
+                ),
             ) { Text("Open App info") }
         }
     }
