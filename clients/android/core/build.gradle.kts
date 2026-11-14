@@ -53,6 +53,17 @@ tasks.register<JavaExec>("checkPlugins") {
     args(target.normalize().absolutePath, repoRoot.absolutePath)
 }
 
+// Rewrites the table of bundled plugins in plugins/README.md from the plugin files (-Pcheck=true only checks it).
+// Wrapped by scripts/plugin-table.sh; PluginTableTest fails :core:test when the table is out of date.
+tasks.register<JavaExec>("pluginTable") {
+    group = "documentation"
+    description = "Updates the plugin table in plugins/README.md (docs/PLUGINS.md). -Pcheck=true fails instead when it is stale."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("dev.phonebridge.core.plugins.PluginTableKt")
+    val check = providers.gradleProperty("check").orNull?.toBoolean() == true
+    args(listOfNotNull(pluginsDir.absolutePath, if (check) "--check" else null))
+}
+
 // Headless demo device for cross-language E2E tests (src/test/kotlin/dev/phonebridge/core/demo/DemoDevice.kt).
 // Env: DEMO_POLICY, DEMO_CONFIRM, DEMO_CONFIRM_TIMEOUT_MS, DEMO_LOCAL_PORT, DEMO_RELAY_URL, DEMO_ACCESS_KEY,
 // DEMO_DEVICE_SECRET. Prints DEMO_TOKEN=... and DEMO_DEVICE_ID=... on stdout, then runs until killed.
