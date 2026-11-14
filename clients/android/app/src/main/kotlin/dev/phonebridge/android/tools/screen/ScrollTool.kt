@@ -57,8 +57,6 @@ private suspend fun scroll(
     direction: ScrollDirection,
     ref: String?,
 ): String {
-    val dir = direction.name.lowercase()
-    val screen = service.screenBounds()
     val container: ScreenSession.Live? = withContext(Dispatchers.IO) {
         if (ref != null) {
             val live = ScreenSession.resolve(ref, access)
@@ -77,10 +75,30 @@ private suspend fun scroll(
             node?.let { n -> ScreenSession.refresh(n, access)?.let { ScreenSession.Live(ScreenSession.refs(access).register(n), n, it) } }
         }
     }
+    return scrollWith(context, service, access, direction, container).message
+}
+
+/** What [scrollWith] did: [message] for the agent; [atEnd] when the container can't scroll further that way. */
+internal class ScrollOutcome(val message: String, val atEnd: Boolean = false)
+
+/**
+ * Scrolls [container] (null: swipes across the screen) in [direction]: its scroll action if it has one, else a
+ * swipe inside it. Shared by ui_scroll and app-action screen recipes; every action is checked ([ScreenGuard],
+ * [UiAutomation.beforeAction]) right before it happens. The caller holds the UI mutex.
+ */
+internal suspend fun scrollWith(
+    context: Context,
+    service: BridgeAccessibilityService,
+    access: ScreenAccess,
+    direction: ScrollDirection,
+    container: ScreenSession.Live?,
+): ScrollOutcome {
+    val dir = direction.name.lowercase()
+    val screen = service.screenBounds()
     if (container == null) {
         val plan = ScrollPlanner.swipe(direction, inset(screen))
         swipe(context, service, access, plan)
-        return "No scrollable element found; swiped $dir across the screen."
+        return ScrollOutcome("No scrollable element found; swiped $dir across the screen.")
     }
     val label = "${container.ref} ${TreeSerializer.label(container.fresh)}"
     withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, container.fresh, access) }
@@ -89,13 +107,13 @@ private suspend fun scroll(
         is ScrollPlan.Action -> {
             UiAutomation.beforeAction(access)
             if (withContext(Dispatchers.IO) { NodeActions.scroll(container.fresh, plan.action) }) {
-                "Scrolled $dir in $label."
+                ScrollOutcome("Scrolled $dir in $label.")
             } else {
-                swipeWithin(context, service, access, direction, area, label)
+                ScrollOutcome(swipeWithin(context, service, access, direction, area, label))
             }
         }
-        ScrollPlan.AtEnd -> "Can't scroll $dir in $label: already at the end in that direction."
-        is ScrollPlan.Swipe -> swipeWithin(context, service, access, direction, area, label)
+        ScrollPlan.AtEnd -> ScrollOutcome("Can't scroll $dir in $label: already at the end in that direction.", atEnd = true)
+        is ScrollPlan.Swipe -> ScrollOutcome(swipeWithin(context, service, access, direction, area, label))
     }
 }
 

@@ -55,52 +55,75 @@ internal fun uiTypeTool(context: Context): Tool = tool(
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
         val field = withContext(Dispatchers.IO) { resolveField(context, service, access, args.optString("ref")?.trim()) }
-        val node = field.fresh
-        withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, node, access) }
-        val label = "${field.ref} ${TreeSerializer.label(node)}"
-        if (append && node.password) {
-            throw ToolException("Can't append to the password field $label (its content is hidden). Pass the full text with append=false.")
-        }
-        // Appending needs the real content: the agent's copy of the node may show one-time codes masked.
-        val existing = if (append) {
-            val raw = withContext(Dispatchers.IO) { NodeActions.refresh(node) }
-                ?: throw ToolException("Field $label is no longer on screen; call screen_read again.")
-            raw.text?.takeUnless { it == raw.hint }.orEmpty()
-        } else {
-            ""
-        }
-        val newText = existing + text
-        UiAutomation.beforeAction(access)
-        val typed = withContext(Dispatchers.IO) {
-            if (!node.focused) NodeActions.focus(node)
-            NodeActions.setText(node, newText)
-        }
-        if (!typed) {
-            throw ToolException("Field $label did not accept text. Tap it first (ui_tap), or check with screen_read that it is an [editable] field.")
-        }
-        var submitNote = ""
-        if (submit) {
-            delay(150)
-            UiAutomation.beforeAction(access)
-            val ok = withContext(Dispatchers.IO) {
-                val current = NodeActions.refresh(node) ?: node
-                (UiAction.IME_ENTER in current.actions || current.focused) && NodeActions.imeEnter(current)
-            }
-            submitNote = if (ok) {
-                " Pressed the keyboard action key."
-            } else {
-                " Submit FAILED: this field has no keyboard action; tap the app's Send/Search button instead (screen_find)."
-            }
-        }
-        UiAutomation.settle()
-        val shown = withContext(Dispatchers.IO) { ScreenSession.refresh(node, access) }
-        val shownNote = when {
-            shown == null -> " The field is no longer on screen."
-            node.password -> ""
-            else -> " Field now shows: \"${TextNorm.truncate(TextNorm.clean(shown.text), 120)}\"."
-        }
-        ToolResult.text(UiAutomation.report(service, access, "Typed into $label.$shownNote$submitNote", settleFirst = false))
+        val typed = typeInto(context, access, field, text, append, submit)
+        ToolResult.text(UiAutomation.report(service, access, typed.message, settleFirst = false))
     }
+}
+
+/** What [typeInto] did: [message] for the agent; [submitted] whether the keyboard action key was pressed (null: not asked). */
+internal class TypeOutcome(val message: String, val submitted: Boolean?)
+
+/**
+ * Sets [field]'s text to [text] (after its current text when [append]) and, if [submit], presses the keyboard's
+ * action key; then settles and reads the field back. Shared by ui_type and app-action screen recipes. The field is
+ * checked with [ScreenGuard] and [UiAutomation.beforeAction] runs right before each node action. The caller holds
+ * the UI mutex ([UiAutomation.exclusive]).
+ */
+internal suspend fun typeInto(
+    context: Context,
+    access: ScreenAccess,
+    field: ScreenSession.Live,
+    text: String,
+    append: Boolean,
+    submit: Boolean,
+): TypeOutcome {
+    val node = field.fresh
+    withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, node, access) }
+    val label = "${field.ref} ${TreeSerializer.label(node)}"
+    if (append && node.password) {
+        throw ToolException("Can't append to the password field $label (its content is hidden). Pass the full text with append=false.")
+    }
+    // Appending needs the real content: the agent's copy of the node may show one-time codes masked.
+    val existing = if (append) {
+        val raw = withContext(Dispatchers.IO) { NodeActions.refresh(node) }
+            ?: throw ToolException("Field $label is no longer on screen; call screen_read again.")
+        raw.text?.takeUnless { it == raw.hint }.orEmpty()
+    } else {
+        ""
+    }
+    val newText = existing + text
+    UiAutomation.beforeAction(access)
+    val typed = withContext(Dispatchers.IO) {
+        if (!node.focused) NodeActions.focus(node)
+        NodeActions.setText(node, newText)
+    }
+    if (!typed) {
+        throw ToolException("Field $label did not accept text. Tap it first (ui_tap), or check with screen_read that it is an [editable] field.")
+    }
+    var submitNote = ""
+    var submitted: Boolean? = null
+    if (submit) {
+        delay(150)
+        UiAutomation.beforeAction(access)
+        val ok = withContext(Dispatchers.IO) {
+            val current = NodeActions.refresh(node) ?: node
+            (UiAction.IME_ENTER in current.actions || current.focused) && NodeActions.imeEnter(current)
+        }
+        submitted = ok
+        submitNote = if (ok) {
+            " Pressed the keyboard action key."
+        } else {
+            " Submit FAILED: this field has no keyboard action; tap the app's Send/Search button instead (screen_find)."
+        }
+    }
+    UiAutomation.settle()
+    val shown = withContext(Dispatchers.IO) { ScreenSession.refresh(node, access) }
+    val shownNote = when {
+        shown == null -> " The field is no longer on screen."
+        node.password -> ""
+        else -> " Field now shows: \"${TextNorm.truncate(TextNorm.clean(shown.text), 120)}\"."
+    }
+    return TypeOutcome("Typed into $label.$shownNote$submitNote", submitted)
 }
 
 /** `text` allowing the empty string (clears the field); null when absent. */
