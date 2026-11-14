@@ -153,19 +153,20 @@ class BridgeGraph private constructor(val app: Application) {
         )
     }
 
+    /** Signs the local server's OAuth client ids; derived from the identity, so registrations survive restarts. */
+    private val localOAuthKey: ByteArray by lazy { identity.deriveKey(LocalOAuth.CLIENT_KEY_PURPOSE) }
+
     /**
-     * One-tap pairing on the local server (docs/PROTOCOL.md §4.1): the relay's OAuth flow answered
-     * by the phone itself, prompting through [pairing] like relay pairings. Client ids are signed
-     * with a key derived from the device identity, so registrations survive restarts.
+     * One-tap pairing for a new local server (docs/PROTOCOL.md §4.1): the relay's OAuth flow answered
+     * by the phone itself, prompting through [pairing] like relay pairings. One per server, because
+     * stopping a server cancels its pairings.
      */
-    val localOAuth: LocalOAuth by lazy {
-        LocalOAuth(
-            pairing = pairing,
-            clientKey = identity.deriveKey(LocalOAuth.CLIENT_KEY_PURPOSE),
-            deviceName = { CoreTransports.deviceName(app) },
-            log = { Log.i(TAG, it) },
-        )
-    }
+    private fun newLocalOAuth(): LocalOAuth = LocalOAuth(
+        pairing = pairing,
+        clientKey = localOAuthKey,
+        deviceName = { CoreTransports.deviceName(app) },
+        log = { Log.i(TAG, it) },
+    )
 
     private val mcpServerLazy = lazy {
         McpServer(
@@ -219,7 +220,7 @@ class BridgeGraph private constructor(val app: Application) {
             scope = appScope,
             settings = { settings.state.value },
             relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle, pairingHandler = { pairing }),
-            localFactory = CoreTransports.localFactory(requestHandler::handle, oauth = { localOAuth }),
+            localFactory = CoreTransports.localFactory(requestHandler::handle, oauth = ::newLocalOAuth),
             lanAddresses = NetworkAddresses::nonLoopbackIpv4,
             onRelayStatus = ::updateRelayStatus,
             onLocalStatus = ::updateLocalServerStatus,

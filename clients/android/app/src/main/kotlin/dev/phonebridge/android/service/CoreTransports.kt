@@ -61,8 +61,8 @@ internal object CoreTransports {
     }
 
     /**
-     * @param oauth one-tap pairing on the local server (docs/PROTOCOL.md §4.1); resolved when each
-     *   server is created, null serves only `/mcp` (manual tokens).
+     * @param oauth one-tap pairing on the local server (docs/PROTOCOL.md §4.1); called once per
+     *   server (its pairings end with it), null serves only `/mcp` (manual tokens).
      */
     fun localFactory(
         handler: suspend (TransportRequest) -> TransportResponse,
