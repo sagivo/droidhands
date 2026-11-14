@@ -6,6 +6,7 @@ import android.content.Context
 import android.provider.AlarmClock
 import dev.phonebridge.android.tools.support.onMain
 import dev.phonebridge.android.tools.system.AudioControl
+import dev.phonebridge.android.tools.system.CalendarTime
 import dev.phonebridge.android.tools.system.ClockIntents
 import dev.phonebridge.android.tools.system.ClockLogic
 import dev.phonebridge.android.tools.system.DeviceStatusReader
@@ -39,6 +40,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.put
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 private const val MAX_CLIPBOARD_CHARS = 100_000
 
@@ -209,8 +212,11 @@ private fun speak(context: Context) = tool(
 private fun alarmSet(context: Context) = tool(
     name = "alarm_set",
     title = "Set an alarm",
-    description = "Creates an alarm in the phone's clock app without opening it. 'hour' is 0-23 (24-hour clock). 'days' " +
-        "(mon..sun) makes it repeat; without days it rings once at the next occurrence of that time.",
+    description = "Creates an alarm in the phone's clock app without opening it. 'hour' is 0-23 (24-hour clock), in the " +
+        "phone's time zone. 'days' (mon..sun) makes it repeat; without days it rings once at the next occurrence of that " +
+        "time. Returns {set,alarm,next_ring,rings_in,days?,label?,clock_app?,note?}: next_ring is when it will ring " +
+        "(ISO-8601) and rings_in the countdown, to confirm to the user. set=true means the clock app received it (clock " +
+        "apps don't report back); set=false means the user must first pick a clock app on the phone (see note).",
     scope = Scopes.DEVICE,
     risk = Risk.ACTION,
     unavailable = { ClockIntents.unavailableReason(context, AlarmClock.ACTION_SET_ALARM) },
@@ -227,14 +233,29 @@ private fun alarmSet(context: Context) = tool(
     val days = ClockLogic.parseDays(args.optStringList("days").orEmpty())
     val label = args.optString("label")?.trim()?.takeIf { it.isNotEmpty() }
     val handler = ClockIntents.send(context, ClockIntents.alarmIntent(hour, minute, days, label))
+    val now = ZonedDateTime.now(ZoneId.systemDefault())
+    val next = ClockLogic.nextRing(now, hour, minute, days)
     ToolResult.json {
+        put("set", handler != null)
         put("alarm", ClockLogic.formatTime(hour, minute))
+        put("next_ring", CalendarTime.format(next))
+        put("rings_in", ClockLogic.formatUntil(now, next))
         if (days.isNotEmpty()) put("days", buildJsonArray { days.forEach { add(ClockLogic.dayName(it)) } })
         putIfNotNull("label", label)
         putIfNotNull("clock_app", handler)
-        putIfNotNull("note", LaunchNotes.afterLaunch(context))
+        putIfNotNull("note", clockNote(context, handler))
     }
 }
+
+/** Chooser and background-launch caveats for alarm_set / timer_set; [handler] is null when Android shows a chooser. */
+private fun clockNote(context: Context, handler: String?): String? = listOfNotNull(
+    CLOCK_CHOOSER.takeIf { handler == null },
+    LaunchNotes.afterLaunch(context),
+).joinToString(" ").ifEmpty { null }
+
+private const val CLOCK_CHOOSER =
+    "Several clock apps are installed and none is the default, so Android is asking the user on the phone which one to " +
+        "use; nothing is set until they pick one."
 
 private fun describeAlarm(args: JsonObject): String = ClockLogic.describeAlarm(
     ClockLogic.requireHour(args.reqInt("hour")),
@@ -246,7 +267,9 @@ private fun describeAlarm(args: JsonObject): String = ClockLogic.describeAlarm(
 private fun timerSet(context: Context) = tool(
     name = "timer_set",
     title = "Start a timer",
-    description = "Starts a countdown timer in the phone's clock app without opening it (1 s to 24 h).",
+    description = "Starts a countdown timer in the phone's clock app without opening it (1 s to 24 h). Returns " +
+        "{set,timer,seconds,ends_at,label?,clock_app?,note?}; ends_at is ISO-8601. set=false means the user must first " +
+        "pick a clock app on the phone (see note).",
     scope = Scopes.DEVICE,
     risk = Risk.ACTION,
     unavailable = { ClockIntents.unavailableReason(context, AlarmClock.ACTION_SET_TIMER) },
@@ -259,11 +282,14 @@ private fun timerSet(context: Context) = tool(
     val seconds = ClockLogic.requireTimerSeconds(args.reqInt("seconds"))
     val label = args.optString("label")?.trim()?.takeIf { it.isNotEmpty() }
     val handler = ClockIntents.send(context, ClockIntents.timerIntent(seconds, label))
+    val endsAt = ZonedDateTime.now(ZoneId.systemDefault()).plusSeconds(seconds.toLong())
     ToolResult.json {
+        put("set", handler != null)
         put("timer", ClockLogic.formatDuration(seconds))
         put("seconds", seconds)
+        put("ends_at", CalendarTime.format(endsAt))
         putIfNotNull("label", label)
         putIfNotNull("clock_app", handler)
-        putIfNotNull("note", LaunchNotes.afterLaunch(context))
+        putIfNotNull("note", clockNote(context, handler))
     }
 }

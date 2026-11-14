@@ -1,9 +1,11 @@
 package dev.phonebridge.android.tools.notifications
 
 import android.content.Context
+import dev.phonebridge.android.notify.AppLabels
 import dev.phonebridge.android.notify.BridgeNotificationListener
 import dev.phonebridge.android.notify.MappedNotification
 import dev.phonebridge.android.notify.NotificationMapper
+import dev.phonebridge.core.tools.AppAccess
 import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asExecutor
@@ -31,6 +33,12 @@ internal object NotificationAccess {
 
     const val OWN_NOTIFICATION =
         "That is one of PhoneBridge's own notifications (bridge status or an approval prompt); agents can't act on it."
+
+    /** For notifications whose content (and here: actions) Android 15+ hid from PhoneBridge. */
+    const val HIDDEN_WITHOUT_ACTION =
+        "Android hid this notification's content and buttons from PhoneBridge (it treats it as sensitive), so it can't " +
+            "be replied to or acted on here. For SMS use sms_list / sms_send, for phone calls call_status / call_answer / " +
+            "call_end; otherwise open the app (app_open, then screen tools)."
 
     /** Generous bound on real keys (`0|com.example|12|tag|10123`), to reject garbage early. */
     private const val MAX_KEY_LENGTH = 1024
@@ -60,14 +68,16 @@ internal object NotificationAccess {
 
     /**
      * The live notification with [key]. Throws when it no longer exists (with a hint to refresh
-     * keys), when the listener is unavailable, or when it is one of PhoneBridge's own.
+     * keys), when the listener is unavailable, when it is one of PhoneBridge's own, or when its app
+     * is blocked for the agent by [access] (checked before anything about it is read).
      */
-    suspend fun find(context: Context, key: String): MappedNotification = withContext(Dispatchers.IO) {
+    suspend fun find(context: Context, key: String, access: AppAccess): MappedNotification = withContext(Dispatchers.IO) {
         if (key.length > MAX_KEY_LENGTH) throw ToolException("Argument 'key' is too long. Pass a key from notifications_list.")
         val listener = requireListener(context)
         val found = listener.activeOrNull(arrayOf(key)) ?: throw ToolException(queryFailure(context))
         val sbn = found.firstOrNull { it.key == key } ?: throw ToolException(notFound(key))
         if (sbn.packageName == context.packageName) throw ToolException(OWN_NOTIFICATION)
+        access.require(sbn.packageName, AppLabels.of(context, sbn.packageName))
         NotificationMapper.map(context, sbn)
     }
 

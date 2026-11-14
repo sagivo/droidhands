@@ -4,7 +4,11 @@ package dev.phonebridge.android.notify
 // "Notifications"). Built from StatusBarNotification by NotificationMapper; filtered, selected and
 // serialized by pure code that is unit-tested on the JVM.
 
-/** One active notification. Texts are already cleaned and truncated. */
+/**
+ * One active notification. Texts are cleaned (trimmed, blank = null) but not shortened: matching and
+ * one-time-code redaction need the whole text; [dev.phonebridge.android.tools.notifications.NotificationJson]
+ * truncates for agents.
+ */
 data class NotificationInfo(
     /** `StatusBarNotification.key`: the handle agents pass to the notification_* tools. */
     val key: String,
@@ -30,6 +34,10 @@ data class NotificationInfo(
     val isGroupSummary: Boolean = false,
     /** Combined standard + wearable actions with stable indices (see [NotificationActions.merge]). */
     val actions: List<NotificationActionInfo> = emptyList(),
+    /** Android 15+ replaced the content with its "sensitive content hidden" placeholder (see [HiddenContent]). */
+    val contentHiddenByAndroid: Boolean = false,
+    /** One-time codes were masked in the texts above (set by redaction, never by the mapper). */
+    val codesHidden: Boolean = false,
 )
 
 /** A MessagingStyle message. */

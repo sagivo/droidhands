@@ -78,4 +78,38 @@ class NotificationSummariesTest {
     fun `no footer for a complete page`() {
         assertNull(NotificationSummaries.listFooter(NotificationQuery(), page(3, 3)))
     }
+
+    @Test
+    fun `footer explains notifications whose content android hid`() {
+        val hidden = FilteredNotifications(
+            listOf(NotificationInfo(key = "k", packageName = "p", appLabel = "Messages", postTime = 0, contentHiddenByAndroid = true)),
+            1,
+        )
+        val footer = NotificationSummaries.listFooter(NotificationQuery(), hidden)!!
+        assertTrue(footer.contains("sms_list"))
+        assertTrue(footer.contains("call_answer"))
+        assertTrue(footer.contains("by index"))
+    }
+
+    @Test
+    fun `footer says when app access hid notifications and combines notes`() {
+        assertEquals(NotificationSummaries.HIDDEN_BY_ACCESS, NotificationSummaries.listFooter(NotificationQuery(), page(3, 3), hiddenByAccess = true))
+        val both = NotificationSummaries.listFooter(NotificationQuery(limit = 30), page(30, 31), hiddenByAccess = true)!!
+        assertTrue(both.startsWith("1 more matching notification(s) not shown."))
+        assertTrue(both.endsWith(NotificationSummaries.HIDDEN_BY_ACCESS))
+    }
+
+    @Test
+    fun `reply summary warns when android hid the conversation`() {
+        val summary = NotificationSummaries.reply("Messages", null, "YES", conversationHidden = true)
+        assertEquals("Reply in Messages to the sender of a notification whose content Android hides from PhoneBridge: \"YES\"", summary)
+    }
+
+    @Test
+    fun `action summary describes blank titles by index`() {
+        assertEquals(
+            "Tap button #1 (Android hid its title) on Messages notification: Messages",
+            NotificationSummaries.action("", "Messages", "Messages", index = 1),
+        )
+    }
 }

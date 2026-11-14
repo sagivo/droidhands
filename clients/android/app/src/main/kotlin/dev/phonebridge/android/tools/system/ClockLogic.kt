@@ -1,6 +1,10 @@
 package dev.phonebridge.android.tools.system
 
 import dev.phonebridge.core.tools.ToolException
+import java.time.DayOfWeek
+import java.time.Duration
+import java.time.LocalTime
+import java.time.ZonedDateTime
 import java.util.Calendar
 
 /** Argument validation and formatting for `alarm_set` / `timer_set` (pure). */
@@ -80,6 +84,42 @@ object ClockLogic {
         if (days.isNotEmpty()) append(" every ").append(days.joinToString(", ") { dayName(it) })
         if (!label.isNullOrBlank()) append(" ").append(quoteForSummary(label, 60))
     }
+
+    /**
+     * When an alarm set now for [hour]:[minute] next rings: the next such local time after [now]
+     * on one of [days] (java.util.Calendar constants), or on any day when [days] is empty (a
+     * one-time alarm rings at the next occurrence). A time skipped by a DST change moves forward
+     * by the gap, as clock apps do.
+     */
+    fun nextRing(now: ZonedDateTime, hour: Int, minute: Int, days: List<Int>): ZonedDateTime {
+        val wanted = days.map(::dayOfWeek).toSet()
+        val today = now.toLocalDate()
+        for (offset in 0L..7L) {
+            val date = today.plusDays(offset)
+            if (wanted.isNotEmpty() && date.dayOfWeek !in wanted) continue
+            val candidate = ZonedDateTime.of(date, LocalTime.of(hour, minute), now.zone)
+            if (candidate.isAfter(now)) return candidate
+        }
+        // Unreachable: within 8 days every weekday occurs after today.
+        return ZonedDateTime.of(today.plusDays(1), LocalTime.of(hour, minute), now.zone)
+    }
+
+    /** Countdown from [now] to [then] such as "8h 5m" or "2d 3h", rounded up to the minute (at least "1m"). */
+    fun formatUntil(now: ZonedDateTime, then: ZonedDateTime): String {
+        val seconds = Duration.between(now, then).seconds.coerceAtLeast(0)
+        val minutes = ((seconds + 59) / 60).coerceAtLeast(1)
+        val days = minutes / MINUTES_PER_DAY
+        val rest = minutes % MINUTES_PER_DAY
+        return listOfNotNull(
+            days.takeIf { it > 0 }?.let { "${it}d" },
+            rest.takeIf { it > 0 }?.let { formatDuration((it * 60).toInt()) },
+        ).joinToString(" ")
+    }
+
+    private const val MINUTES_PER_DAY = 24 * 60L
+
+    /** java.util.Calendar day constant (SUNDAY = 1 … SATURDAY = 7) -> [DayOfWeek]. */
+    fun dayOfWeek(calendarDay: Int): DayOfWeek = if (calendarDay == Calendar.SUNDAY) DayOfWeek.SUNDAY else DayOfWeek.of(calendarDay - 1)
 
     /** 5400 -> "1h 30m", 45 -> "45s". */
     fun formatDuration(seconds: Int): String {

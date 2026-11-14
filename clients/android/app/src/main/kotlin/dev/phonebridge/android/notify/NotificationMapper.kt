@@ -77,13 +77,16 @@ object NotificationMapper {
             lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.mapNotNull { NotificationText.clean(it) }.orEmpty(),
         )
         val targets = mapActions(n)
+        val messages = style?.let(::mapMessages).orEmpty()
 
+        // Texts stay whole here: redaction and query matching need them; NotificationJson truncates.
         val info = baseInfo(sbn, app).copy(
-            title = title?.let { NotificationText.truncate(it, NotificationText.MAX_TITLE) },
-            text = text?.let { NotificationText.truncate(it, NotificationText.MAX_TEXT) },
-            messages = style?.let(::mapMessages).orEmpty(),
+            title = title,
+            text = text,
+            messages = messages,
             conversation = style != null || extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION, false),
             actions = targets.map { it.info },
+            contentHiddenByAndroid = HiddenContent.isHidden(text, messages.map { it.text }, SystemPlaceholders.current()),
         )
         return MappedNotification(sbn, info, targets)
     }
@@ -98,7 +101,7 @@ object NotificationMapper {
             val fromMe = NotificationText.isFromUser(sender?.toRef(), user)
             NotificationMessage(
                 sender = if (fromMe) null else NotificationText.clean(sender?.name),
-                text = NotificationText.truncate(body, NotificationText.MAX_MESSAGE_TEXT),
+                text = body,
                 time = m.timestamp,
                 fromMe = fromMe,
             )

@@ -96,6 +96,24 @@ class ActionSelectorTest {
     }
 
     @Test
+    fun `reply works when android 15 blanked the action titles`() {
+        // Sensitive notifications reach listeners with every action title replaced by "".
+        val hidden = listOf(a(0, ""), a(1, "", canReply = true, semantic = true), a(2, ""))
+        assertEquals(1, ActionSelector.replyAction(hidden)?.index)
+        val noSemantic = listOf(a(0, ""), a(1, "", canReply = true))
+        assertEquals(1, ActionSelector.replyAction(noSemantic)?.index)
+    }
+
+    @Test
+    fun `blank-titled actions can be chosen by index but not by an empty title`() {
+        val hidden = listOf(a(0, ""), a(1, ""))
+        assertEquals(1, ActionSelector.select(hidden, null, 1).index)
+        assertEquals(0, ActionSelector.select(hidden, "", 0).index)
+        val e = assertThrows(ToolException::class.java) { ActionSelector.select(hidden, "", null) }
+        assertTrue(e.message!!.contains("Pass 'action'"))
+    }
+
+    @Test
     fun `notification without actions says so`() {
         val e = assertThrows(ToolException::class.java) { ActionSelector.select(emptyList(), "Reply", null) }
         assertEquals(ActionSelector.NO_ACTIONS, e.message)

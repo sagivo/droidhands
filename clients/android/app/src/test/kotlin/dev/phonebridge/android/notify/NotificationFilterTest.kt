@@ -116,4 +116,31 @@ class NotificationFilterTest {
         assertTrue(page.items.isEmpty())
         assertEquals(0, page.omitted)
     }
+
+    @Test
+    fun `apps blocked by app access are hidden like our own`() {
+        val all = listOf(n("bank", pkg = "com.bank", time = 3), n("wa", time = 2), n("tg", pkg = "org.telegram.messenger", time = 1))
+        val allowed: (String) -> Boolean = { it != "com.bank" }
+        assertEquals(listOf("wa", "tg"), NotificationFilter.apply(all, NotificationQuery(), own, allowed).items.map { it.key })
+        assertEquals(emptyList<String>(), NotificationFilter.apply(all, NotificationQuery(packageName = "com.bank"), own, allowed).items.map { it.key })
+        assertEquals(2, NotificationFilter.apply(all, NotificationQuery(), own, allowed).totalMatches)
+    }
+
+    @Test
+    fun `blocked notifications do not count as group children`() {
+        val all = listOf(n("sum", group = "g", summary = true), n("blocked", pkg = "com.bank", group = "g"))
+        assertEquals(listOf("sum"), NotificationFilter.apply(all, NotificationQuery(), own, { it != "com.bank" }).items.map { it.key })
+    }
+
+    @Test
+    fun `query matches the prepared text, so it can't probe masked codes`() {
+        val all = listOf(n("otp", text = "Your code is 482913", time = 2), n("other", text = "Code review at 4", time = 1))
+        val mask: (NotificationInfo) -> NotificationInfo = { it.copy(text = it.text?.replace(Regex("\\d{6}"), "[code hidden]")) }
+        fun keys(q: String) = NotificationFilter.apply(all, NotificationQuery(query = q), own, prepare = mask).items.map { it.key }
+        assertEquals(emptyList<String>(), keys("4829"))
+        assertEquals(emptyList<String>(), keys("is 4"))
+        assertEquals(listOf("otp"), keys("code is"))
+        assertEquals(listOf("otp", "other"), keys("code"))
+        assertEquals("Your code is [code hidden]", NotificationFilter.apply(all, NotificationQuery(), own, prepare = mask).items.first().text)
+    }
 }

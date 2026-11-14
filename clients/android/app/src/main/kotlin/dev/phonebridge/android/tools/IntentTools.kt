@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import dev.phonebridge.android.tools.support.Launcher
 import dev.phonebridge.android.tools.system.IntentFactory
 import dev.phonebridge.android.tools.system.IntentSpecParser
+import dev.phonebridge.android.tools.system.LaunchGate
 import dev.phonebridge.android.tools.system.LaunchNotes
 import dev.phonebridge.android.tools.system.putIfNotNull
 import dev.phonebridge.android.tools.system.resolveActivityCompat
@@ -30,7 +31,9 @@ private fun intentStart(context: Context) = tool(
         "action android.settings.WIFI_SETTINGS, or VIEW with data and package). Short names are expanded: action " +
         "\"VIEW\" -> android.intent.action.VIEW, category \"BROWSABLE\" -> android.intent.category.BROWSABLE. class_name " +
         "may be relative to package (\".MainActivity\"). extras: string, number, boolean or array-of-strings values. " +
-        "Cannot target PhoneBridge itself and never grants file/URI access. Prefer app_open/url_open when they fit.",
+        "Cannot target PhoneBridge itself and never grants file/URI access. Refused when the app that would handle it is " +
+        "blocked for this agent; if several apps could handle it and some are blocked, the error lists the allowed ones " +
+        "to pass as 'package'. Prefer app_open/url_open when they fit.",
     scope = Scopes.INTENTS,
     risk = Risk.SENSITIVE,
     schema = objectSchema {
@@ -46,8 +49,10 @@ private fun intentStart(context: Context) = tool(
         runCatching { IntentSpecParser.describe(IntentSpecParser.parse(args, context.packageName)) }
             .getOrElse { "Start Android activity with arguments ${truncate(args.toString(), 500)}" }
     },
-) { args, _ ->
+) { args, ctx ->
     val spec = IntentSpecParser.parse(args, context.packageName)
+    // Before resolving, so the answer doesn't depend on what the blocked app could handle.
+    spec.packageName?.let { withContext(Dispatchers.IO) { LaunchGate.requireApp(context, ctx.appAccess, it) } }
     val intent = IntentFactory.build(spec)
     val resolved = withContext(Dispatchers.IO) {
         // Same matching startActivity uses (implicit intents implicitly carry CATEGORY_DEFAULT).
@@ -63,15 +68,17 @@ private fun intentStart(context: Context) = tool(
     if (spec.className != null && target != null && !target.exported) {
         throw ToolException("${target.packageName}/${target.name} is private to its app (not exported), so it cannot be started from outside.")
     }
+    val handler = LaunchGate.check(context, intent, resolved, ctx.appAccess, "this intent")
     Launcher.startActivity(context, intent)
     ToolResult.json {
         put("started", true)
         put("action", spec.action)
-        target?.takeIf { it.packageName != "android" }?.let {
+        handler?.let {
             put("package", it.packageName)
-            put("activity", it.name)
+            // A pinned intent may open another activity of that app than the one first resolved.
+            if (it.packageName == target?.packageName) put("activity", target.name)
         }
-        if (target?.packageName == "android") put("chooser", true)
-        putIfNotNull("note", LaunchNotes.afterLaunch(context))
+        if (handler == null) put("chooser", true)
+        putIfNotNull("note", LaunchNotes.afterLaunch(context, chooser = handler == null))
     }
 }
