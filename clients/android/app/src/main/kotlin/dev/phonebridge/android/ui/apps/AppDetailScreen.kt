@@ -3,8 +3,6 @@ package dev.phonebridge.android.ui.apps
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,15 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,12 +33,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.phonebridge.android.ui.components.Accents
+import dev.phonebridge.android.ui.components.AppCard
+import dev.phonebridge.android.ui.components.CardPadding
 import dev.phonebridge.android.ui.components.ConfirmDialog
 import dev.phonebridge.android.ui.components.EmptyState
+import dev.phonebridge.android.ui.components.IconRowInset
+import dev.phonebridge.android.ui.components.IconTile
+import dev.phonebridge.android.ui.components.ListDivider
+import dev.phonebridge.android.ui.components.ListRow
+import dev.phonebridge.android.ui.components.ListSection
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.ScreenScaffold
-import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.StatusPill
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.components.SystemIntents
@@ -64,10 +67,7 @@ fun AppDetailScreen(vm: AppsViewModel, packageName: String, onBack: () -> Unit) 
     val app = apps?.firstOrNull { it.packageName == packageName }
     var confirmUnblock by rememberSaveable { mutableStateOf(false) }
 
-    ScreenScaffold(
-        title = app?.label ?: "App",
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-    ) { padding ->
+    ScreenScaffold(title = app?.label ?: "App", onBack = onBack) { padding ->
         when {
             apps == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             app == null -> Box(Modifier.padding(padding)) {
@@ -108,24 +108,8 @@ private fun AppDetailContent(
     val context = LocalContext.current
     val requestUrl = AppsPresentation.integrationRequestUrl(vm.githubRepo, app.label, app.packageName)
     val drafting = vm.draftingFor == app.packageName
-    LazyColumn(contentPadding = contentPadding.padded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item(key = "header") {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app.packageName)
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        app.packageName,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    BadgeRow(AppsPresentation.badge(app))
-                }
-            }
-        }
+    LazyColumn(contentPadding = contentPadding.padded(), verticalArrangement = Arrangement.spacedBy(SECTION_SPACING)) {
+        item(key = "header") { AppHeroCard(app) }
         item(key = "note") {
             Notice(
                 AppsPresentation.integrationNote(app),
@@ -133,47 +117,63 @@ private fun AppDetailContent(
             )
         }
         item(key = "block") {
-            OutlinedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    SwitchRow(
-                        title = "Block for all agents",
-                        subtitle = if (blocked) {
-                            "No agent can see, open or operate ${app.label}, or run its actions (Settings > Security > Never-allow apps)."
-                        } else {
-                            "Agents may use ${app.label} if their own app access allows it. Turn on to block it for every agent."
-                        },
-                        checked = blocked,
-                        onCheckedChange = onBlockedChange,
+            ListSection(
+                title = "Access",
+                footer = if (blocked) {
+                    "No agent can see, open or operate ${app.label}, or run its actions (Settings > Security > Never-allow apps)."
+                } else {
+                    "Agents may use ${app.label} if their own app access allows it. Turn on to block it for every agent."
+                },
+            ) {
+                SwitchRow(
+                    title = "Block for all agents",
+                    checked = blocked,
+                    onCheckedChange = onBlockedChange,
+                    leading = { IconTile(Icons.Filled.Lock, if (blocked) Accents.Red else Accents.Gray) },
+                )
+            }
+        }
+        item(key = "actions") {
+            ListSection(title = "What agents can do (${AppsPresentation.actionCount(app.actions.size)})") {
+                if (app.actions.isEmpty()) {
+                    ListRow(
+                        title = "No ready-made actions",
+                        subtitle = "Agents can still use ${app.label} through the screen tools (read the screen, tap, type).",
+                        leading = { IconTile(Icons.Filled.Info, Accents.Gray) },
                     )
                 }
-            }
-        }
-        item(key = "actions-header") { SectionHeader("What agents can do (${AppsPresentation.actionCount(app.actions.size)})") }
-        if (app.actions.isEmpty()) {
-            item(key = "no-actions") {
-                Text(
-                    "No ready-made actions. Agents can still use ${app.label} through the screen tools (read the screen, tap, type).",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        items(app.actions, key = { "action-${it.id}" }) { action -> ActionCard(action, blocked) }
-        item(key = "improve-header") { SectionHeader("Make ${app.label} work better") }
-        item(key = "improve") {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Integrations are community plugins: one small file per app, no code. Ask for one, or start one from what " +
-                        "PhoneBridge found in this app and share it to your computer.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (requestUrl != null) {
-                    OutlinedButton(onClick = { SystemIntents.launch(context, SystemIntents.webPage(requestUrl)) }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Request a better integration")
-                    }
+                app.actions.forEachIndexed { index, action ->
+                    if (index > 0) ListDivider()
+                    ActionRow(action, blocked)
                 }
-                OutlinedButton(
+            }
+        }
+        item(key = "improve") {
+            ListSection(
+                title = "Make ${app.label} work better",
+                footer = "Integrations are community plugins: one small file per app, no code. Ask for one, or start one from " +
+                    "what PhoneBridge found in this app and share it to your computer.",
+            ) {
+                if (requestUrl != null) {
+                    ListRow(
+                        title = "Request a better integration",
+                        subtitle = "Opens a prefilled request on GitHub",
+                        leading = { IconTile(Icons.AutoMirrored.Filled.Send, Accents.Blue) },
+                        onClick = { SystemIntents.launch(context, SystemIntents.webPage(requestUrl)) },
+                    )
+                    ListDivider(IconRowInset)
+                }
+                ListRow(
+                    title = "Create plugin draft",
+                    subtitle = "A plugin.yaml made from what ${app.label} declares, to share",
+                    leading = { IconTile(Icons.Filled.Share, Accents.Teal) },
+                    trailing = if (drafting) {
+                        { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+                    } else {
+                        null
+                    },
+                    showChevron = !drafting,
+                    enabled = !drafting,
                     onClick = {
                         vm.createDraft(app.packageName) { intent ->
                             try {
@@ -183,57 +183,104 @@ private fun AppDetailContent(
                             }
                         }
                     },
-                    enabled = !drafting,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    if (drafting) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text("Create plugin draft")
+                )
+            }
+        }
+    }
+}
+
+/** The page's hero: the app's icon, name, package and kind of support. */
+@Composable
+private fun AppHeroCard(app: AppListing) {
+    val badge = AppsPresentation.badge(app)
+    AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppIcon(app.packageName, label = app.label, size = 56.dp)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(app.label, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(
+                    app.packageName,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatusPill(kindLabel(badge.kind), badgeColor(badge.kind))
+                    badge.status?.let { StatusPill(it, statusColors().warning) }
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private fun kindLabel(kind: BadgeKind): String = when (kind) {
+    BadgeKind.INTEGRATION -> "Integration"
+    BadgeKind.LOCAL -> "Local plugin"
+    BadgeKind.BASIC -> "Basic"
+}
+
+/**
+ * One action: title and risk pill, what it does, how it is approved, its parameters and the tool name
+ * rules and the log use. Why it can't run right now, if so, as a warning.
+ */
 @Composable
-private fun ActionCard(action: ActionInfo, appBlocked: Boolean) {
+private fun ActionRow(action: ActionInfo, appBlocked: Boolean) {
     val colors = statusColors()
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(action.title, style = MaterialTheme.typography.titleMedium)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val riskColor = when (action.risk) {
-                    Risk.READ -> colors.ok
-                    Risk.ACTION -> MaterialTheme.colorScheme.primary
-                    Risk.SENSITIVE -> colors.warning
-                }
-                StatusPill(AppsPresentation.riskLabel(action.risk), riskColor)
-                if (AppsPresentation.needsApproval(action)) StatusPill("Needs approval", colors.warning)
-                if (action.discovered) StatusPill("Discovered", MaterialTheme.colorScheme.onSurfaceVariant)
-                if (appBlocked) StatusPill("Blocked", colors.error)
-            }
-            Text(action.description, style = MaterialTheme.typography.bodyMedium)
-            if (action.params.isNotEmpty()) {
-                Text("Parameters", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
-                action.params.forEach { p ->
-                    Text("• " + AppsPresentation.paramText(p), style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            val notes = listOfNotNull(
-                AppsPresentation.approvalNote(action),
-                AppsPresentation.OPENS_SCREEN.takeIf { !action.completes },
-            )
-            notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            action.unavailableReason?.let { Notice(it, kind = NoticeKind.WARNING) }
+    val riskColor = when (action.risk) {
+        Risk.READ -> colors.ok
+        Risk.ACTION -> MaterialTheme.colorScheme.primary
+        Risk.SENSITIVE -> colors.warning
+    }
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = CardPadding, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(action.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            StatusPill(AppsPresentation.riskLabel(action.risk), riskColor)
+        }
+        Text(action.description, style = MaterialTheme.typography.bodyMedium, color = secondary)
+        val needsApproval = AppsPresentation.needsApproval(action)
+        val flags = listOfNotNull(
+            "Blocked for all agents".takeIf { appBlocked },
+            "Needs approval".takeIf { needsApproval },
+            "Discovered".takeIf { action.discovered },
+        )
+        if (flags.isNotEmpty()) {
             Text(
-                action.toolName,
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                flags.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = when {
+                    appBlocked -> colors.error
+                    needsApproval -> colors.warning
+                    else -> secondary
+                },
             )
         }
+        if (action.params.isNotEmpty()) {
+            Text("Parameters", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+            action.params.forEach { p ->
+                Text("• " + AppsPresentation.paramText(p), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        val notes = listOfNotNull(
+            AppsPresentation.approvalNote(action),
+            AppsPresentation.OPENS_SCREEN.takeIf { !action.completes },
+        )
+        notes.forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = secondary) }
+        action.unavailableReason?.let { Notice(it, kind = NoticeKind.WARNING, modifier = Modifier.padding(top = 4.dp)) }
+        Text(
+            action.toolName,
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.labelSmall,
+            color = secondary,
+        )
     }
 }
