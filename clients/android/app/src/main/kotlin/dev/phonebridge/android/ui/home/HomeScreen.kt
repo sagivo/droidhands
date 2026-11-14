@@ -1,22 +1,14 @@
 package dev.phonebridge.android.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -25,12 +17,18 @@ import dev.phonebridge.android.ui.activity.ActivityQuery
 import dev.phonebridge.android.ui.activity.AuditPresentation
 import dev.phonebridge.android.ui.activity.AuditRow
 import dev.phonebridge.android.ui.agents.AgentPresentation
+import dev.phonebridge.android.ui.components.Accents
+import dev.phonebridge.android.ui.components.IconTile
+import dev.phonebridge.android.ui.components.ListDivider
+import dev.phonebridge.android.ui.components.ListRow
+import dev.phonebridge.android.ui.components.ListSection
 import dev.phonebridge.android.ui.components.MenuAction
 import dev.phonebridge.android.ui.components.OverflowMenu
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SecureWindowEffect
 import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.SystemIntents
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.TouchShieldEffect
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
@@ -89,13 +87,14 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
 
     ScreenScaffold(
         title = "PhoneBridge",
+        large = true,
         actions = {
             OverflowMenu(
                 listOf(MenuAction("Revoke all agents", enabled = activeAgents > 0, destructive = true, onClick = actions.onRevokeAll)),
             )
         },
     ) { padding ->
-        LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             if (pairings.isNotEmpty()) {
                 item(key = "pairing-header") { SectionHeader("Wants to connect (${pairings.size})") }
                 items(pairings, key = { "pairing-${it.id}" }) { request ->
@@ -119,18 +118,7 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
                     )
                 }
             }
-            item(key = "status") {
-                AccessStatusCard(
-                    accessEnabled = settings.accessEnabled,
-                    relay = StatusPresentation.relay(relay, settings.relayEnabled),
-                    local = StatusPresentation.local(local, settings.localServerEnabled, settings.localServerBind),
-                    deviceIdShort = deviceIdShort,
-                    showRestart = StatusPresentation.showRestart(relay, settings.relayEnabled, local, settings.localServerEnabled),
-                    onAccessChange = vm::setAccessEnabled,
-                    onRestart = vm::restartBridge,
-                    onCopyUrl = { copy("Connection URL", it, false) },
-                )
-            }
+            item(key = "status") { AccessHeroCard(settings.accessEnabled, onAccessChange = vm::setAccessEnabled) }
             if (setup.loaded && !setup.progress.essentialComplete) {
                 item(key = "setup-hint") { SetupHintCard(setup.progress, onOpenSetup = actions.onOpenPermissions) }
             }
@@ -149,7 +137,9 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
                 }
             }
             item(key = "connect") { ConnectAgentCard(hasActiveAgents = activeAgents > 0, onConnect = actions.onConnectAgent) }
-            item(key = "today") { TodayCard(today, onOpenAgents = actions.onOpenAgents) }
+            if (activeAgents > 0 || !today.isEmpty) {
+                item(key = "today") { TodayCard(today, onOpenAgents = actions.onOpenAgents) }
+            }
             item(key = "recent") {
                 RecentActivity(
                     empty = recent.isEmpty(),
@@ -159,7 +149,7 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
                     },
                 ) {
                     recent.forEachIndexed { index, entry ->
-                        if (index > 0) HorizontalDivider()
+                        if (index > 0) ListDivider()
                         AuditRow(
                             entry = entry,
                             time = formatTime(entry.timestamp, now),
@@ -173,26 +163,32 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
                     }
                 }
             }
+            item(key = "connection") {
+                ConnectionSection(
+                    relay = StatusPresentation.relay(relay, settings.relayEnabled),
+                    local = StatusPresentation.local(local, settings.localServerEnabled, settings.localServerBind),
+                    deviceIdShort = deviceIdShort,
+                    showRestart = StatusPresentation.showRestart(relay, settings.relayEnabled, local, settings.localServerEnabled),
+                    onRestart = vm::restartBridge,
+                    onCopyUrl = { copy("Connection URL", it, false) },
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun RecentActivity(empty: Boolean, onSeeAll: () -> Unit, rows: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionHeader("Recent activity", Modifier.weight(1f))
-            if (!empty) TextButton(onClick = onSeeAll) { Text("See all") }
-        }
-        if (empty) {
-            Text(
-                "Nothing yet. Every request from an agent will show up here.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    if (empty) {
+        ListSection(title = "Recent activity") {
+            ListRow(
+                title = "Nothing yet",
+                subtitle = "Every request from an agent will show up here.",
+                leading = { IconTile(Icons.AutoMirrored.Filled.List, Accents.Gray) },
             )
-        } else {
-            OutlinedCard(Modifier.fillMaxWidth()) { Column { rows() } }
         }
+    } else {
+        ListSection(title = "Recent activity", action = { TertiaryButton("See all", onClick = onSeeAll) }) { rows() }
     }
 }
 

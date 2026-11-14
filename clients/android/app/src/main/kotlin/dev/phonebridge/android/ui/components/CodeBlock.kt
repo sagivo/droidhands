@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -32,7 +29,7 @@ import androidx.compose.ui.unit.dp
 fun CodeBlock(text: String, modifier: Modifier = Modifier) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        shape = MaterialTheme.shapes.small,
+        shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth(),
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
@@ -41,7 +38,7 @@ fun CodeBlock(text: String, modifier: Modifier = Modifier) {
                     text = text,
                     fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                 )
             }
         }
@@ -64,7 +61,7 @@ fun CopyableCode(
 ) {
     val copy = rememberCopier()
     val context = LocalContext.current
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CodeBlock(text)
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -72,15 +69,14 @@ fun CopyableCode(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (shareTitle != null) {
-                TextButton(onClick = { if (Clipboard.share(context, shareTitle, text)) onCopied() else onShareFailed() }) {
-                    Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Share")
-                }
+                TertiaryButton("Share", icon = Icons.Filled.Share, onClick = {
+                    if (Clipboard.share(context, shareTitle, text)) onCopied() else onShareFailed()
+                })
             }
-            FilledTonalButton(onClick = {
+            SecondaryButton("Copy", onClick = {
                 copy(copyLabel, text, sensitive)
                 onCopied()
-            }) { Text("Copy") }
+            })
         }
     }
 }

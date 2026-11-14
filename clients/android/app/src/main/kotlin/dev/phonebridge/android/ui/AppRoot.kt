@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -17,9 +18,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -76,6 +80,7 @@ import dev.phonebridge.android.ui.settings.SettingsViewModel
 import dev.phonebridge.android.ui.setup.SetupScreen
 import dev.phonebridge.android.ui.setup.SetupUiState
 import dev.phonebridge.android.ui.setup.SetupViewModel
+import dev.phonebridge.android.ui.theme.TINT_ALPHA
 import dev.phonebridge.android.ui.tokens.TokenFlow
 import dev.phonebridge.android.ui.tokens.TokenScreen
 import dev.phonebridge.android.ui.tokens.TokensViewModel
@@ -201,20 +206,32 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
             },
             bottomBar = {
                 if (layer == Layer.TAB) {
-                    NavigationBar {
-                        Destination.entries.forEach { destination ->
-                            NavigationBarItem(
-                                selected = nav.tab == destination,
-                                onClick = { selectTab(destination) },
-                                icon = {
-                                    NavIcon(
-                                        destination,
-                                        waitingCount = pending.size + pairings.count { it.expiresAt > now },
-                                        setupMissing = setupState.loaded && !setupState.progress.essentialComplete,
-                                    )
-                                },
-                                label = { Text(destination.label) },
-                            )
+                    val scheme = MaterialTheme.colorScheme
+                    val itemColors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = scheme.primary,
+                        selectedTextColor = scheme.primary,
+                        indicatorColor = scheme.primary.copy(alpha = TINT_ALPHA),
+                        unselectedIconColor = scheme.onSurfaceVariant,
+                        unselectedTextColor = scheme.onSurfaceVariant,
+                    )
+                    Column {
+                        HorizontalDivider(thickness = 0.5.dp, color = scheme.outlineVariant)
+                        NavigationBar(containerColor = scheme.surfaceContainerLowest, tonalElevation = 0.dp) {
+                            Destination.entries.forEach { destination ->
+                                NavigationBarItem(
+                                    selected = nav.tab == destination,
+                                    onClick = { selectTab(destination) },
+                                    colors = itemColors,
+                                    icon = {
+                                        NavIcon(
+                                            destination,
+                                            waitingCount = pending.size + pairings.count { it.expiresAt > now },
+                                            setupMissing = setupState.loaded && !setupState.progress.essentialComplete,
+                                        )
+                                    },
+                                    label = { Text(destination.label, style = MaterialTheme.typography.labelMedium) },
+                                )
+                            }
                         }
                     }
                 }

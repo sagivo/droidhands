@@ -5,29 +5,35 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.phonebridge.android.ui.components.AppCard
+import dev.phonebridge.android.ui.components.ButtonSize
+import dev.phonebridge.android.ui.components.Chevron
+import dev.phonebridge.android.ui.components.IconBadge
+import dev.phonebridge.android.ui.components.PrimaryButton
+import dev.phonebridge.android.ui.components.SecondaryButton
 import dev.phonebridge.android.ui.components.StatusPill
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.rememberArming
 import dev.phonebridge.android.ui.connect.PairingWatch
 import dev.phonebridge.android.ui.setup.SetupProgress
@@ -50,39 +56,29 @@ internal fun PendingApprovalCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = statusColors()
-    ElevatedCard(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    request.toolTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.weight(1f),
-                )
-                val (riskText, riskColor) = when (request.risk) {
-                    Risk.SENSITIVE -> "Sensitive" to colors.error
-                    Risk.ACTION -> "Action" to colors.warning
-                    Risk.READ -> "Read" to colors.ok
-                }
-                StatusPill(riskText, riskColor)
-            }
-            Text(request.summary, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onTertiaryContainer)
-            Text(
-                "Requested by \"${request.tokenName}\" via ${request.transport} · ${request.toolName}. " +
-                    (expiresAt?.let { "Denied automatically if unanswered (${PairingWatch.timeLeft(it, now)})." }
-                        ?: "Unanswered requests are denied automatically."),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onTertiaryContainer,
-            )
-            // Allow arms only after the card has stayed in place (it pops in above whatever the user was tapping).
-            val arming = rememberArming(request.id)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                OutlinedButton(onClick = onDeny) { Text("Deny") }
-                Button(onClick = onAllow, enabled = arming.armed, modifier = arming.modifier) { Text("Allow") }
-            }
+    val (riskText, riskColor) = when (request.risk) {
+        Risk.SENSITIVE -> "Sensitive" to colors.error
+        Risk.ACTION -> "Action" to colors.warning
+        Risk.READ -> "Read" to colors.ok
+    }
+    AppCard(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(request.toolTitle, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            StatusPill(riskText, riskColor)
+        }
+        Text(request.summary, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            "Requested by \"${request.tokenName}\" via ${request.transport} · ${request.toolName}. " +
+                (expiresAt?.let { "Denied automatically if unanswered (${PairingWatch.timeLeft(it, now)})." }
+                    ?: "Unanswered requests are denied automatically."),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Allow arms only after the card has stayed in place (it pops in above whatever the user was tapping).
+        val arming = rememberArming(request.id)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton("Deny", onClick = onDeny, modifier = Modifier.weight(1f))
+            PrimaryButton("Allow", onClick = onAllow, enabled = arming.armed, modifier = arming.modifier.weight(1f))
         }
     }
 }
@@ -92,11 +88,11 @@ internal fun PendingApprovalCard(
 internal fun SetupHintCard(progress: SetupProgress, onOpenSetup: () -> Unit, modifier: Modifier = Modifier) {
     val warning = statusColors().warning
     val missing = progress.essentialMissing
-    OutlinedCard(onClick = onOpenSetup, modifier = modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Warning, contentDescription = null, tint = warning)
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    AppCard(onClick = onOpenSetup, modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Filled.Warning, warning)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Finish setup", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "${missing.size} essential ${if (missing.size == 1) "item" else "items"} missing: " +
@@ -104,17 +100,22 @@ internal fun SetupHintCard(progress: SetupProgress, onOpenSetup: () -> Unit, mod
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                val summary = "${progress.done} of ${progress.total} setup items done"
-                LinearProgressIndicator(
-                    progress = { progress.fraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                        .semantics { contentDescription = summary },
-                )
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open permissions")
+            Chevron()
         }
+        val summary = "${progress.done} of ${progress.total} setup items done"
+        LinearProgressIndicator(
+            progress = { progress.fraction },
+            color = warning,
+            trackColor = warning.copy(alpha = 0.15f),
+            gapSize = 0.dp,
+            drawStopIndicator = {},
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(CircleShape)
+                .semantics { contentDescription = summary },
+        )
     }
 }
 
@@ -125,18 +126,22 @@ internal fun SetupHintCard(progress: SetupProgress, onOpenSetup: () -> Unit, mod
  */
 @Composable
 internal fun UpdateCard(version: String, onDownload: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedCard(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Update available: v$version", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Download it, then open the file to install. Your agents and settings stay as they are.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-                TextButton(onClick = onDismiss) { Text("Not now") }
-                Button(onClick = onDownload) { Text("Download") }
+    AppCard(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBadge(Icons.Filled.Refresh, MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Update available: v$version", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Download it, then open the file to install. Your agents and settings stay as they are.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            TertiaryButton("Not now", onClick = onDismiss)
+            PrimaryButton("Download", onClick = onDownload)
         }
     }
 }
@@ -145,30 +150,49 @@ internal fun UpdateCard(version: String, onDownload: () -> Unit, onDismiss: () -
 @Composable
 internal fun ConnectAgentCard(hasActiveAgents: Boolean, onConnect: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = onConnect, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-            Text("Connect an AI agent")
-        }
+        PrimaryButton("Connect an AI agent", onClick = onConnect, icon = Icons.Filled.Add, size = ButtonSize.LARGE, fullWidth = true)
         if (!hasActiveAgents) {
             Text(
                 "Paste one URL into Claude, ChatGPT or any MCP client, then tap Allow on this phone.",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
             )
         }
     }
 }
 
-/** "Today: 23 actions by 2 agents · 1 denied", tapping opens the Agents tab. */
+/** Today's numbers as stat tiles (actions, agents, denied); tapping opens the Agents tab. */
 @Composable
 internal fun TodayCard(summary: TodaySummary, onOpenAgents: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedCard(onClick = onOpenAgents, modifier = modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Today", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(TodaySummary.text(summary), style = MaterialTheme.typography.titleMedium)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open agents")
+    val colors = statusColors()
+    val text = TodaySummary.text(summary)
+    AppCard(onClick = onOpenAgents, modifier = modifier.semantics { contentDescription = "Today: $text. Open agents" }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Today", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Chevron()
         }
+        Row(Modifier.fillMaxWidth().clearAndSetSemantics {}) {
+            Stat(summary.actions.toString(), if (summary.actions == 1L) "action" else "actions", Modifier.weight(1f))
+            Stat(summary.agents.toString(), if (summary.agents == 1) "agent" else "agents", Modifier.weight(1f))
+            val blocked = summary.denied + summary.errors
+            Stat(
+                blocked.toString(),
+                "denied or failed",
+                Modifier.weight(1f),
+                color = if (blocked > 0) colors.error else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Stat(value: String, label: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
+    Column(modifier) {
+        Text(value, style = MaterialTheme.typography.headlineMedium, color = color)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -1,7 +1,6 @@
 package dev.phonebridge.android.ui.components
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -12,7 +11,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,7 +23,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /** An entry of an [OverflowMenu]. [destructive] items use the error color. */
@@ -73,16 +70,18 @@ fun <T> DropdownSelector(
     var open by remember { mutableStateOf(false) }
     val current = optionLabel(selected)
     Box(modifier) {
-        OutlinedButton(
+        ChoiceChip(
+            text = "$label: $current",
+            selected = false,
             onClick = { open = true },
-            modifier = Modifier.semantics {
-                role = Role.DropdownList
-                contentDescription = "$label: $current"
-            },
-        ) {
-            Text("$label: $current", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 240.dp))
-            Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.padding(start = 4.dp))
-        }
+            trailingIcon = Icons.Filled.ArrowDropDown,
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .semantics {
+                    role = Role.DropdownList
+                    contentDescription = "$label: $current"
+                },
+        )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             options.forEach { option ->
                 val isSelected = option == selected

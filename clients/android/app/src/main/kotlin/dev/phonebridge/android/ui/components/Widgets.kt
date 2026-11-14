@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -18,39 +16,32 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.ui.home.StatusLevel
 import dev.phonebridge.android.ui.theme.StatusColors
+import dev.phonebridge.android.ui.theme.TINT_ALPHA
 import dev.phonebridge.android.ui.theme.statusColors
 
-/** Section title inside a screen; marked as a heading for TalkBack navigation. */
+/**
+ * Section title above free-standing cards, aligned with the text inside them. Same look as a
+ * [ListSection] title; marked as a heading for TalkBack navigation.
+ */
 @Composable
 fun SectionHeader(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier
-            .padding(top = 8.dp)
-            .semantics { heading() },
-    )
+    SectionTitle(text, modifier.padding(start = CardPadding, top = 8.dp))
 }
 
 /** Small filled circle in a status color. Decorative: pair it with text. */
 @Composable
-fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Dp = 12.dp) {
+fun StatusDot(color: Color, modifier: Modifier = Modifier, size: Dp = 8.dp) {
     Box(
         modifier
             .size(size)
@@ -67,60 +58,49 @@ fun StatusColors.forLevel(level: StatusLevel): Color = when (level) {
     StatusLevel.OFF -> off
 }
 
-/** Compact tinted label, e.g. an outcome or "Revoked" badge. */
-@Composable
-fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier) {
-    Surface(
-        color = color.copy(alpha = 0.14f),
-        contentColor = color,
-        shape = MaterialTheme.shapes.small,
-        modifier = modifier,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
-    }
+/** Saturated tile color for a [StatusLevel], for [IconTile]s (white glyphs need the darker hue in both themes). */
+fun StatusLevel.accent(): Color = when (this) {
+    StatusLevel.OK -> Accents.Green
+    StatusLevel.PENDING -> Accents.Indigo
+    StatusLevel.WARNING -> Accents.Orange
+    StatusLevel.ERROR -> Accents.Red
+    StatusLevel.OFF -> Accents.Gray
 }
 
 /**
- * Full-width row with a trailing switch. The whole row is one toggleable element, so TalkBack
- * reads title, subtitle and state together.
+ * The app's one badge style: a tinted pill with colored text, e.g. an outcome, "Active" or
+ * "Revoked". [dot] adds a leading status dot for live states.
  */
 @Composable
-fun SwitchRow(
-    title: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    enabled: Boolean = true,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+fun StatusPill(text: String, color: Color, modifier: Modifier = Modifier, dot: Boolean = false) {
+    Surface(
+        color = color.copy(alpha = TINT_ALPHA),
+        contentColor = color,
+        shape = CircleShape,
+        modifier = modifier,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Row(
+            Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            if (dot) StatusDot(color, size = 6.dp)
+            Text(text = text, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
-        Spacer(Modifier.width(16.dp))
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 
 enum class NoticeKind { INFO, WARNING, DANGER }
 
-/** Inline callout with an icon, used for warnings and explanations. */
+/** Inline callout with an icon, used for warnings and explanations. [action] goes under the text. */
 @Composable
-fun Notice(text: String, modifier: Modifier = Modifier, kind: NoticeKind = NoticeKind.INFO, title: String? = null) {
+fun Notice(
+    text: String,
+    modifier: Modifier = Modifier,
+    kind: NoticeKind = NoticeKind.INFO,
+    title: String? = null,
+    action: (@Composable () -> Unit)? = null,
+) {
     val colors = statusColors()
     val scheme = MaterialTheme.colorScheme
     val (tint, icon: ImageVector) = when (kind) {
@@ -129,39 +109,51 @@ fun Notice(text: String, modifier: Modifier = Modifier, kind: NoticeKind = Notic
         NoticeKind.DANGER -> colors.error to Icons.Filled.Warning
     }
     Surface(
-        color = tint.copy(alpha = 0.10f),
+        color = tint.copy(alpha = 0.08f),
         shape = MaterialTheme.shapes.medium,
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
                 Text(text, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurface)
+                if (action != null) action()
             }
         }
     }
 }
 
-/** Centered message for empty lists. */
+/** Centered message for empty lists, with an optional call to action below. */
 @Composable
-fun EmptyState(title: String, message: String, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+fun EmptyState(
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    action: (@Composable () -> Unit)? = null,
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 48.dp, horizontal = 24.dp),
+            .padding(vertical = 40.dp, horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(48.dp))
+            IconBadge(icon, MaterialTheme.colorScheme.primary, size = 64.dp)
+            Spacer(Modifier.size(8.dp))
         }
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            textAlign = TextAlign.Center,
         )
+        if (action != null) {
+            Spacer(Modifier.size(8.dp))
+            action()
+        }
     }
 }
