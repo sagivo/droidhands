@@ -43,14 +43,23 @@ export function allowMethods(req: IncomingMessage, res: ServerResponse, allow: s
  * when it did.
  */
 export function applyOpenCors(req: IncomingMessage, res: ServerResponse, methods: string): boolean {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  if (req.method !== 'OPTIONS') return false;
-  res.setHeader('Access-Control-Allow-Methods', `${methods}, OPTIONS`);
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, MCP-Protocol-Version');
-  res.setHeader('Access-Control-Max-Age', '86400');
+  const preflight = req.method === 'OPTIONS';
+  for (const [name, value] of Object.entries(openCorsHeaders(methods, preflight))) res.setHeader(name, value);
+  if (!preflight) return false;
   res.statusCode = 204;
   res.end();
   return true;
+}
+
+/** The headers of [applyOpenCors] (a 204 preflight answer when [preflight]). Pure. */
+export function openCorsHeaders(methods: string, preflight: boolean): Record<string, string> {
+  if (!preflight) return { 'Access-Control-Allow-Origin': '*' };
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': `${methods}, OPTIONS`,
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version',
+    'Access-Control-Max-Age': '86400',
+  };
 }
 
 /** CORS settings for [applyOriginCors]. */
@@ -69,18 +78,24 @@ export interface OriginCors {
  * The caller must have checked [origin] against the allowlist.
  */
 export function applyOriginCors(req: IncomingMessage, res: ServerResponse, origin: string, cors: OriginCors): boolean {
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Vary', 'Origin');
-  if (req.method !== 'OPTIONS') {
-    res.setHeader('Access-Control-Expose-Headers', cors.exposeHeaders);
-    return false;
-  }
-  res.setHeader('Access-Control-Allow-Methods', `${cors.methods}, OPTIONS`);
-  res.setHeader('Access-Control-Allow-Headers', cors.allowHeaders);
-  res.setHeader('Access-Control-Max-Age', '86400');
+  const preflight = req.method === 'OPTIONS';
+  for (const [name, value] of Object.entries(originCorsHeaders(origin, cors, preflight))) res.setHeader(name, value);
+  if (!preflight) return false;
   res.statusCode = 204;
   res.end();
   return true;
+}
+
+/** The headers of [applyOriginCors] (a 204 preflight answer when [preflight]). Pure. */
+export function originCorsHeaders(origin: string, cors: OriginCors, preflight: boolean): Record<string, string> {
+  const common = { 'Access-Control-Allow-Origin': origin, Vary: 'Origin' };
+  if (!preflight) return { ...common, 'Access-Control-Expose-Headers': cors.exposeHeaders };
+  return {
+    ...common,
+    'Access-Control-Allow-Methods': `${cors.methods}, OPTIONS`,
+    'Access-Control-Allow-Headers': cors.allowHeaders,
+    'Access-Control-Max-Age': '86400',
+  };
 }
 
 /** The request's path, or null when the target cannot be parsed. Query strings are ignored. */

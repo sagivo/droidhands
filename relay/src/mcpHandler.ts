@@ -23,11 +23,11 @@ export type McpRoute =
 /** Retry-After for "device offline" and "shutting down" (seconds). */
 export const OFFLINE_RETRY_AFTER_SEC = 30;
 
-const UNAUTHORIZED_BODY = jsonRpcError(RpcCode.UNAUTHORIZED, 'Unauthorized');
-const PLAIN_CHALLENGE = 'Bearer realm="phonebridge"';
+export const UNAUTHORIZED_BODY = jsonRpcError(RpcCode.UNAUTHORIZED, 'Unauthorized');
+export const PLAIN_CHALLENGE = 'Bearer realm="phonebridge"';
 
 /** For requests refused before anything was sent to the phone. */
-const SHUTTING_DOWN_MESSAGE = 'Relay is shutting down; retry shortly';
+export const SHUTTING_DOWN_MESSAGE ='Relay is shutting down; retry shortly';
 
 /**
  * Appended when the request reached (or may have reached) the phone. The phone keeps running a
@@ -42,7 +42,7 @@ const MAY_HAVE_RUN =
  * How each tunnel failure of a forwarded request is reported to the agent. None carries
  * Retry-After or invites a retry: the phone may have performed the action.
  */
-const FAILURE_RESPONSES: Record<TunnelFailure, { status: number; message: string }> = {
+export const FAILURE_RESPONSES: Record<TunnelFailure, { status: number; message: string }> = {
   timeout: { status: 504, message: `The phone did not answer in time. ${MAY_HAVE_RUN}` },
   disconnected: { status: 502, message: `The phone's connection dropped before it answered. ${MAY_HAVE_RUN}` },
   replaced: { status: 502, message: `The phone reconnected before it answered. ${MAY_HAVE_RUN}` },
@@ -52,7 +52,7 @@ const FAILURE_RESPONSES: Record<TunnelFailure, { status: number; message: string
 };
 
 /** CORS for MCP requests from an allowlisted Origin (ALLOWED_ORIGINS), e.g. browser-based clients. */
-const MCP_CORS: OriginCors = {
+export const MCP_CORS: OriginCors = {
   methods: 'POST',
   allowHeaders: 'Authorization, Content-Type, Accept, Mcp-Protocol-Version, Mcp-Session-Id',
   exposeHeaders: 'WWW-Authenticate, Mcp-Session-Id, Retry-After',
@@ -143,7 +143,7 @@ export async function handleMcp(deps: HttpDeps, req: IncomingMessage, res: Serve
   const outcome = await connection.forward({
     method: 'POST',
     path: '/mcp',
-    headers: forwardedHeaders(req, token.token),
+    headers: forwardedHeaders((name) => headerValue(req, name), token.token),
     body: body.body,
     remoteAddress: ip,
   });
@@ -167,15 +167,18 @@ export async function handleMcp(deps: HttpDeps, req: IncomingMessage, res: Serve
   return done(response.status);
 }
 
-/** The allowlisted request headers (§3.2), with the token normalized to `Bearer <token>`. */
-function forwardedHeaders(req: IncomingMessage, token: string): Record<string, string> {
+/**
+ * The allowlisted request headers (§3.2), with the token normalized to `Bearer <token>`. [header]
+ * returns a request header (repeated ones joined with ", "). Pure; shared with the Worker relay.
+ */
+export function forwardedHeaders(header: (name: string) => string | undefined, token: string): Record<string, string> {
   const headers: Record<string, string> = {};
   for (const name of FORWARDED_REQUEST_HEADERS) {
     if (name === 'authorization') {
       headers.authorization = `Bearer ${token}`;
       continue;
     }
-    const value = headerValue(req, name);
+    const value = header(name);
     if (value !== undefined) headers[name] = value;
   }
   return headers;

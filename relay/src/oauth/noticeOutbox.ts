@@ -50,4 +50,15 @@ export class NoticeOutbox {
   clear(): void {
     this.queues.clear();
   }
+
+  /** The queued notices as JSON-safe data (see [load]). */
+  entries(): Array<[string, Array<{ frame: RelayPairFrame; queuedAt: number }>]> {
+    return [...this.queues.entries()].map(([deviceId, queued]) => [deviceId, queued.map((n) => ({ ...n }))]);
+  }
+
+  /** Replaces the queues with [entries] (from [entries]). */
+  load(entries: ReadonlyArray<readonly [string, ReadonlyArray<{ frame: RelayPairFrame; queuedAt: number }>]>): void {
+    this.queues.clear();
+    for (const [deviceId, queued] of entries) this.queues.set(deviceId, queued.map((n) => ({ ...n })));
+  }
 }

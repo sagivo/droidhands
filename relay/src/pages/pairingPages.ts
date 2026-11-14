@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { PairingView } from '../oauth/pairingStore.js';
-import { html, sendMessagePage, sendPage } from './html.js';
+import { html, messagePage, sendPage, type PageOptions } from './html.js';
 
 /**
  * Pages of the one-tap pairing flow (docs/PROTOCOL.md §5.3): the "approve on your phone" waiting
@@ -20,9 +20,14 @@ export interface WaitingPageInput {
 
 /** "Approve on your phone": shows the device name and display code, polls, then navigates on. */
 export function sendWaitingPage(req: IncomingMessage, res: ServerResponse, input: WaitingPageInput): void {
+  sendPage(req, res, 200, waitingPage(input));
+}
+
+/** The [sendWaitingPage] page (status 200), for adapters other than node:http. */
+export function waitingPage(input: WaitingPageInput): PageOptions {
   const { pairing, deviceName, pollUrl, pageUrl, now } = input;
   const remaining = Math.max(0, Math.ceil((pairing.expiresAt - now) / 1000));
-  sendPage(req, res, 200, {
+  return {
     title: 'Approve on your phone · PhoneBridge',
     head: html`<noscript><meta http-equiv="refresh" content="5;url=${pageUrl}"></noscript>`,
     body: html`<div id="pairing" data-poll="${pollUrl}" data-page="${pageUrl}" data-remaining="${remaining}">
@@ -41,15 +46,20 @@ After you approve, you will return to <span class="mono">${pairing.redirectHost}
 <noscript><p><a class="button" href="${pageUrl}">I answered on my phone. Continue</a></p></noscript>
 </div>`,
     script: WAITING_SCRIPT,
-  });
+  };
 }
 
 /** §5.3 step 3. */
 export function sendOfflinePage(req: IncomingMessage, res: ServerResponse): void {
-  sendMessagePage(
-    req,
-    res,
-    503,
+  sendPage(req, res, OFFLINE_PAGE_STATUS, offlinePage());
+}
+
+/** Status of the [offlinePage]. */
+export const OFFLINE_PAGE_STATUS = 503;
+
+/** The [sendOfflinePage] page, for adapters other than node:http. */
+export function offlinePage(): PageOptions {
+  return messagePage(
     'Your phone is offline',
     ['Your phone is offline. Open PhoneBridge, make sure it shows Connected, then reload this page.'],
     html`<a class="button" href="">Reload</a>`,
@@ -64,7 +74,12 @@ export function sendPairingError(
   problem: string,
   hint: string,
 ): void {
-  sendMessagePage(req, res, status, "Can't connect to your phone", [problem, html`<span class="muted">${hint}</span>`]);
+  sendPage(req, res, status, pairingErrorPage(problem, hint));
+}
+
+/** The [sendPairingError] page, for adapters other than node:http. */
+export function pairingErrorPage(problem: string, hint: string): PageOptions {
+  return messagePage("Can't connect to your phone", [problem, html`<span class="muted">${hint}</span>`]);
 }
 
 /**

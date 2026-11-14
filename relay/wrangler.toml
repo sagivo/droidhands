@@ -1,0 +1,42 @@
+# PhoneBridge relay on Cloudflare Workers + Durable Objects (see CLOUDFLARE.md).
+#   npm run cf:dev       local, on http://127.0.0.1:8787 (needs RELAY_SECRET in .dev.vars)
+#   npm run cf:deploy    to your Cloudflare account (needs `npx wrangler secret put RELAY_SECRET`)
+name = "phonebridge-relay"
+main = "src/worker/index.ts"
+compatibility_date = "2026-11-01"
+# node:crypto and Buffer for the modules shared with the Node relay.
+compatibility_flags = ["nodejs_compat"]
+
+# One Durable Object per phone. SQLite-backed, so it runs on the Workers Free plan.
+[[durable_objects.bindings]]
+name = "DEVICES"
+class_name = "DeviceObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DeviceObject"]
+
+[vars]
+# Public base URL (https://relay.example.com). Leave empty to use the address each request was
+# sent to (e.g. https://phonebridge-relay.<account>.workers.dev or your custom domain).
+PUBLIC_URL = ""
+# Origins (comma-separated, or *) of browser-based MCP clients allowed to call the MCP endpoints.
+ALLOWED_ORIGINS = ""
+# Where the setup page's "Install PhoneBridge" button points, e.g. the APK of a GitHub release.
+APK_URL = ""
+# Log the setup link (and a QR code) once per isolate. It contains RELAY_ACCESS_KEY when one is
+# set, and deployed Worker logs may be kept by Cloudflare, so it is off by default.
+SETUP_BANNER = "false"
+# Secrets (never put them here): `npx wrangler secret put RELAY_SECRET`, and optionally
+# `npx wrangler secret put RELAY_ACCESS_KEY` to keep strangers' phones off your relay.
+
+# The relay shares its config module with the Node relay, which computes a default file path from
+# import.meta.url at load time; Workers have no file system, so give it a harmless constant.
+[define]
+"import.meta.url" = "\"file:///phonebridge-relay/src/worker/index.js\""
+
+[observability]
+enabled = true
+
+# A custom domain instead of *.workers.dev (the zone must be on your Cloudflare account):
+# routes = [{ pattern = "relay.example.com", custom_domain = true }]

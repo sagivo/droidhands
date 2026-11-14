@@ -132,6 +132,26 @@ export interface PairingStoreOptions {
   /** Sends [frame] to the device's live connection; returns that connection, or null if offline. */
   readonly deliver: (deviceId: string, frame: RelayPairFrame) => Channel | null;
   readonly logger: Logger;
+  /**
+   * Opaque values handed to the browser and the client, for relays that must route them to the
+   * device's state (the Cloudflare Worker prefixes them with the deviceId). Defaults: 16 random
+   * bytes (page token) and 32 random bytes (authorization code), base64url.
+   */
+  readonly newPageToken?: (deviceId: string) => string;
+  readonly newCode?: (deviceId: string) => string;
+}
+
+/**
+ * Everything a [PairingStore] holds, as plain JSON (for relays that keep it in durable storage, such
+ * as a Cloudflare Durable Object that may be evicted). Contains access tokens: store it only where
+ * the relay's own secrets live, and never log it.
+ */
+export interface PairingSnapshot {
+  readonly v: 1;
+  readonly records: ReadonlyArray<Omit<PairingRecord, 'channel'> & { readonly channel: string }>;
+  readonly codes: ReadonlyArray<readonly [string, CodeGrant]>;
+  readonly history: ReadonlyArray<readonly [string, readonly number[]]>;
+  readonly notices: ReturnType<NoticeOutbox['entries']>;
 }
 
 interface PairingRecord {
@@ -191,6 +211,49 @@ export class PairingStore {
   }
 
   /**
+   * The store's state as JSON-safe data; [channelKey] names each record's channel. See
+   * [PairingSnapshot]. Restore with [restore].
+   */
+  snapshot(channelKey: (channel: Channel) => string): PairingSnapshot {
+    return {
+      v: 1,
+      records: [...this.records.values()].map((r) => ({ ...r, channel: channelKey(r.channel) })),
+      codes: [...this.codes.entries()].map(([key, grant]) => [key, { ...grant }] as const),
+      history: [...this.history.entries()],
+      notices: this.notices.entries(),
+    };
+  }
+
+  /** Replaces the state with [snapshot]; [channelFor] maps channel keys back to channels. */
+  restore(snapshot: PairingSnapshot, channelFor: (key: string) => Channel): void {
+    this.records.clear();
+    this.codes.clear();
+    this.history.clear();
+    for (const r of snapshot.records) this.records.set(r.id, { ...r, channel: channelFor(r.channel) });
+    for (const [key, grant] of snapshot.codes) this.codes.set(key, { ...grant });
+    for (const [key, times] of snapshot.history) this.history.set(key, [...times]);
+    this.notices.load(snapshot.notices);
+  }
+
+  /**
+   * When [sweep] next has something to do that the device or browser would notice (a pending
+   * pairing or an authorization code expiring), or null. Relays without a periodic sweep schedule
+   * one for then.
+   */
+  nextDeadline(): number | null {
+    let next: number | null = null;
+    const consider = (t: number): void => {
+      if (next === null || t < next) next = t;
+    };
+    for (const record of this.records.values()) {
+      if (record.status === 'pending') consider(record.expiresAt);
+      else consider(record.decidedAt + this.retainMs);
+    }
+    for (const grant of this.codes.values()) consider(grant.expiresAt);
+    return next;
+  }
+
+  /**
    * Starts a pairing and sends `pair_request` to the device. A repeated request for the same
    * flow (same client, redirect URI, PKCE challenge and state, e.g. a page reload) returns the
    * existing pairing while it is pending or approved, instead of prompting the phone again.
@@ -227,7 +290,7 @@ export class PairingStore {
 
     const record: PairingRecord = {
       ...prompt,
-      pageToken: randomBytes(16).toString('base64url'),
+      pageToken: this.options.newPageToken?.(request.deviceId) ?? randomBytes(16).toString('base64url'),
       channel,
       status: 'pending',
       redirect: null,
@@ -290,7 +353,7 @@ export class PairingStore {
       return;
     }
 
-    const code = randomBytes(32).toString('base64url');
+    const code = this.options.newCode?.(deviceId) ?? randomBytes(32).toString('base64url');
     this.codes.set(hashCode(code), {
       pairingId: record.id,
       deviceId,

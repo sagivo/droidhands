@@ -16,12 +16,65 @@ import { verifyPkce } from './pkce.js';
  */
 
 /** Token requests are a handful of short parameters. */
-const MAX_TOKEN_BODY_BYTES = 16 * 1024;
+export const MAX_TOKEN_BODY_BYTES = 16 * 1024;
 
 /** Token request parameters that must not repeat (RFC 6749 §3.2). */
 const SINGLE_PARAMS = ['grant_type', 'code', 'redirect_uri', 'client_id', 'code_verifier', 'resource'] as const;
 
-type TokenError = 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unsupported_grant_type' | 'invalid_target';
+export type TokenError = 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unsupported_grant_type' | 'invalid_target';
+
+/** `error_description` for an unknown, expired or used code. */
+export const INVALID_CODE_DESCRIPTION = 'the authorization code is invalid, expired or already used';
+
+export type TokenRequestCheck =
+  | { readonly ok: true; readonly clientId: string; readonly code: string; readonly verifier: string }
+  | {
+      readonly ok: false;
+      readonly error: TokenError;
+      readonly description: string;
+      /** Counts toward the client's authentication-failure limit (an unknown client). */
+      readonly authFailure: boolean;
+    };
+
+/**
+ * The checks of a token request before its code is looked up, shared by the Node and Worker relays:
+ * repeated parameters, grant type, required parameters and the client (HMAC). Pure.
+ */
+export function checkTokenRequest(
+  params: URLSearchParams,
+  authorization: string | undefined,
+  relaySecret: Buffer,
+): TokenRequestCheck {
+  const fail = (error: TokenError, description: string, authFailure = false): TokenRequestCheck => ({
+    ok: false,
+    error,
+    description,
+    authFailure,
+  });
+  const repeated = SINGLE_PARAMS.find((name) => params.getAll(name).length > 1);
+  if (repeated !== undefined) return fail('invalid_request', `"${repeated}" must not repeat`);
+  const grantType = params.get('grant_type');
+  if (grantType === null) return fail('invalid_request', 'grant_type is required');
+  if (grantType !== 'authorization_code') {
+    return fail('unsupported_grant_type', 'only authorization_code is supported; to reconnect, authorize again');
+  }
+  const clientId = requestClientId(params, authorization);
+  const code = params.get('code');
+  const verifier = params.get('code_verifier');
+  if (clientId === undefined) return fail('invalid_request', 'client_id in the body and in Basic auth differ');
+  if (clientId === null || code === null || verifier === null) {
+    return fail('invalid_request', 'client_id, code and code_verifier are required');
+  }
+  if (decodeClientId(clientId, relaySecret) === null) {
+    return fail('invalid_client', 'unknown client_id; register again', true);
+  }
+  return { ok: true, clientId, code, verifier };
+}
+
+/** The successful token response (§5.4) for [grant]. Contains the token: never log it. */
+export function tokenResponseBody(grant: CodeGrant): string {
+  return JSON.stringify({ access_token: grant.accessToken, token_type: 'Bearer', scope: OAUTH_SCOPE });
+}
 
 export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (applyOpenCors(req, res, 'POST')) return;
@@ -48,27 +101,17 @@ export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: Ser
   }
 
   const params = new URLSearchParams(body.body);
-  const repeated = SINGLE_PARAMS.find((name) => params.getAll(name).length > 1);
-  if (repeated !== undefined) return fail(res, 'invalid_request', `"${repeated}" must not repeat`);
-  const grantType = params.get('grant_type');
-  if (grantType === null) return fail(res, 'invalid_request', 'grant_type is required');
-  if (grantType !== 'authorization_code') {
-    return fail(res, 'unsupported_grant_type', 'only authorization_code is supported; to reconnect, authorize again');
+  const checked = checkTokenRequest(params, headerValue(req, 'authorization'), deps.relaySecret);
+  if (!checked.ok) {
+    return checked.authFailure
+      ? rejectAuth(deps, res, client, checked.error, checked.description)
+      : fail(res, checked.error, checked.description);
   }
-  const clientId = requestClientId(params, headerValue(req, 'authorization'));
-  const code = params.get('code');
-  const verifier = params.get('code_verifier');
-  if (clientId === undefined) return fail(res, 'invalid_request', 'client_id in the body and in Basic auth differ');
-  if (clientId === null || code === null || verifier === null) {
-    return fail(res, 'invalid_request', 'client_id, code and code_verifier are required');
-  }
-  if (decodeClientId(clientId, deps.relaySecret) === null) {
-    return rejectAuth(deps, res, client, 'invalid_client', 'unknown client_id; register again');
-  }
+  const { clientId, code, verifier } = checked;
 
   const grant = deps.pairings.takeCode(code);
   if (grant === null) {
-    return rejectAuth(deps, res, client, 'invalid_grant', 'the authorization code is invalid, expired or already used');
+    return rejectAuth(deps, res, client, 'invalid_grant', INVALID_CODE_DESCRIPTION);
   }
   // From here on the code is consumed: any mismatch abandons the pairing so the phone deletes the token.
   const problem = checkGrant(grant, clientId, params, verifier);
@@ -77,7 +120,7 @@ export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: Ser
     return rejectAuth(deps, res, client, problem.error, problem.description, grant.deviceId);
   }
 
-  const payload = JSON.stringify({ access_token: grant.accessToken, token_type: 'Bearer', scope: OAUTH_SCOPE });
+  const payload = tokenResponseBody(grant);
   grant.accessToken = '';
   // pair_complete only once the response has been handed to the network; abandoned otherwise.
   res.once('close', () => deps.pairings.finishExchange(grant, res.writableFinished));
@@ -89,7 +132,7 @@ export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: Ser
 }
 
 /** The binding checks of §5.4, or null when the request matches the code. */
-function checkGrant(
+export function checkGrant(
   grant: CodeGrant,
   clientId: string,
   params: URLSearchParams,

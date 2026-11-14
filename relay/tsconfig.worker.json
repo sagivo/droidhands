@@ -1,0 +1,23 @@
+{
+  // Type-checks the Cloudflare Worker relay (src/worker/**) and its tests against the Workers
+  // runtime types. Separate from tsconfig.json so @cloudflare/workers-types never meets the Node
+  // relay's build; the shared modules the Worker imports are checked here too. No output: wrangler
+  // and vitest bundle the sources themselves.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types", "node"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["src/worker/**/*.ts", "test-worker/**/*.ts"]
+}

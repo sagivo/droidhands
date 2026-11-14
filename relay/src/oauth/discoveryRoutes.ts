@@ -11,7 +11,7 @@ import { authorizationServerMetadata, protectedResourceMetadata } from './metada
  */
 
 /** Registration metadata is small; this bounds memory per request. */
-const MAX_REGISTRATION_BODY_BYTES = 16 * 1024;
+export const MAX_REGISTRATION_BODY_BYTES = 16 * 1024;
 
 /** `GET /.well-known/oauth-protected-resource/d/<deviceId>/mcp` (RFC 9728). */
 export function handleResourceMetadata(deps: HttpDeps, req: IncomingMessage, res: ServerResponse, deviceId: string): void {
@@ -44,19 +44,35 @@ export async function handleRegister(deps: HttpDeps, req: IncomingMessage, res: 
     res.setHeader('Connection', 'close');
     return sendJson(res, 413, { error: 'invalid_client_metadata', error_description: 'registration request too large' });
   }
+  const outcome = registrationOutcome(body.body, deps.relaySecret, Date.now());
+  if (outcome.log !== null) deps.logger.info(outcome.log.msg, { ip: client.ip, ...outcome.log.fields });
+  sendJson(res, outcome.status, outcome.body);
+}
+
+/**
+ * The answer to a registration request body, shared by the Node and Worker relays: `201` with the
+ * stateless client, or `400` (RFC 7591 §3.2.2), plus what to log. Pure.
+ */
+export function registrationOutcome(
+  bodyText: string,
+  key: Buffer,
+  nowMs: number,
+): { status: number; body: unknown; log: { msg: string; fields: Record<string, string> } | null } {
   let metadata: unknown;
   try {
-    metadata = JSON.parse(body.body);
+    metadata = JSON.parse(bodyText);
   } catch {
-    return sendJson(res, 400, { error: 'invalid_client_metadata', error_description: 'the request body must be JSON' });
+    return { status: 400, body: { error: 'invalid_client_metadata', error_description: 'the request body must be JSON' }, log: null };
   }
-  const result = registerClient(metadata, deps.relaySecret, Date.now());
+  const result = registerClient(metadata, key, nowMs);
   if (!result.ok) {
-    deps.logger.info('client registration rejected', { ip: client.ip, error: result.error });
-    return sendJson(res, 400, { error: result.error, error_description: result.description });
+    return {
+      status: 400,
+      body: { error: result.error, error_description: result.description },
+      log: { msg: 'client registration rejected', fields: { error: result.error } },
+    };
   }
-  deps.logger.info('client registered', { ip: client.ip, name: result.response.client_name });
-  sendJson(res, 201, result.response);
+  return { status: 201, body: result.response, log: { msg: 'client registered', fields: { name: result.response.client_name } } };
 }
 
 /** CORS, preflight, method and rate checks shared by the metadata endpoints. */

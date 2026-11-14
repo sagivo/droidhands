@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ANDROID_PACKAGE } from '../setup/setupUrl.js';
-import { SafeHtml, html, sendPage } from './html.js';
+import { SafeHtml, html, sendPage, type PageOptions } from './html.js';
 
 /**
  * The phone setup page (docs/PROTOCOL.md §5.5): install the app, then open it pre-configured for
@@ -21,8 +21,13 @@ export interface SetupPageInput {
 }
 
 export function sendSetupPage(req: IncomingMessage, res: ServerResponse, input: SetupPageInput): void {
+  sendPage(req, res, 200, setupPage(input));
+}
+
+/** The [sendSetupPage] page (status 200), for adapters other than node:http (Cloudflare Worker). */
+export function setupPage(input: SetupPageInput): PageOptions {
   const { base, apkUrl, qrEndpoint, accessKeyRequired, qrSvg } = input;
-  sendPage(req, res, 200, {
+  return {
     title: 'Set up PhoneBridge',
     body: html`<div id="setup" data-relay="${base}" data-key-required="${String(accessKeyRequired)}" data-qr="${qrEndpoint}">
 <h1>Set up PhoneBridge</h1>
@@ -70,7 +75,7 @@ ${
 </div>
 </div>`,
     script: SETUP_SCRIPT,
-  });
+  };
 }
 
 /**

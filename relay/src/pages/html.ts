@@ -54,12 +54,19 @@ export interface PageOptions {
   readonly script?: string;
 }
 
+/** A rendered page: the document and the security headers it must be sent with. */
+export interface RenderedPage {
+  readonly html: string;
+  /** `Content-Security-Policy` (with this page's nonce), `Referrer-Policy`, `X-Frame-Options`. */
+  readonly headers: Readonly<Record<string, string>>;
+}
+
 /**
- * Sends a complete HTML page with a strict CSP (`default-src 'none'`, nonce-only inline style and
+ * Renders a complete HTML page with a strict CSP (`default-src 'none'`, nonce-only inline style and
  * script, same-origin fetch, no framing, no forms), `Referrer-Policy: no-referrer` and
- * `X-Frame-Options: DENY`.
+ * `X-Frame-Options: DENY`. Shared by the Node and Cloudflare Worker relays.
  */
-export function sendPage(req: IncomingMessage, res: ServerResponse, status: number, page: PageOptions): void {
+export function renderPage(page: PageOptions): RenderedPage {
   const nonce = randomBytes(16).toString('base64');
   const document = html`<!doctype html>
 <html lang="en">
@@ -80,25 +87,41 @@ ${page.script === undefined ? '' : html`<script nonce="${nonce}">${new SafeHtml(
 </body>
 </html>
 `;
-  res.setHeader(
-    'Content-Security-Policy',
-    [
-      "default-src 'none'",
-      `style-src 'nonce-${nonce}'`,
-      `script-src 'nonce-${nonce}'`,
-      "img-src 'self'",
-      "connect-src 'self'",
-      "base-uri 'none'",
-      "form-action 'none'",
-      "frame-ancestors 'none'",
-    ].join('; '),
-  );
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('X-Frame-Options', 'DENY');
-  sendBody(req, res, status, 'text/html; charset=utf-8', document.value);
+  return {
+    html: document.value,
+    headers: {
+      'Content-Security-Policy': [
+        "default-src 'none'",
+        `style-src 'nonce-${nonce}'`,
+        `script-src 'nonce-${nonce}'`,
+        "img-src 'self'",
+        "connect-src 'self'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'none'",
+      ].join('; '),
+      'Referrer-Policy': 'no-referrer',
+      'X-Frame-Options': 'DENY',
+    },
+  };
+}
+
+/** Sends [page] (see [renderPage]) with [status]. */
+export function sendPage(req: IncomingMessage, res: ServerResponse, status: number, page: PageOptions): void {
+  const rendered = renderPage(page);
+  for (const [name, value] of Object.entries(rendered.headers)) res.setHeader(name, value);
+  sendBody(req, res, status, 'text/html; charset=utf-8', rendered.html);
 }
 
 /** A simple page with a heading, paragraphs and an optional hint. */
+export function messagePage(title: string, paragraphs: readonly (string | SafeHtml)[], extra?: SafeHtml): PageOptions {
+  return {
+    title: `${title} · PhoneBridge`,
+    body: html`<h1>${title}</h1>${paragraphs.map((p) => html`<p>${p}</p>`)}${extra}`,
+  };
+}
+
+/** Sends a [messagePage]. */
 export function sendMessagePage(
   req: IncomingMessage,
   res: ServerResponse,
@@ -107,10 +130,7 @@ export function sendMessagePage(
   paragraphs: readonly (string | SafeHtml)[],
   extra?: SafeHtml,
 ): void {
-  sendPage(req, res, status, {
-    title: `${title} · PhoneBridge`,
-    body: html`<h1>${title}</h1>${paragraphs.map((p) => html`<p>${p}</p>`)}${extra}`,
-  });
+  sendPage(req, res, status, messagePage(title, paragraphs, extra));
 }
 
 /** Shared stylesheet: system fonts, mobile-first, dark-mode aware. */
