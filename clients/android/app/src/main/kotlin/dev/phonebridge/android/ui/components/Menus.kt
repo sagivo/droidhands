@@ -1,7 +1,6 @@
 package dev.phonebridge.android.ui.components
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
@@ -23,7 +22,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 
 /** An entry of an [OverflowMenu]. [destructive] items use the error color. */
 data class MenuAction(val label: String, val enabled: Boolean = true, val destructive: Boolean = false, val onClick: () -> Unit)
@@ -76,7 +74,6 @@ fun <T> DropdownSelector(
             onClick = { open = true },
             trailingIcon = Icons.Filled.ArrowDropDown,
             modifier = Modifier
-                .widthIn(max = 280.dp)
                 .semantics {
                     role = Role.DropdownList
                     contentDescription = "$label: $current"

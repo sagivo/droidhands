@@ -198,12 +198,13 @@ internal fun PairingScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SecondaryButton("Deny", onClick = onDeny, enabled = !approving, size = ButtonSize.LARGE, modifier = Modifier.weight(1f))
                     PrimaryButton(
-                        if (approving) "Allowing…" else "Allow",
+                        "Allow",
                         onClick = {
                             val level = PairingPresentation.level(levelName)
                             onAllow(PairingChoice.of(name, level, policy))
                         },
-                        enabled = armed && secondsLeft > 0 && !approving,
+                        enabled = armed && secondsLeft > 0,
+                        loading = approving,
                         size = ButtonSize.LARGE,
                         modifier = Modifier.weight(1f),
                     )

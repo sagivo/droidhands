@@ -52,9 +52,9 @@ import dev.phonebridge.android.ui.theme.statusColors
 
 /**
  * One checklist row inside a [dev.phonebridge.android.ui.components.ListSection]: icon tile, title,
- * a subtitle (why to grant it while missing, what it unlocks once done) and, trailing, a green check
- * when done or the action that fixes it. Warnings (blocked, connecting, restricted setting) sit
- * below the row text. TalkBack reads the status ("Not granted", "Done", …) as the row's state.
+ * a subtitle (why to grant it while missing, what it unlocks once done), and a trailing green check
+ * when done. The action that fixes a missing item sits under the text, so the explanation keeps the
+ * row's full width. Warnings (blocked, connecting, restricted setting) sit below that. TalkBack reads the status ("Not granted", "Done", …) as the row's state.
  */
 @Composable
 internal fun SetupRow(
@@ -67,21 +67,26 @@ internal fun SetupRow(
     val statusText = SetupLogic.statusLabel(item.status, item.blocked)
     val done = item.status == SetupStatus.DONE
     val (icon, accent) = tileFor(item.id)
+    val label = SetupLogic.actionLabel(item)
     Column(modifier.fillMaxWidth()) {
         ListRow(
             title = item.title,
             subtitle = if (done) item.unlocks else item.description,
             leading = { IconTile(icon, accent) },
-            trailing = {
-                val label = SetupLogic.actionLabel(item)
-                when {
-                    done -> IconBadge(Icons.Filled.Check, colors.ok, size = 28.dp)
-                    label != null -> SecondaryButton(label, onClick = { onAction(item) })
-                    else -> StatusPill(statusText, colors.off)
-                }
+            trailing = when {
+                done -> { { IconBadge(Icons.Filled.Check, colors.ok, size = 28.dp) } }
+                label == null -> { { StatusPill(statusText, colors.off) } }
+                else -> null
             },
             modifier = Modifier.semantics(mergeDescendants = true) { stateDescription = statusText },
         )
+        if (!done && label != null) {
+            SecondaryButton(
+                label,
+                onClick = { onAction(item) },
+                modifier = Modifier.padding(start = IconRowInset, bottom = 12.dp),
+            )
+        }
         RowNotes(item, onOpenAppInfo)
     }
 }

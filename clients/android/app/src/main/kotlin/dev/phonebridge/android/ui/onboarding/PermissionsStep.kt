@@ -7,13 +7,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LocationOn
@@ -23,7 +22,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.ui.components.Accents
 import dev.phonebridge.android.ui.components.AppCard
+import dev.phonebridge.android.ui.components.IconBadge
 import dev.phonebridge.android.ui.components.IconRowInset
 import dev.phonebridge.android.ui.components.IconTile
 import dev.phonebridge.android.ui.components.ListDivider
@@ -179,11 +178,11 @@ private fun PermissionRow(item: SetupItem, actions: SetupActions) {
         trailing = {
             val label = SetupLogic.actionLabel(item)
             when {
-                done -> Icon(
-                    Icons.Filled.CheckCircle,
-                    contentDescription = "Granted",
-                    tint = statusColors().ok,
-                    modifier = Modifier.size(24.dp),
+                done -> IconBadge(
+                    Icons.Filled.Check,
+                    statusColors().ok,
+                    size = 28.dp,
+                    modifier = Modifier.semantics { contentDescription = "Granted" },
                 )
                 label != null -> SecondaryButton(
                     if (item.blocked) "App info" else "Grant",

@@ -84,10 +84,10 @@ class SettingsActions(
 )
 
 /**
- * Settings, as inset grouped lists (the iOS Settings pattern): how agents reach this phone (the
- * connection URLs of the routes that are on, then the relay and Tailscale), General (permissions,
- * boot, the activity notification), Security (never-allow apps, hidden one-time codes), Advanced
- * (the local server), Developer (local plugins), About, and Revoke all last. Connection changes are
+ * Settings, as inset grouped lists (the iOS Settings pattern): General first (permissions, which
+ * may need attention, boot, the activity notification), Security (never-allow apps, hidden one-time
+ * codes), how agents reach this phone (the connection URLs of the routes that are on, then the relay
+ * and Tailscale), Advanced (the local server), Developer (local plugins), About, and Revoke all last. Connection changes are
  * saved together from the bottom bar; switches outside the form apply at once.
  */
 @Composable
@@ -130,31 +130,16 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                 BottomActionBar {
                     TertiaryButton("Discard", onClick = vm::discard, enabled = !vm.saving)
                     PrimaryButton(
-                        if (vm.saving) "Saving…" else "Save",
+                        "Save",
                         onClick = vm::save,
-                        enabled = validation.isValid && !vm.saving,
+                        enabled = validation.isValid,
+                        loading = vm.saving,
                     )
                 }
             }
         },
     ) { padding ->
         LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            item(key = "routes") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SectionHeader("How agents reach this phone")
-                    val routes = remember(current, relayStatus, localStatus) { ConnectionRoutes.active(current, relayStatus, localStatus) }
-                    if (routes.isEmpty()) {
-                        Notice("Agents can't reach this phone yet. Turn on the relay or Tailscale below, then tap Save.", kind = NoticeKind.WARNING)
-                    } else {
-                        ActiveRoutesCard(routes)
-                    }
-                }
-            }
-            item(key = "relay") {
-                val usingDefault = current.relayFromDefault && RelayUrls.normalize(form.relayUrl) == current.relayUrl
-                RelaySection(form, validation, usingDefault, vm::edit)
-            }
-            item(key = "tailscale") { TailscaleSection(form, tailscale, vm::edit) }
             item(key = "general") {
                 ListSection(
                     title = "General",
@@ -189,6 +174,22 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                     onRedactChange = vm::setRedactOneTimeCodes,
                 )
             }
+            item(key = "routes") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHeader("How agents reach this phone")
+                    val routes = remember(current, relayStatus, localStatus) { ConnectionRoutes.active(current, relayStatus, localStatus) }
+                    if (routes.isEmpty()) {
+                        Notice("Agents can't reach this phone yet. Turn on the relay or Tailscale below, then tap Save.", kind = NoticeKind.WARNING)
+                    } else {
+                        ActiveRoutesCard(routes)
+                    }
+                }
+            }
+            item(key = "relay") {
+                val usingDefault = current.relayFromDefault && RelayUrls.normalize(form.relayUrl) == current.relayUrl
+                RelaySection(form, validation, usingDefault, vm::edit)
+            }
+            item(key = "tailscale") { TailscaleSection(form, tailscale, vm::edit) }
             item(key = "local") { LocalServerSection(form, validation, vm::edit) }
             item(key = "developer") {
                 DeveloperSection(

@@ -118,7 +118,7 @@ private fun AgentRow(
     ListRow(
         title = record.name,
         subtitle = "$identity\n$details",
-        subtitleMaxLines = 2,
+        subtitleMaxLines = 3,
         leading = { Monogram(record.name, size = MONOGRAM_SIZE) },
         trailing = { StatusPill(AgentPresentation.stateLabel(state), color, dot = state == TokenState.ACTIVE) },
         showChevron = true,

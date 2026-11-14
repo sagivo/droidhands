@@ -2,11 +2,9 @@ package dev.phonebridge.android.ui.activity
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -107,15 +105,12 @@ fun ActivityScreen(vm: MainViewModel) {
                         selected = options.firstOrNull { it.agent == query.agent } ?: options.first(),
                         optionLabel = { it.label },
                         onSelect = { vm.activityQuery = query.copy(agent = it.agent) },
-                        modifier = Modifier.width(IntrinsicSize.Max),
                     )
                     AuditFilter.entries.forEach { f ->
                         ChoiceChip(
                             text = "${f.label} ${counts[f] ?: 0}",
                             selected = query.outcome == f,
                             onClick = { vm.activityQuery = query.copy(outcome = f) },
-                            // A chip measures its label with a weight, which needs a bounded width inside a scrolling row.
-                            modifier = Modifier.width(IntrinsicSize.Max),
                         )
                     }
                 }

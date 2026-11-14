@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -25,6 +24,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.phonebridge.android.ui.components.PrimaryButton
 import dev.phonebridge.android.ui.deeplink.ConfigureLinkViewModel
 import dev.phonebridge.android.ui.nav.NavState
 
@@ -63,6 +63,6 @@ private fun StartupError(message: String, onRetry: () -> Unit) {
     ) {
         Text("PhoneBridge couldn't start", style = MaterialTheme.typography.titleLarge)
         Text(message, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-        Button(onClick = onRetry) { Text("Try again") }
+        PrimaryButton("Try again", onClick = onRetry)
     }
 }

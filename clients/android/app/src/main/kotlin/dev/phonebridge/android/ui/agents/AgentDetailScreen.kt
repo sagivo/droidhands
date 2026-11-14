@@ -158,9 +158,10 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
                 BottomActionBar {
                     TertiaryButton("Discard", onClick = vm::discard, enabled = !vm.saving)
                     PrimaryButton(
-                        if (vm.saving) "Saving…" else "Save",
+                        "Save",
                         onClick = vm::save,
-                        enabled = draft.canSave && !vm.saving,
+                        enabled = draft.canSave,
+                        loading = vm.saving,
                         size = ButtonSize.LARGE,
                         modifier = Modifier.weight(1f),
                     )

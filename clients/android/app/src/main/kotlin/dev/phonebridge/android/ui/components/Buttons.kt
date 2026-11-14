@@ -10,13 +10,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.ui.theme.TINT_ALPHA
@@ -28,7 +32,8 @@ import dev.phonebridge.android.ui.theme.TINT_ALPHA
  *  - SecondaryButton: other real actions next to it (tinted brand color).
  *  - TertiaryButton: low-emphasis actions such as Cancel, Not now, See all, Show (text only).
  *  - [destructive] on Primary/Secondary/Tertiary: revoke, delete, deny-for-good (red).
- * All are pills; [large] (52dp) is for full-width calls to action, the default (40dp) for inline use.
+ * All are pills; [ButtonSize.LARGE] (52dp) is for full-width calls to action, the default (40dp) for
+ * inline use. [loading] on a primary button shows a spinner and disables it while work is running.
  */
 
 enum class ButtonSize(val height: Int, val padding: PaddingValues) {
@@ -46,6 +51,7 @@ fun PrimaryButton(
     destructive: Boolean = false,
     size: ButtonSize = ButtonSize.REGULAR,
     fullWidth: Boolean = false,
+    loading: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val colors = if (destructive) {
@@ -53,7 +59,7 @@ fun PrimaryButton(
     } else {
         ButtonDefaults.buttonColors()
     }
-    PillButton(text, onClick, modifier, icon, enabled, size, fullWidth, colors)
+    PillButton(text, onClick, modifier, icon, enabled && !loading, size, fullWidth, colors, loading)
 }
 
 @Composable
@@ -110,6 +116,7 @@ private fun PillButton(
     size: ButtonSize,
     fullWidth: Boolean,
     colors: ButtonColors,
+    loading: Boolean = false,
 ) {
     Button(
         onClick = onClick,
@@ -120,7 +127,17 @@ private fun PillButton(
         elevation = null,
         contentPadding = size.padding,
     ) {
-        ButtonContent(text, icon)
+        if (loading) {
+            CircularProgressIndicator(
+                strokeWidth = 2.dp,
+                color = LocalContentColor.current,
+                modifier = Modifier
+                    .size(18.dp)
+                    .semantics { contentDescription = "In progress" },
+            )
+            Spacer(Modifier.width(8.dp))
+        }
+        ButtonContent(text, icon.takeUnless { loading })
     }
 }
 

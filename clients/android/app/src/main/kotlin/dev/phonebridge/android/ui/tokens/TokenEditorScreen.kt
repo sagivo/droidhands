@@ -78,9 +78,10 @@ internal fun TokenEditorScreen(
             BottomActionBar {
                 TertiaryButton("Cancel", onClick = onCancel)
                 PrimaryButton(
-                    if (creating) "Creating…" else "Create token",
+                    "Create token",
                     onClick = onCreate,
-                    enabled = draft.canCreate && !creating,
+                    enabled = draft.canCreate,
+                    loading = creating,
                     size = ButtonSize.LARGE,
                     modifier = Modifier.weight(1f),
                 )
