@@ -2,22 +2,16 @@ package dev.phonebridge.android.ui.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +20,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -39,17 +35,28 @@ import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.service.TailscaleState
 import dev.phonebridge.android.settings.BridgeSettings
 import dev.phonebridge.android.ui.MainViewModel
+import dev.phonebridge.android.ui.components.Accents
+import dev.phonebridge.android.ui.components.AppCard
+import dev.phonebridge.android.ui.components.IconTile
+import dev.phonebridge.android.ui.components.ListRow
+import dev.phonebridge.android.ui.components.ListSection
 import dev.phonebridge.android.ui.components.Notice
+import dev.phonebridge.android.ui.components.PrimaryButton
+import dev.phonebridge.android.ui.components.SecondaryButton
 import dev.phonebridge.android.ui.components.SectionHeader
+import dev.phonebridge.android.ui.components.StatusPill
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.connect.ConnectionRoutes
 import dev.phonebridge.android.ui.connect.ConnectionStatusLine
+import dev.phonebridge.android.ui.connect.QrScanner
 import dev.phonebridge.android.ui.connect.RelaySetupForm
 import dev.phonebridge.android.ui.connect.RouteKind
 import dev.phonebridge.android.ui.connect.RouteUrl
-import dev.phonebridge.android.ui.connect.QrScanner
 import dev.phonebridge.android.ui.connect.SCAN_LABEL
 import dev.phonebridge.android.ui.connect.TailscaleStatus
+import dev.phonebridge.android.ui.connect.routeIcon
 import dev.phonebridge.android.ui.deeplink.ConfigureLinks
+import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.core.transport.RelayStatus
 
 /**
@@ -72,12 +79,15 @@ internal fun ConnectStep(main: MainViewModel) {
         DefaultRelayOnline(main, settings, relay, local, tailscale)
         return
     }
-    StepTitle(
+    val online = relay is RelayStatus.Connected
+    StepHeader(
+        if (online) Icons.Filled.CheckCircle else Icons.Filled.Share,
         "Connect this phone",
-        "Your AI agents reach this phone through a small relay you host yourself, which works on Wi-Fi and mobile " +
-            "data, or directly over Tailscale.",
+        "Your AI agents reach this phone through a small relay you host yourself, on Wi-Fi or mobile data, or directly " +
+            "over Tailscale.",
+        color = if (online) statusColors().ok else MaterialTheme.colorScheme.primary,
     )
-    if (relay is RelayStatus.Connected) {
+    if (online) {
         ConnectedCard("Connected to ${ConfigureLinks.hostOf(settings.relayUrl) ?: "your relay"}")
         return
     }
@@ -88,8 +98,10 @@ internal fun ConnectStep(main: MainViewModel) {
             title = "Go online now",
             text = "No relay of your own? Use ${ConfigureLinks.hostOf(defaultUrl) ?: defaultUrl}, the relay this app comes " +
                 "with. You can switch to your own relay at any time.",
+            icon = Icons.Filled.CheckCircle,
+            color = Accents.Indigo,
         ) {
-            Button(onClick = main::useDefaultRelay) { Text("Go online") }
+            PrimaryButton("Go online", onClick = main::useDefaultRelay, fullWidth = true)
         }
     }
     OwnRelayOption(main, settings)
@@ -109,20 +121,31 @@ private fun DefaultRelayOnline(
     var more by rememberSaveable { mutableStateOf(settings.localServerEnabled) }
     val host = ConfigureLinks.hostOf(settings.relayUrl) ?: settings.relayUrl
     if (relay is RelayStatus.Connected) {
-        StepTitle("You're online", "AI agents can reach this phone from anywhere, on Wi-Fi or mobile data. Nothing to set up here.")
+        StepHeader(
+            Icons.Filled.CheckCircle,
+            "You're online",
+            "AI agents can reach this phone from anywhere, on Wi-Fi or mobile data. Nothing to set up here.",
+            color = statusColors().ok,
+        )
         ConnectedCard("Online through $host")
     } else {
-        StepTitle("Going online", "PhoneBridge connects this phone to a relay, so AI agents can reach it on Wi-Fi or mobile data.")
+        StepHeader(
+            Icons.Filled.Share,
+            "Going online",
+            "PhoneBridge connects this phone to a relay, so AI agents can reach it on Wi-Fi or mobile data.",
+        )
         ConnectionStatusLine(settings, relay, local, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
     }
     Notice(title = "About the relay", text = DEFAULT_RELAY_NOTE)
     if (more) {
-        SectionHeader("More ways to connect")
-        TailscaleOption(main, settings, local, tailscale)
-        OwnRelayOption(main, settings.copy(relayUrl = "", relayAccessKey = ""))
-        LocalOnlyOption(main, settings)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionHeader("More ways to connect")
+            TailscaleOption(main, settings, local, tailscale)
+            OwnRelayOption(main, settings.copy(relayUrl = "", relayAccessKey = ""))
+            LocalOnlyOption(main, settings)
+        }
     } else {
-        TextButton(onClick = { more = true }) { Text("More ways to connect") }
+        TertiaryButton("More ways to connect", onClick = { more = true })
     }
 }
 
@@ -130,15 +153,21 @@ private fun DefaultRelayOnline(
 @Composable
 private fun TailscaleOption(main: MainViewModel, settings: BridgeSettings, local: LocalServerStatus, tailscale: TailscaleState) {
     val on = ConnectionRoutes.tailscaleOn(settings)
-    OptionCard(title = ConnectionRoutes.TAILSCALE_TITLE, text = ConnectionRoutes.TAILSCALE_SUMMARY) {
+    OptionCard(
+        title = ConnectionRoutes.TAILSCALE_TITLE,
+        text = ConnectionRoutes.TAILSCALE_SUMMARY,
+        icon = routeIcon(RouteKind.TAILSCALE),
+        color = Accents.Blue,
+        live = on,
+    ) {
         TailscaleStatus(tailscale)
         if (on) {
             ConnectionRoutes.active(settings, RelayStatus.Stopped, local).filter { it.kind == RouteKind.TAILSCALE }.forEach { route ->
                 RouteUrl(route)
             }
-            TextButton(onClick = { main.setTailscale(false) }) { Text("Stop using Tailscale") }
+            TertiaryButton("Stop using Tailscale", onClick = { main.setTailscale(false) })
         } else {
-            Button(onClick = { main.setTailscale(true) }) { Text("Use Tailscale") }
+            SecondaryButton("Use Tailscale", onClick = { main.setTailscale(true) })
         }
     }
 }
@@ -146,7 +175,12 @@ private fun TailscaleOption(main: MainViewModel, settings: BridgeSettings, local
 /** The user's own relay: the setup link or the URL form, and the script that runs one through Tailscale. */
 @Composable
 private fun OwnRelayOption(main: MainViewModel, settings: BridgeSettings) {
-    OptionCard(title = ConnectionRoutes.OWN_RELAY_TITLE, text = ConnectionRoutes.OWN_RELAY_SUMMARY) {
+    OptionCard(
+        title = ConnectionRoutes.OWN_RELAY_TITLE,
+        text = ConnectionRoutes.OWN_RELAY_SUMMARY,
+        icon = routeIcon(RouteKind.RELAY),
+        color = Accents.Indigo,
+    ) {
         val context = LocalContext.current
         val scan = if (remember { QrScanner.isAvailable(context) }) "Tap \"$SCAN_LABEL\" and point the camera at the code, or open" else "Open"
         Text(
@@ -163,43 +197,61 @@ private fun OwnRelayOption(main: MainViewModel, settings: BridgeSettings) {
 /** No relay at all: the local server, over USB or the user's own network. */
 @Composable
 private fun LocalOnlyOption(main: MainViewModel, settings: BridgeSettings) {
+    val on = settings.localServerEnabled && !ConnectionRoutes.tailscaleOn(settings)
     OptionCard(
         title = "Local only (advanced)",
         text = "No relay: serve agents on this phone directly, over USB (adb forward) or your own network. Agents connect " +
             "the same way: paste the URL, then tap Allow on this phone.",
+        icon = Icons.Filled.Build,
+        color = Accents.Gray,
+        live = on,
     ) {
-        if (settings.localServerEnabled && !ConnectionRoutes.tailscaleOn(settings)) {
+        if (on) {
             Text("Local server is on (port ${settings.localServerPort}).", style = MaterialTheme.typography.bodyMedium)
         } else {
-            OutlinedButton(onClick = main::enableLocalServer) { Text("Use the local server") }
+            SecondaryButton("Use the local server", onClick = main::enableLocalServer)
         }
     }
 }
 
+/** "Connected to relay.example.com" as a green row with a Live pill; announced when it appears. */
 @Composable
 private fun ConnectedCard(text: String) {
-    ElevatedCard(
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics { liveRegion = LiveRegionMode.Polite },
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            Spacer(Modifier.width(12.dp))
-            Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-        }
+    ListSection(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+        ListRow(
+            title = text,
+            leading = { IconTile(Icons.Filled.CheckCircle, Accents.Green) },
+            trailing = { StatusPill("Live", statusColors().ok, dot = true) },
+        )
     }
 }
 
+/** One way to connect: tile, title and what it is for, then its controls. [live] adds an "On" pill. */
 @Composable
-private fun OptionCard(title: String, text: String, content: @Composable () -> Unit = {}) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            content()
+private fun OptionCard(
+    title: String,
+    text: String,
+    icon: ImageVector,
+    color: Color,
+    live: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit = {},
+) {
+    AppCard {
+        Row(verticalAlignment = Alignment.Top) {
+            IconTile(icon, color)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f, fill = false))
+                    if (live) {
+                        Spacer(Modifier.width(8.dp))
+                        StatusPill("On", statusColors().ok, dot = true)
+                    }
+                }
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        content()
     }
 }
 

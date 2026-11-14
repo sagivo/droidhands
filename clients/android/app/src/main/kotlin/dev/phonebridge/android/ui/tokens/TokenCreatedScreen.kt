@@ -3,16 +3,19 @@ package dev.phonebridge.android.ui.tokens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,30 +25,41 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.ui.MainViewModel
 import dev.phonebridge.android.ui.components.BottomActionBar
+import dev.phonebridge.android.ui.components.ButtonSize
+import dev.phonebridge.android.ui.components.CardPadding
+import dev.phonebridge.android.ui.components.ChoiceChip
 import dev.phonebridge.android.ui.components.CodeBlock
 import dev.phonebridge.android.ui.components.ConfirmDialog
 import dev.phonebridge.android.ui.components.CopyableCode
+import dev.phonebridge.android.ui.components.IconBadge
+import dev.phonebridge.android.ui.components.ListSection
 import dev.phonebridge.android.ui.components.LocalSnackbarHostState
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
+import dev.phonebridge.android.ui.components.PrimaryButton
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SecureWindowEffect
-import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.settings.RelayUrls
+import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.core.auth.IssuedToken
 import dev.phonebridge.core.transport.RelayStatus
 import kotlinx.coroutines.launch
 
 /**
- * One-time display of a new token with ready-to-paste client configs. The window is FLAG_SECURE
- * while shown; Done (or back, after confirming) drops the plaintext.
+ * One-time display of a new token with ready-to-paste client configs: a success hero, the
+ * "shown only once" warning, the token itself, then the setup per client. The window is
+ * FLAG_SECURE while shown; Done (or back, after confirming) drops the plaintext.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -89,9 +103,33 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
 
     ScreenScaffold(
         title = "Token created",
-        bottomBar = { BottomActionBar { Button(onClick = leave) { Text("Done") } } },
+        bottomBar = { BottomActionBar { PrimaryButton("Done", onClick = leave, size = ButtonSize.LARGE, fullWidth = true) } },
     ) { padding ->
-        LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            item(key = "hero") {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconBadge(Icons.Filled.CheckCircle, statusColors().ok, size = 64.dp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "\"${token.record.name}\"",
+                        style = MaterialTheme.typography.headlineMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        "${TokenPresentation.scopeSummary(token.record.scopes, token.record.maxRisk)} · " +
+                            "${TokenPresentation.policyLabel(token.record.confirmPolicy)} · " +
+                            TokenPresentation.expiryText(token.record.expiresAt, System.currentTimeMillis()),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
             item(key = "warning") {
                 Notice(
                     title = "Copy it now: it's shown only once",
@@ -101,21 +139,12 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                 )
             }
             item(key = "token") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SectionHeader("\"${token.record.name}\"")
-                    Text(
-                        "${TokenPresentation.scopeSummary(token.record.scopes, token.record.maxRisk)} · " +
-                            "${TokenPresentation.policyLabel(token.record.confirmPolicy)} · " +
-                            TokenPresentation.expiryText(token.record.expiresAt, System.currentTimeMillis()),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                CardSection(title = "Token") {
                     CopyableCode(token.plaintext, copyLabel = "Token", sensitive = true, onCopied = markCopied)
                 }
             }
             item(key = "endpoint") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SectionHeader("Connect an agent")
+                CardSection(title = "Connect an agent") {
                     if (endpoint == null) {
                         Notice(
                             "No endpoint is set up yet. Turn on the relay or the local server in Settings, then use the " +
@@ -129,13 +158,13 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                         )
                     } else {
                         if (endpoints.size > 1) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.selectableGroup(),
+                            ) {
                                 endpoints.forEachIndexed { index, ep ->
-                                    FilterChip(
-                                        selected = ep == endpoint,
-                                        onClick = { selected = index },
-                                        label = { Text(ep.label) },
-                                    )
+                                    ChoiceChip(ep.label, selected = ep == endpoint, onClick = { selected = index })
                                 }
                             }
                         } else {
@@ -152,20 +181,16 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                 }
             }
             items(snippets, key = { "snippet-${it.id}" }) { snippet ->
-                OutlinedCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(snippet.title, style = MaterialTheme.typography.titleSmall)
-                        Text(snippet.hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        val secret = token.plaintext in snippet.text
-                        CopyableCode(
-                            snippet.text,
-                            copyLabel = snippet.title,
-                            sensitive = secret,
-                            shareTitle = "Share setup for ${snippet.title}",
-                            onShareFailed = shareFailed,
-                            onCopied = { if (secret) markCopied() },
-                        )
-                    }
+                CardSection(title = snippet.title, footer = snippet.hint) {
+                    val secret = token.plaintext in snippet.text
+                    CopyableCode(
+                        snippet.text,
+                        copyLabel = snippet.title,
+                        sensitive = secret,
+                        shareTitle = "Share setup for ${snippet.title}",
+                        onShareFailed = shareFailed,
+                        onCopied = { if (secret) markCopied() },
+                    )
                 }
             }
         }
@@ -181,5 +206,13 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
             onConfirm = onDone,
             onDismiss = { confirmLeave = false },
         )
+    }
+}
+
+/** A titled white group holding free-form content (code, chips, notices), padded like a card. */
+@Composable
+private fun CardSection(title: String, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    ListSection(title = title, footer = footer) {
+        Column(Modifier.padding(CardPadding), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }

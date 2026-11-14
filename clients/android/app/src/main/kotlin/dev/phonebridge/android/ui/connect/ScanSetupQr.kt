@@ -4,8 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -21,6 +19,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import dev.phonebridge.android.ui.components.LocalSnackbarHostState
+import dev.phonebridge.android.ui.components.SecondaryButton
 import dev.phonebridge.android.ui.components.findActivity
 import dev.phonebridge.android.ui.deeplink.ConfigureLinkViewModel
 import kotlinx.coroutines.launch
@@ -40,10 +39,11 @@ internal fun ScanSetupQrButton(modifier: Modifier = Modifier) {
     val links: ConfigureLinkViewModel = viewModel(viewModelStoreOwner = activity)
     val snackbar = LocalSnackbarHostState.current
     val scope = rememberCoroutineScope()
-    OutlinedButton(
+    SecondaryButton(
+        SCAN_LABEL,
         onClick = { QrScanner.scan(activity, onResult = links::offerScanned, onError = { scope.launch { snackbar.showSnackbar(it) } }) },
         modifier = modifier,
-    ) { Text(SCAN_LABEL) }
+    )
 }
 
 /** The activity's [ConfigureLinkViewModel] (the one behind the "Connect to relay?" dialog), or null outside an activity. */
