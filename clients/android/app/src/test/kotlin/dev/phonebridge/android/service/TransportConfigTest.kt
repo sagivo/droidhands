@@ -1,6 +1,7 @@
 package dev.phonebridge.android.service
 
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.core.transport.RelayStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,10 +23,30 @@ class TransportConfigTest {
     @Test
     fun localConfigFollowsSettings() {
         assertNull(TransportConfig.local(BridgeSettings(localServerEnabled = false)))
-        assertEquals(LocalConfig(8765, false), TransportConfig.local(BridgeSettings(localServerEnabled = true)))
-        assertEquals(LocalConfig(1024, true), TransportConfig.local(BridgeSettings(localServerEnabled = true, localServerPort = 80, localServerBindAll = true)))
-        assertEquals("127.0.0.1", LocalConfig(8765, false).bindAddress)
-        assertEquals("0.0.0.0", LocalConfig(8765, true).bindAddress)
+        assertEquals(LocalConfig(8765, LocalBind.LOOPBACK), TransportConfig.local(BridgeSettings(localServerEnabled = true)))
+        assertEquals(
+            LocalConfig(1024, LocalBind.ALL_INTERFACES),
+            TransportConfig.local(BridgeSettings(localServerEnabled = true, localServerPort = 80, localServerBind = LocalBind.ALL_INTERFACES)),
+        )
+        assertEquals("127.0.0.1", LocalConfig(8765, LocalBind.LOOPBACK).bindAddress)
+        assertEquals("0.0.0.0", LocalConfig(8765, LocalBind.ALL_INTERFACES).bindAddress)
+    }
+
+    @Test
+    fun tailscaleBindListensOnTheTailnetAddressOnly() {
+        val tailscale = BridgeSettings(localServerEnabled = true, localServerBind = LocalBind.TAILSCALE)
+        val config = TransportConfig.local(tailscale, tailnet = "100.101.102.103")!!
+        assertEquals("100.101.102.103", config.bindAddress)
+        // No tailnet address: nothing to bind, the server waits (but the service still runs, to notice Tailscale).
+        assertNull(TransportConfig.local(tailscale, tailnet = null)!!.bindAddress)
+        assertTrue(TransportConfig.shouldRun(tailscale))
+        // A new tailnet address is a different config: the controller rebinds.
+        assertFalse(config == TransportConfig.local(tailscale, tailnet = "100.101.102.104"))
+        // Other modes ignore the tailnet address, so a Tailscale change never rebinds them.
+        assertEquals(
+            LocalConfig(8765, LocalBind.ALL_INTERFACES),
+            TransportConfig.local(tailscale.copy(localServerBind = LocalBind.ALL_INTERFACES), tailnet = "100.101.102.103"),
+        )
     }
 
     @Test
@@ -51,11 +72,25 @@ class TransportConfigTest {
 
     @Test
     fun localUrlsAlwaysIncludeLoopback() {
-        assertEquals(listOf("http://127.0.0.1:8765/mcp"), TransportConfig.localUrls(8765, bindAll = false, lanAddresses = listOf("192.168.1.20")))
+        assertEquals(listOf("http://127.0.0.1:8765/mcp"), TransportConfig.localUrls(8765, LocalBind.LOOPBACK, lanAddresses = listOf("192.168.1.20")))
         assertEquals(
             listOf("http://127.0.0.1:9000/mcp", "http://192.168.1.20:9000/mcp", "http://100.64.0.7:9000/mcp"),
-            TransportConfig.localUrls(9000, bindAll = true, lanAddresses = listOf("192.168.1.20", "127.0.0.2", "0.0.0.0", "100.64.0.7", "192.168.1.20")),
+            TransportConfig.localUrls(
+                9000,
+                LocalBind.ALL_INTERFACES,
+                lanAddresses = listOf("192.168.1.20", "127.0.0.2", "0.0.0.0", "100.64.0.7", "192.168.1.20"),
+            ),
         )
+    }
+
+    @Test
+    fun tailscaleUrlIsTheTailnetHostOnly() {
+        assertEquals(
+            listOf("http://pixel.tail1234.ts.net:8765/mcp"),
+            TransportConfig.localUrls(8765, LocalBind.TAILSCALE, listOf("192.168.1.20"), tailnetHost = "pixel.tail1234.ts.net"),
+        )
+        assertEquals(listOf("http://[fd7a:115c:a1e0::1]:8765/mcp"), TransportConfig.localUrls(8765, LocalBind.TAILSCALE, emptyList(), "fd7a:115c:a1e0::1"))
+        assertEquals(emptyList<String>(), TransportConfig.localUrls(8765, LocalBind.TAILSCALE, emptyList(), tailnetHost = null))
     }
 
     @Test

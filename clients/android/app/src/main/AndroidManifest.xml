@@ -51,6 +51,8 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- The Tailscale route: "Get Tailscale" or "Open Tailscale". -->
+        <package android:name="com.tailscale.ipn" />
     </queries>
 
     <application

@@ -114,7 +114,7 @@ class SettingsCodecTest {
             relayAccessKey = "s3cret",
             localServerEnabled = true,
             localServerPort = 9000,
-            localServerBindAll = true,
+            localServerBind = LocalBind.TAILSCALE,
             accessEnabled = false,
             startOnBoot = false,
             neverAllowApps = setOf("com.ideomobile.hapoalim", "com.x8bit.bitwarden"),
@@ -126,11 +126,40 @@ class SettingsCodecTest {
             checkForUpdates = false,
         )
         val encoded = SettingsCodec.encode(settings)
-        assertEquals(15, encoded.size)
+        assertEquals(16, encoded.size)
         assertEquals(settings, SettingsCodec.decode(encoded))
         // Fresh-install values survive a save too (the store is no longer empty afterwards).
         val fresh = BridgeSettings(securityDefaultsApplied = true)
         assertEquals(fresh, SettingsCodec.decode(SettingsCodec.encode(fresh)))
+    }
+
+    @Test
+    fun localBindMigratesFromTheBindAllSwitch() {
+        // Saved before the bind mode existed: the bind-all switch decides, so nothing changes for the user.
+        assertEquals(LocalBind.ALL_INTERFACES, SettingsCodec.decode(mapOf(SettingsCodec.KEY_LOCAL_BIND_ALL to true)).localServerBind)
+        assertEquals(LocalBind.LOOPBACK, SettingsCodec.decode(mapOf(SettingsCodec.KEY_LOCAL_BIND_ALL to false)).localServerBind)
+        assertEquals(LocalBind.LOOPBACK, SettingsCodec.decode(mapOf(SettingsCodec.KEY_LOCAL_ENABLED to true)).localServerBind)
+        assertEquals(LocalBind.LOOPBACK, SettingsCodec.decode(emptyMap<String, Any>()).localServerBind)
+
+        // The bind mode wins once stored; unknown or mistyped values fall back to the switch.
+        val both = mapOf(SettingsCodec.KEY_LOCAL_BIND_ALL to false, SettingsCodec.KEY_LOCAL_BIND to "tailscale")
+        assertEquals(LocalBind.TAILSCALE, SettingsCodec.decode(both).localServerBind)
+        assertEquals(
+            LocalBind.ALL_INTERFACES,
+            SettingsCodec.decode(mapOf(SettingsCodec.KEY_LOCAL_BIND_ALL to true, SettingsCodec.KEY_LOCAL_BIND to "mesh")).localServerBind,
+        )
+        assertEquals(LocalBind.LOOPBACK, SettingsCodec.decode(mapOf(SettingsCodec.KEY_LOCAL_BIND to 3)).localServerBind)
+    }
+
+    @Test
+    fun encodeKeepsTheBindAllSwitchForOlderVersions() {
+        fun stored(bind: LocalBind) = SettingsCodec.encode(BridgeSettings(localServerBind = bind))
+        assertEquals("all", stored(LocalBind.ALL_INTERFACES)[SettingsCodec.KEY_LOCAL_BIND])
+        assertEquals(true, stored(LocalBind.ALL_INTERFACES)[SettingsCodec.KEY_LOCAL_BIND_ALL])
+        // An older app reads Tailscale-only as loopback: never wider than the user chose.
+        assertEquals(false, stored(LocalBind.TAILSCALE)[SettingsCodec.KEY_LOCAL_BIND_ALL])
+        assertEquals("tailscale", stored(LocalBind.TAILSCALE)[SettingsCodec.KEY_LOCAL_BIND])
+        assertEquals(false, stored(LocalBind.LOOPBACK)[SettingsCodec.KEY_LOCAL_BIND_ALL])
     }
 
     @Test

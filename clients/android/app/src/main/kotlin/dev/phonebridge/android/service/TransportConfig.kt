@@ -2,6 +2,7 @@ package dev.phonebridge.android.service
 
 import dev.phonebridge.android.graph.RelayUrls
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.android.settings.SettingsCodec
 import dev.phonebridge.core.transport.RelayStatus
 
@@ -15,9 +16,19 @@ data class RelayConfig(
     override fun toString(): String = "RelayConfig(url=$url, accessKey=${if (accessKey == null) "none" else "***"})"
 }
 
-/** What a running local server was bound with; a change in any field requires a rebind. */
-data class LocalConfig(val port: Int, val bindAll: Boolean) {
-    val bindAddress: String get() = if (bindAll) ALL_INTERFACES else LOOPBACK
+/**
+ * What a running local server was bound with; a change in any field requires a rebind. With
+ * [LocalBind.TAILSCALE], [tailnet] is the phone's tailnet address right now (null: Tailscale is
+ * off, so the server waits instead of listening).
+ */
+data class LocalConfig(val port: Int, val bind: LocalBind, val tailnet: String? = null) {
+    /** The address to bind, or null while [LocalBind.TAILSCALE] has no tailnet address. */
+    val bindAddress: String?
+        get() = when (bind) {
+            LocalBind.LOOPBACK -> LOOPBACK
+            LocalBind.ALL_INTERFACES -> ALL_INTERFACES
+            LocalBind.TAILSCALE -> tailnet
+        }
 
     companion object {
         const val LOOPBACK = "127.0.0.1"
@@ -33,9 +44,15 @@ object TransportConfig {
         return RelayConfig(RelayUrls.normalize(settings.relayUrl), settings.relayAccessKey.trim().ifEmpty { null })
     }
 
-    /** The local server to run, or null when disabled. */
-    fun local(settings: BridgeSettings): LocalConfig? =
-        if (settings.localServerEnabled) LocalConfig(SettingsCodec.clampPort(settings.localServerPort), settings.localServerBindAll) else null
+    /**
+     * The local server to run, or null when disabled. [tailnet] (the phone's tailnet address, or
+     * null) only matters for [LocalBind.TAILSCALE].
+     */
+    fun local(settings: BridgeSettings, tailnet: String? = null): LocalConfig? {
+        if (!settings.localServerEnabled) return null
+        val bind = settings.localServerBind
+        return LocalConfig(SettingsCodec.clampPort(settings.localServerPort), bind, tailnet.takeIf { bind == LocalBind.TAILSCALE })
+    }
 
     /** True if at least one transport should run, i.e. BridgeService should be in the foreground. */
     fun shouldRun(settings: BridgeSettings): Boolean = relay(settings) != null || local(settings) != null
@@ -51,13 +68,15 @@ object TransportConfig {
     }
 
     /**
-     * MCP URLs at which the local server can be reached: always loopback (via `adb forward`), plus
-     * each address in [lanAddresses] (non-loopback IPv4) when bound to all interfaces.
+     * MCP URLs at which the local server can be reached: loopback (via `adb forward`) unless it
+     * listens on the tailnet only, each address in [lanAddresses] (non-loopback IPv4) when bound to
+     * all interfaces, and for [LocalBind.TAILSCALE] just [tailnetHost] (MagicDNS name or address).
      */
-    fun localUrls(port: Int, bindAll: Boolean, lanAddresses: List<String>): List<String> {
+    fun localUrls(port: Int, bind: LocalBind, lanAddresses: List<String>, tailnetHost: String? = null): List<String> {
+        if (bind == LocalBind.TAILSCALE) return listOfNotNull(tailnetHost).map { Tailnet.mcpUrl(it, port) }
         val hosts = buildList {
             add(LocalConfig.LOOPBACK)
-            if (bindAll) lanAddresses.filterNot { it.startsWith("127.") || it == LocalConfig.ALL_INTERFACES }.forEach(::add)
+            if (bind == LocalBind.ALL_INTERFACES) lanAddresses.filterNot { it.startsWith("127.") || it == LocalConfig.ALL_INTERFACES }.forEach(::add)
         }
         return hosts.distinct().map { "http://$it:$port/mcp" }
     }

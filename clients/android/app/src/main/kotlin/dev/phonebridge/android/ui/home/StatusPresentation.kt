@@ -2,6 +2,7 @@ package dev.phonebridge.android.ui.home
 
 import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.android.ui.settings.RelayUrls
 import dev.phonebridge.core.transport.RelayStatus
 
@@ -38,13 +39,26 @@ object StatusPresentation {
         }
     }
 
-    fun local(status: LocalServerStatus, enabled: Boolean): StatusLine = when (status) {
-        is LocalServerStatus.Running -> StatusLine(StatusLevel.OK, "Local server running", null, status.urls)
-        is LocalServerStatus.Error -> StatusLine(StatusLevel.ERROR, "Local server failed", status.message)
-        LocalServerStatus.Stopped -> if (enabled) {
-            StatusLine(StatusLevel.WARNING, "Local server not running", "The bridge service isn't running. Tap Restart.")
-        } else {
-            StatusLine(StatusLevel.OFF, "Local server off", "Optional: for USB (adb forward) or same-network use.")
+    /** The local server's line; listening on the tailnet only ([LocalBind.TAILSCALE]) it is the Tailscale route. */
+    fun local(status: LocalServerStatus, enabled: Boolean, bind: LocalBind = LocalBind.LOOPBACK): StatusLine {
+        val name = if (bind == LocalBind.TAILSCALE) "Tailscale" else "Local server"
+        return when (status) {
+            is LocalServerStatus.Running -> if (bind == LocalBind.TAILSCALE) {
+                StatusLine(StatusLevel.OK, "Tailscale ready", "Private to your tailnet, for agents on your own devices:", status.urls)
+            } else {
+                StatusLine(StatusLevel.OK, "Local server running", null, status.urls)
+            }
+            is LocalServerStatus.Error -> StatusLine(StatusLevel.ERROR, "$name failed", status.message)
+            LocalServerStatus.WaitingForTailscale -> StatusLine(
+                StatusLevel.WARNING,
+                "Waiting for Tailscale",
+                "Turn on Tailscale on this phone. Agents on your tailnet can connect as soon as it's on.",
+            )
+            LocalServerStatus.Stopped -> if (enabled) {
+                StatusLine(StatusLevel.WARNING, "$name not running", "The bridge service isn't running. Tap Restart.")
+            } else {
+                StatusLine(StatusLevel.OFF, "Local server off", "Optional: for Tailscale, USB (adb forward) or same-network use.")
+            }
         }
     }
 

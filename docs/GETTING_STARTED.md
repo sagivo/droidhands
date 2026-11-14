@@ -46,11 +46,13 @@ The wizard has four short steps. Every step can be skipped and reopened later fr
 3. **Connect**: nothing to do. The app has already connected to its **default relay** and shows
    **You're online**. The relay forwards your agents' requests to the phone over HTTPS. It can't do
    anything by itself: every agent needs a token you approve on the phone. Whoever runs the relay
-   could see the requests passing through, so for maximum privacy use **Use my own relay**
-   ([self-hosting](#self-hosting-the-relay-optional-most-private)).
+   could see the requests passing through, so for maximum privacy open **More ways to connect**:
+   **Tailscale** (agents on your own devices reach the phone directly, no relay) or **Your own
+   relay** ([self-hosting](#self-hosting-the-relay-optional-most-private)). The routes are compared
+   in [CONNECTING.md](CONNECTING.md).
 
    Builds without a default relay (for example ones you build from source) ask for your relay here
-   instead.
+   instead, or offer Tailscale.
 4. **Add an agent**: the same page as [step 3](#3-connect-your-ai-agent) below.
 
 ## 3. Connect your AI agent
@@ -117,18 +119,24 @@ On startup it prints a **setup link and a QR code**. Each release also publishes
 [Dockerfile](../relay/Dockerfile). For TLS, put it behind Caddy
 (`caddy reverse-proxy --from relay.example.com --to :8787`). See [relay/README.md](../relay/README.md).
 
+No server? `./scripts/relay-tailscale.sh` runs the relay on your computer and publishes it over
+Tailscale, for your tailnet only or, with `--public`, for cloud agents too
+([CONNECTING.md](CONNECTING.md#on-your-computer-with-scriptsrelay-tailscalesh)).
+
 Then point the app at it, either way:
 
 * Open the setup link on the phone (or scan the QR code) and tap **Open in PhoneBridge**. The app
   asks "Connect to relay …?" and connects.
-* Or in the app: the Connect step's **Use my own relay**, or *Settings › Connection*, and paste the
-  URL and access key.
+* Or in the app: the Connect step's **More ways to connect** › Your own relay, or *Settings › How
+  agents reach this phone* › Relay, and paste the URL and access key.
 
 Agents you connected through the previous relay need its URL, so connect them again with the new
 connection URL.
 
-> If your agent and phone are on the same Tailscale network, or you only use USB, you can skip
-> the relay and use the app's *local server* instead (Connect step › *Local only*).
+> If your agent and phone are on the same Tailscale network, you can skip the relay: turn on
+> **Tailscale** (Connect step › *More ways to connect*, or Settings) and the phone serves agents on
+> its tailnet address only ([CONNECTING.md](CONNECTING.md#tailscale-private-no-relay)). For USB,
+> use the *local server* (Connect step › *Local only*).
 
 ## Developer setup over USB (scripts/setup-phone.sh)
 
@@ -158,3 +166,5 @@ the other way round): uninstall one first. Building and publishing signed releas
 | Agent can't reach the phone after a while | Exempt PhoneBridge from battery optimization (Settings → Permissions & access). Check that the relay shows the phone as connected. |
 | "Device offline" | The app isn't connected to the relay. Open it and check the status card. |
 | "This relay is full right now" | The relay reached its limit of connected phones. PhoneBridge keeps retrying; to connect now, use your own relay. |
+| "Waiting for Tailscale" | The Tailscale route is on but the phone isn't on your tailnet. Open Tailscale and connect; if it's on, check that PhoneBridge isn't excluded in Tailscale's app settings. |
+| claude.ai or ChatGPT can't reach the Tailscale URL | Expected: cloud agents can't reach your tailnet. Use the relay for them (both routes can be on). |

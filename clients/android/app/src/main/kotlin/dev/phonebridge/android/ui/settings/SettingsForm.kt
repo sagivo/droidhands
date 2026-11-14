@@ -1,6 +1,7 @@
 package dev.phonebridge.android.ui.settings
 
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 
 /**
  * Editable copy of the connection settings shown on the Settings screen. Pure: validation and
@@ -13,9 +14,19 @@ data class SettingsForm(
     val localServerEnabled: Boolean,
     /** Raw text of the port field. */
     val localServerPort: String,
-    val localServerBindAll: Boolean,
+    val localServerBind: LocalBind,
     val startOnBoot: Boolean,
 ) {
+    /** The Tailscale route: the local server on, listening on the tailnet only. */
+    val tailscaleOn: Boolean get() = localServerEnabled && localServerBind == LocalBind.TAILSCALE
+
+    /** The Tailscale switch: on listens on the tailnet only; off stops the local server it ran on. */
+    fun withTailscale(on: Boolean): SettingsForm = when {
+        on -> copy(localServerEnabled = true, localServerBind = LocalBind.TAILSCALE)
+        tailscaleOn -> copy(localServerEnabled = false)
+        else -> this
+    }
+
     /** Field-level problems; the form can be saved only when [isValid]. */
     data class Validation(
         val relayUrl: RelayUrlCheck,
@@ -58,13 +69,14 @@ data class SettingsForm(
             relayAccessKey = relayAccessKey.trim(),
             localServerEnabled = localServerEnabled,
             localServerPort = localServerPort.trim().toIntOrNull() ?: current.localServerPort,
-            localServerBindAll = localServerBindAll,
+            localServerBind = localServerBind,
             startOnBoot = startOnBoot,
             relayFromDefault = current.relayFromDefault && url == RelayUrls.normalize(current.relayUrl),
         )
         // Choosing how to connect is the user's decision: the default relay must not switch itself on later.
         val connectionChanged = saved.relayEnabled != current.relayEnabled || saved.relayUrl != current.relayUrl ||
-            saved.relayAccessKey != current.relayAccessKey || saved.localServerEnabled != current.localServerEnabled
+            saved.relayAccessKey != current.relayAccessKey || saved.localServerEnabled != current.localServerEnabled ||
+            (saved.localServerEnabled && saved.localServerBind != current.localServerBind)
         return if (connectionChanged) saved.copy(defaultRelayDecided = true) else saved
     }
 
@@ -80,7 +92,7 @@ data class SettingsForm(
 
         const val BIND_ALL_WARNING =
             "Anyone on the same Wi-Fi, hotspot or VPN can reach the endpoint. A token is still required, but " +
-                "traffic is unencrypted http://. Prefer the relay, adb forward or Tailscale."
+                "traffic is unencrypted http://. Prefer the relay, Tailscale or adb forward."
 
         fun from(settings: BridgeSettings) = SettingsForm(
             relayEnabled = settings.relayEnabled,
@@ -88,7 +100,7 @@ data class SettingsForm(
             relayAccessKey = settings.relayAccessKey,
             localServerEnabled = settings.localServerEnabled,
             localServerPort = settings.localServerPort.toString(),
-            localServerBindAll = settings.localServerBindAll,
+            localServerBind = settings.localServerBind,
             startOnBoot = settings.startOnBoot,
         )
     }

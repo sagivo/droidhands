@@ -123,7 +123,7 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
                 AccessStatusCard(
                     accessEnabled = settings.accessEnabled,
                     relay = StatusPresentation.relay(relay, settings.relayEnabled),
-                    local = StatusPresentation.local(local, settings.localServerEnabled),
+                    local = StatusPresentation.local(local, settings.localServerEnabled, settings.localServerBind),
                     deviceIdShort = deviceIdShort,
                     showRestart = StatusPresentation.showRestart(relay, settings.relayEnabled, local, settings.localServerEnabled),
                     onAccessChange = vm::setAccessEnabled,

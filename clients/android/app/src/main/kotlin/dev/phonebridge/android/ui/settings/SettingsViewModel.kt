@@ -11,14 +11,18 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.phonebridge.android.graph.BridgeGraph
+import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.plugins.ImportResult
 import dev.phonebridge.android.plugins.LocalPluginEntry
 import dev.phonebridge.android.plugins.LocalPlugins
 import dev.phonebridge.android.plugins.PluginImports
+import dev.phonebridge.android.service.TailscaleState
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.android.ui.GraphAdapters
 import dev.phonebridge.android.ui.apps.AppInfo
 import dev.phonebridge.android.ui.apps.LaunchableApps
+import dev.phonebridge.core.transport.RelayStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -46,6 +50,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<BridgeSettings> = graph.settings.state
     val deviceId: String = graph.identity.deviceId
     val messages: Flow<String> = _messages.receiveAsFlow()
+
+    /** Live transport status, for the connection URLs of the routes that are on. */
+    val relayStatus: StateFlow<RelayStatus> = graph.relayStatus
+    val localServerStatus: StateFlow<LocalServerStatus> = graph.localServerStatus
+
+    /** Tailscale on this phone (Settings › How agents reach this phone › Tailscale). */
+    val tailscale: StateFlow<TailscaleState> = graph.tailscale.state
 
     /** True when this build can check GitHub for new releases (it names a repository). */
     val updatesSupported: Boolean = graph.updates.isSupported
@@ -139,6 +150,11 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 saving = false
             }
         }
+    }
+
+    /** Looks for Tailscale again (it changes outside the app). */
+    fun refreshTailscale() {
+        viewModelScope.launch(Dispatchers.IO) { runCatching { graph.tailscale.refresh() } }
     }
 
     fun setRedactOneTimeCodes(on: Boolean) = saveSecurity("Couldn't change the setting") {
@@ -265,11 +281,14 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun savedMessage(s: BridgeSettings): String = when {
-        s.relayEnabled && s.localServerEnabled -> "Saved. Connecting to the relay and starting the local server…"
-        s.relayEnabled -> "Saved. Connecting to the relay…"
-        s.localServerEnabled -> "Saved. Starting the local server…"
-        else -> "Saved. Relay and local server are off."
+    private fun savedMessage(s: BridgeSettings): String {
+        val local = if (s.localServerBind == LocalBind.TAILSCALE) "listening on your tailnet" else "starting the local server"
+        return when {
+            s.relayEnabled && s.localServerEnabled -> "Saved. Connecting to the relay and $local…"
+            s.relayEnabled -> "Saved. Connecting to the relay…"
+            s.localServerEnabled -> "Saved. ${local.replaceFirstChar { it.uppercase() }}…"
+            else -> "Saved. Relay and local server are off."
+        }
     }
 
     private companion object {

@@ -69,7 +69,8 @@ internal object CoreTransports {
         oauth: () -> LocalOAuth? = { null },
     ): LocalTransportFactory =
         LocalTransportFactory { config ->
-            val server = LocalHttpServer(port = config.port, bindAddress = config.bindAddress, handler = handler, oauth = oauth())
+            val bindAddress = requireNotNull(config.bindAddress) { "No address to listen on" }
+            val server = LocalHttpServer(port = config.port, bindAddress = bindAddress, handler = handler, oauth = oauth())
             object : LocalTransport {
                 override fun start() = server.start()
                 override fun stop() = server.stop()

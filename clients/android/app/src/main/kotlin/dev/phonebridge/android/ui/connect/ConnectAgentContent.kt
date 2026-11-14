@@ -123,13 +123,16 @@ internal fun ConnectAgentContent(
                 }
             }
             settings.localServerEnabled -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Notice(
-                    "You're using the local server only. One-tap connect needs a relay, so give the agent a token instead: " +
-                        "PhoneBridge shows ready-to-paste setup for Claude Code, Claude Desktop and other clients.",
-                )
-                Button(onClick = onUseToken) { Text("Create a token") }
+                ActiveRoutesCard(ConnectionRoutes.active(settings, relay, local))
                 Text(
-                    "Want one-tap connect? Turn on a relay below.",
+                    "Agents that can't sign in this way can use a token instead: PhoneBridge shows ready-to-paste setup " +
+                        "for Claude Code, Claude Desktop and other clients.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = onUseToken) { Text("Create a token") }
+                Text(
+                    "For claude.ai or ChatGPT, which run in the cloud, turn on a relay below.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

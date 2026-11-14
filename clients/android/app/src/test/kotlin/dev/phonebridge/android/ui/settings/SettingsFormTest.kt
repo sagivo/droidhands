@@ -1,6 +1,7 @@
 package dev.phonebridge.android.ui.settings
 
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -60,17 +61,44 @@ class SettingsFormTest {
             relayAccessKey = " key\n",
             localServerEnabled = true,
             localServerPort = "9000",
-            localServerBindAll = true,
+            localServerBind = LocalBind.ALL_INTERFACES,
             startOnBoot = false,
         )
         val applied = form.applyTo(current)
         assertEquals("https://relay.example.com", applied.relayUrl)
         assertEquals("key", applied.relayAccessKey)
         assertEquals(9000, applied.localServerPort)
-        assertTrue(applied.localServerBindAll)
+        assertEquals(LocalBind.ALL_INTERFACES, applied.localServerBind)
         assertFalse(applied.startOnBoot)
         assertFalse("access switch is not owned by the form", applied.accessEnabled)
         assertTrue(form.differsFrom(current))
+    }
+
+    @Test
+    fun tailscaleSwitchIsTheLocalServerOnTheTailnetOnly() {
+        val form = SettingsForm.from(base.copy(localServerBind = LocalBind.ALL_INTERFACES))
+        assertFalse(form.tailscaleOn)
+
+        val on = form.withTailscale(true)
+        assertTrue(on.tailscaleOn)
+        assertTrue(on.localServerEnabled)
+        assertEquals(LocalBind.TAILSCALE, on.localServerBind)
+
+        val off = on.withTailscale(false)
+        assertFalse(off.tailscaleOn)
+        assertFalse("the server ran only for Tailscale", off.localServerEnabled)
+
+        // Turning Tailscale "off" leaves a server listening elsewhere alone.
+        val usb = form.copy(localServerEnabled = true, localServerBind = LocalBind.LOOPBACK)
+        assertEquals(usb, usb.withTailscale(false))
+    }
+
+    @Test
+    fun choosingTailscaleIsAConnectionDecision() {
+        val current = base.copy(localServerEnabled = true)
+        val applied = SettingsForm.from(current).withTailscale(true).applyTo(current)
+        assertEquals(LocalBind.TAILSCALE, applied.localServerBind)
+        assertTrue("the default relay must not switch itself on later", applied.defaultRelayDecided)
     }
 
     @Test

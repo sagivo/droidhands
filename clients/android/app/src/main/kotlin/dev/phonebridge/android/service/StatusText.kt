@@ -36,6 +36,7 @@ object StatusText {
         is LocalServerStatus.Stopped -> if (enabled) "stopped" else "disabled"
         is LocalServerStatus.Running -> "running: " + status.urls.joinToString(", ")
         is LocalServerStatus.Error -> "error: ${status.message}"
+        is LocalServerStatus.WaitingForTailscale -> "waiting for Tailscale"
     }
 
     /** Human line for the notification, e.g. "Relay: connected to relay.example.com". */
@@ -52,6 +53,7 @@ object StatusText {
         is LocalServerStatus.Running ->
             "Local: " + status.urls.joinToString(", ") { it.removePrefix("http://").removeSuffix("/mcp") }
         is LocalServerStatus.Error -> "Local: ${status.message}"
+        is LocalServerStatus.WaitingForTailscale -> "Tailscale: waiting for Tailscale to connect"
     }
 
     /**

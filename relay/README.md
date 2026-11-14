@@ -182,14 +182,44 @@ npm start                       # listens on http://0.0.0.0:8787 and prints the 
 
 Without `PUBLIC_URL` the setup link uses your computer's LAN address, so a phone on the same Wi-Fi
 can open it. Plain HTTP and `ws://` are for local development only; AI apps such as claude.ai need
-an HTTPS URL they can reach (deploy the relay, or use a tunnel such as Tailscale Funnel or
-`cloudflared`).
+an HTTPS URL they can reach (deploy the relay, or use a tunnel such as Tailscale Funnel, see
+[Self-host with Tailscale](#self-host-with-tailscale), or `cloudflared`).
 
 ## Deploy
 
 The relay speaks plain HTTP; put it behind a TLS-terminating reverse proxy, or use a platform that
 provides TLS. In both cases set `TRUST_PROXY=true`, and `PUBLIC_URL` unless the platform is Render
 or Fly.io (detected automatically).
+
+### Self-host with Tailscale
+
+No server and no domain: run the relay on your own computer and publish it with Tailscale HTTPS.
+
+```sh
+./scripts/relay-tailscale.sh                    # tailnet only (tailscale serve)
+./scripts/relay-tailscale.sh --public --access-key "$(openssl rand -hex 16)"   # internet (tailscale funnel)
+./scripts/relay-tailscale.sh --stop
+```
+
+The script checks that the `tailscale` CLI is installed and logged in, builds and starts this relay
+(or its image with `--docker`) on `127.0.0.1:8787` (change it with `--port`) with `TRUST_PROXY=true`,
+`DATA_DIR=~/.phonebridge-relay` (with `--docker`, the `phonebridge-relay-data` volume) and `PUBLIC_URL=https://<MagicDNS name>`, then runs
+`tailscale serve --bg --https=443 http://127.0.0.1:8787` (or `tailscale funnel --bg …` with
+`--public`) and prints the setup link and QR code. `--https-port` picks another port (Funnel: 443,
+8443 or 10000). Running it again reuses or restarts what it started, and it refuses to touch a
+mapping on that port that points somewhere else. `--stop` runs `tailscale serve --https=443 off`
+(after `tailscale funnel --https=443 off` for a Funnel) and stops the relay; the log is
+`~/.phonebridge-relay/relay.log`.
+
+* **Tailnet only** (default): your phone (with the Tailscale app) and agents on your own devices
+  reach it, nobody else does. claude.ai and ChatGPT can't: they connect from the cloud.
+* **`--public`**: Tailscale Funnel exposes it to the internet, which cloud agents need. Set an
+  access key; it is in the setup link, so the phone picks it up.
+
+Needs MagicDNS and HTTPS certificates on in the tailnet (admin console › DNS) and, for `--public`,
+Funnel allowed for the computer. For agents on your own devices you can also skip the relay
+entirely: the app's Tailscale route serves MCP from the phone itself
+([docs/CONNECTING.md](../docs/CONNECTING.md)).
 
 ### Cloudflare Workers (no server, free plan)
 

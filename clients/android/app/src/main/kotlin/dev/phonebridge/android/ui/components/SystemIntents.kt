@@ -63,6 +63,19 @@ object SystemIntents {
     /** An https:// page in the user's browser (e.g. the latest release's APK download). */
     fun webPage(url: String) = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
 
+    /** [packageName]'s Play Store page: the store app, else the web page. Pass both to [launch]. */
+    fun playStore(packageName: String): Array<Intent> = arrayOf(
+        Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")),
+        webPage("https://play.google.com/store/apps/details?id=$packageName"),
+    )
+
+    /** Opens another installed app ([packageName]'s launcher activity), or null if it has none. */
+    fun openApp(context: Context, packageName: String): Intent? = try {
+        context.packageManager.getLaunchIntentForPackage(packageName)
+    } catch (_: RuntimeException) {
+        null
+    }
+
     /**
      * Starts the first of [intents] that resolves. Returns false if none could be started, so the
      * caller can tell the user where to go by hand.
