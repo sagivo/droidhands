@@ -63,10 +63,31 @@ are hidden), and `one_time_codes_hidden`. Also each visible tool with its availa
 
 | tool | risk | args |
 |---|---|---|
-| `apps_list` | READ | `query` (substring filter), `include_system` bool → `[{package,label,version}]` launchable apps |
+| `apps_list` | READ | `query` (substring filter), `include_system` bool → `[{package,label,version,system,integration,actions}]` launchable apps. `integration` is `plugin` (a reviewed plugin), `local` (a plugin imported on the phone, unreviewed) or `basic` (discovered actions only). `actions` lists the ids of the app actions this agent may run (see below). |
 | `app_open` | ACTION | `package` or `name` (fuzzy app-label match; ambiguous → error with candidates) |
 | `url_open` | ACTION | `url` (req; `http`, `https`, `geo`, `mailto`, `market`, `whatsapp`, `tg` and other app deep links. `intent:`, `file:`, `content:`, `javascript:` are rejected), `package` (opt) |
 | `whatsapp_open_chat` | ACTION | `to` (phone) or `contact` (name), `business` bool – opens the chat without sending anything |
+| `app_actions_list` | READ | `app` (name or package) and/or `query` (what to do, e.g. "play music"), `limit` (default 10 for a query, max 50). With `app` → `{app, package, integration, status?, note?, actions:[{action, title, description, risk, completes, params, available?, unavailable_reason?}], how_to_run}`; with only `query` → `{query, matches:[{app, package, integration, action, title, description, risk, completes, params}], how_to_run}`, ranked by keyword overlap. Neither → error. Lists only actions this agent may run; a footer gives the number hidden, never which apps. |
+| `app_action_run` | ACTION | `app` (req; name or package), `action` (req; id), `params` (object). Runs one app action. The server checks and approves it as a tool of its own (see "App actions" below). |
+
+### App actions
+
+Every installed app has a menu of actions, from plugins and from what the app declares
+([PLUGINS.md](PLUGINS.md)). `app_action_run` doesn't act by itself: the server resolves the app (app
+access applies: a blocked app is refused and audited `DENIED_APP`) and the action, checks `params`
+against the action's JSON Schema (unknown parameters are refused), then runs the action **as a tool
+named `<package>/<action id>`** (e.g. `com.spotify.music/play`) through the normal pipeline: that
+name's scope (usually `apps`), risk, per-tool rules, risk cap, active hours, rate limits, approval and
+audit entry (noting "via app_action_run"). `app_action_run`'s own scope, rule and risk cap must allow
+the call too. Actions whose recipe is a built-in tool (`tool` recipes) run exactly as that tool, e.g.
+`whatsapp_send`, with its rules and audit entry. Actions of unreviewed local plugins always need
+approval on the phone.
+
+Results of intent, link and screen-recipe actions:
+`{app, package, action, done, opened?, note?, next?, integration_note?, …}`. `done: false` (actions
+with `completes: false`) means the app is open at the right place but someone still has to finish
+there: `next` says to use `screen_read` and `ui_tap` or ask the user. `integration_note` appears for
+experimental community plugins: if the action fails, fall back to the screen tools.
 
 ## Intents — scope `intents` (advanced)
 
