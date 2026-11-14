@@ -23,6 +23,7 @@ import dev.phonebridge.android.settings.SecurityDefaults
 import dev.phonebridge.android.settings.SensitiveApps
 import dev.phonebridge.android.settings.SettingsRepository
 import dev.phonebridge.android.tools.AndroidToolCatalog
+import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.audit.AuditLog
 import dev.phonebridge.core.audit.FileAuditLog
@@ -105,10 +106,12 @@ class BridgeGraph private constructor(val app: Application) {
             isLocked = { DeviceState.isLocked(app) },
             scope = appScope,
             log = { message, error -> Log.w(TAG, message, error) },
+            // Screen control stays off while a pairing could be approved (its screen may be showing).
+            onPendingChanged = { ApprovalGuard.set(PairingCoordinator.GUARD_SOURCE, it) },
         )
     }
 
-    val mcpServer: McpServer by lazy {
+    private val mcpServerLazy = lazy {
         McpServer(
             registry = registry,
             tokens = tokenManager,
@@ -122,6 +125,8 @@ class BridgeGraph private constructor(val app: Application) {
             globalSecurity = ::globalSecurity,
         )
     }
+
+    val mcpServer: McpServer by mcpServerLazy
 
     /**
      * Device-wide security settings for the current call: the user's never-allow list plus
@@ -230,14 +235,61 @@ class BridgeGraph private constructor(val app: Application) {
 
     /**
      * Global kill switch (persisted in settings, reflected in the service notification). Pausing
-     * also denies every confirmation prompt that is still open. Transports keep running so agents
-     * get a clear "paused" error instead of a connection failure.
+     * also stops every tool call still running (including ones waiting for an approval, an unlock or
+     * the screen) and denies every confirmation prompt that is still open. Transports keep running
+     * so agents get a clear "paused" error instead of a connection failure.
      */
     fun setAccessEnabled(enabled: Boolean) {
         settings.update { it.copy(accessEnabled = enabled) }
-        // Pausing also answers every open prompt with "deny": nothing runs while paused.
-        if (!enabled) confirmations.denyAll()
+        // Nothing runs while paused: new calls see the setting, calls already running are stopped.
+        if (!enabled) {
+            cancelCalls(tokenId = null)
+            confirmations.denyAll()
+        }
         if (_serviceRunning.value) sendToRunningService(BridgeService.ACTION_REFRESH, stopIfUndeliverable = false)
+    }
+
+    /**
+     * Revokes agent [id] and stops its tool calls still running; their approval prompts are denied.
+     * Blocking (token store I/O): call from a background dispatcher. Throws if the store can't be
+     * saved (the agent's running calls are stopped anyway).
+     */
+    fun revokeAgent(id: String) {
+        try {
+            tokenManager.revoke(id)
+        } finally {
+            cancelCalls(id)
+        }
+    }
+
+    /** Deletes agent [id] (and its usage counters) and stops its tool calls still running. Blocking, like [revokeAgent]. */
+    fun deleteAgent(id: String) {
+        try {
+            tokenManager.delete(id)
+        } finally {
+            cancelCalls(id)
+        }
+        usage.forget(id)
+    }
+
+    /**
+     * Revokes every agent and stops every tool call still running; open approval prompts are denied.
+     * Returns how many agents were newly revoked. Blocking, like [revokeAgent].
+     */
+    fun revokeAllAgents(): Int {
+        try {
+            return tokenManager.revokeAll()
+        } finally {
+            cancelCalls(tokenId = null)
+            confirmations.denyAll()
+        }
+    }
+
+    /** Stops [tokenId]'s running tool calls (all calls when null). No server yet means no calls to stop. */
+    private fun cancelCalls(tokenId: String?) {
+        if (!mcpServerLazy.isInitialized()) return
+        val cancelled = mcpServer.cancelCalls(tokenId)
+        if (cancelled > 0) Log.i(TAG, "Stopped $cancelled running tool call(s)")
     }
 
     internal fun updateRelayStatus(status: RelayStatus) {

@@ -47,9 +47,20 @@ internal object UnlockPrompts {
         return UnlockWait.isUsable(screenOn, locked)
     }
 
-    /** See [dev.phonebridge.android.tools.support.UnlockPrompt.await]. */
-    suspend fun await(context: Context, agentName: String, action: String, timeoutMs: Long): UnlockOutcome {
+    /**
+     * See [dev.phonebridge.android.tools.support.UnlockPrompt.await]. [isPaused] (agent access paused) is
+     * checked first, before every other check: then nothing may run, so the wait ends with
+     * [UnlockOutcome.PAUSED] even if the phone is unlocked.
+     */
+    suspend fun await(
+        context: Context,
+        agentName: String,
+        action: String,
+        timeoutMs: Long,
+        isPaused: () -> Boolean = { false },
+    ): UnlockOutcome {
         val app = context.applicationContext
+        if (isPaused()) return UnlockOutcome.PAUSED
         if (isUsable(app)) return UnlockOutcome.USABLE
         if (timeoutMs <= 0) return UnlockOutcome.TIMED_OUT
 
@@ -75,7 +86,13 @@ internal object UnlockPrompts {
         val registered = register(app, systemReceiver, declineReceiver)
         try {
             post(app, notificationId, nonce, agentName, action, timeoutMs)
-            return UnlockWait.await(isUsable = { isUsable(app) }, isDeclined = declined::get, wakeups = wakeups, timeoutMs = timeoutMs)
+            return UnlockWait.await(
+                isUsable = { isUsable(app) },
+                isDeclined = declined::get,
+                wakeups = wakeups,
+                timeoutMs = timeoutMs,
+                isPaused = isPaused,
+            )
         } finally {
             wakeups.close()
             cancel(app, notificationId)

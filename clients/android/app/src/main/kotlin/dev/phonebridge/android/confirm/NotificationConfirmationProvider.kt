@@ -3,6 +3,7 @@ package dev.phonebridge.android.confirm
 import android.content.Context
 import android.util.Log
 import dev.phonebridge.android.access.BridgeAccessibilityService
+import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.core.confirm.ConfirmationProvider
 import dev.phonebridge.core.confirm.ConfirmationRequest
 import dev.phonebridge.core.confirm.ConfirmationResult
@@ -29,7 +30,10 @@ class NotificationConfirmationProvider(
     private val timeoutMs: Long = DEFAULT_TIMEOUT_MS,
 ) : ConfirmationProvider {
     private val appContext: Context = context.applicationContext
-    private val registry = PendingConfirmations()
+
+    // Screen control stays off while any prompt is pending: the prompt may be showing, and agents must
+    // never operate it (ApprovalGuard, checked before every gesture).
+    private val registry = PendingConfirmations(onPendingChanged = { ApprovalGuard.set(GUARD_SOURCE, it) })
 
     override suspend fun requestConfirmation(request: ConfirmationRequest): ConfirmationResult {
         val entry = registry.register(request, timeoutMs) ?: run {
@@ -49,8 +53,8 @@ class NotificationConfirmationProvider(
     val pendingRequests: StateFlow<List<ConfirmationRequest>> get() = registry.requests
 
     /**
-     * True while an approval prompt is waiting for the user. UI-automation tools use it to stay off
-     * the screen meanwhile (the prompt may be showing, and agents must never operate it).
+     * True while an approval prompt is waiting for the user. Also fed to [ApprovalGuard], which keeps
+     * UI-automation tools off the screen meanwhile (the prompt may be showing, and agents must never operate it).
      */
     val hasPendingConfirmation: StateFlow<Boolean> get() = registry.hasPending
 
@@ -118,6 +122,9 @@ class NotificationConfirmationProvider(
 
     companion object {
         private const val TAG = "PhoneBridge/Confirm"
+
+        /** [ApprovalGuard] source: a confirmation prompt is pending. */
+        const val GUARD_SOURCE = "confirmations"
 
         /** McpServer's default confirmation timeout. */
         const val DEFAULT_TIMEOUT_MS = 60_000L

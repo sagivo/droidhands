@@ -1,9 +1,11 @@
 package dev.phonebridge.android.pairing
 
 import dev.phonebridge.core.auth.ConfirmPolicy
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,6 +18,17 @@ class PairingPresentationTest {
         assertEquals(Scopes.PRESETS.values.toList(), PairingPresentation.ACCESS_LEVELS.map { it.scopes })
         assertEquals(listOf("Assistant"), PairingPresentation.ACCESS_LEVELS.filter { it.recommended }.map { it.name })
         PairingPresentation.ACCESS_LEVELS.forEach { assertTrue(it.name, it.description.isNotBlank() && it.description.length < 120) }
+    }
+
+    @Test
+    fun readOnlyIsCappedAtReadAndTheChoiceCarriesTheCap() {
+        assertEquals(Scopes.PRESETS.keys.map { Scopes.PRESET_MAX_RISK[it] }, PairingPresentation.ACCESS_LEVELS.map { it.maxRisk })
+        assertEquals(Risk.READ, PairingPresentation.level("Read-only").maxRisk)
+        PairingPresentation.ACCESS_LEVELS.forEach { level ->
+            val choice = PairingChoice.of("Claude", level, ConfirmPolicy.ALL_ACTIONS)
+            assertEquals(PairingChoice("Claude", level.scopes, ConfirmPolicy.ALL_ACTIONS, level.maxRisk), choice)
+        }
+        assertNull(PairingChoice.defaults(request).maxRisk)
     }
 
     @Test

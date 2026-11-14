@@ -47,13 +47,18 @@ sealed interface PairingApproval {
  *   it (coroutine cancellation); the prompt is removed in every case. Malformed or already expired
  *   requests are refused without a prompt, and beyond [PairingRules.MAX_PENDING] open prompts the
  *   answer is "busy".
- * * [approve] issues the token (name, scopes and confirmation policy chosen by the user,
+ * * [approve] issues the token (name, scopes, risk cap and confirmation policy chosen by the user,
  *   `origin = "pairing"`, `clientHost` = the redirect host) only while the request is open and the
  *   phone is unlocked. If the request ends while the token is being saved, the token is deleted
  *   again, so no token exists that the relay never received.
- * * `pair_abandoned` ([onPairFinished] with completed = false) deletes the issued token. As a
- *   safety net for a lost `pair_complete`/`pair_abandoned` (e.g. the relay connection dropped), a
- *   paired token that is still unused [exchangeGraceMs] after approval is deleted too.
+ * * `pair_abandoned` ([onPairFinished] with completed = false) deletes the issued token if it is
+ *   still unused. As a safety net for a lost `pair_complete`/`pair_abandoned` (e.g. the relay
+ *   connection dropped), a paired token that is still unused [exchangeGraceMs] after approval is
+ *   deleted too. Both notices are honoured only for the token issued for that pairing id, and only
+ *   until it was picked up or cleaned up: the relay sees every token id it routes and must not be
+ *   able to delete other agents' tokens.
+ * * [onPendingChanged] hears whether any request is pending, before its prompt is shown (it feeds
+ *   the guard that keeps screen control off the screen while an approval is possible).
  *
  * Thread-safe. Token store I/O runs on [io], inside [scope], so a cancelled caller (an activity
  * being destroyed) can never interrupt an approval half-way.
@@ -68,11 +73,15 @@ class PairingCoordinator(
     private val clock: () -> Long = System::currentTimeMillis,
     private val exchangeGraceMs: Long = EXCHANGE_GRACE_MS,
     private val log: (message: String, error: Throwable?) -> Unit = { _, _ -> },
+    onPendingChanged: (Boolean) -> Unit = {},
 ) : PairingHandler {
-    private val registry = PendingPairings()
+    private val registry = PendingPairings(onPendingChanged = onPendingChanged)
 
-    /** tokenId → job deleting the token if the agent never picks it up. */
-    private val awaitingExchange = ConcurrentHashMap<String, Job>()
+    /** A delivered token waiting for `pair_complete`/`pair_abandoned`, and the job deleting it if unused. */
+    private class Exchange(val pairingId: String, val job: Job)
+
+    /** tokenId → the pairing it was issued for. */
+    private val awaitingExchange = ConcurrentHashMap<String, Exchange>()
 
     /** Open pairing requests, oldest first, already sanitized (for the Home card and [PairingActivity]). */
     val pendingPairings: StateFlow<List<PairingRequest>> get() = registry.requests
@@ -103,7 +112,7 @@ class PairingCoordinator(
             entry.decide(PairingDecision.Denied(PairingRules.TIMEOUT))
             val final = entry.outcome
             if (final is PairingDecision.Approved) {
-                if (final == answer) watchExchange(final.tokenId) else discardToken(final.tokenId)
+                if (final == answer) watchExchange(clean.id, final.tokenId) else discardToken(final.tokenId)
             }
             registry.remove(entry)
             try {
@@ -118,8 +127,14 @@ class PairingCoordinator(
         // A finished flow has nothing left to decide; closes a prompt the relay forgot to cancel.
         registry[id]?.decide(PairingDecision.Denied(PairingRules.TIMEOUT))
         if (tokenId == null) return
-        awaitingExchange.remove(tokenId)?.cancel()
-        if (!completed) discardToken(tokenId)
+        // Only the token issued for this pairing, and only once.
+        val exchange = awaitingExchange[tokenId]
+        if (exchange == null || exchange.pairingId != id || !awaitingExchange.remove(tokenId, exchange)) {
+            log("Ignored a pairing notice for a token that was not issued for that pairing", null)
+            return
+        }
+        exchange.job.cancel()
+        if (!completed) scope.launch(io) { deleteIfUnused(tokenId) }
     }
 
     /**
@@ -164,34 +179,50 @@ class PairingCoordinator(
             throw e
         } catch (e: Exception) {
             log("Issuing the paired agent's token failed", e)
-            return PairingApproval.Failed("Couldn't save the new agent (${e.message ?: e.javaClass.simpleName}). Try again.")
+            return saveFailed(e)
         }
-        if (entry.decide(PairingDecision.Approved(issued.plaintext, issued.record.id))) {
-            return PairingApproval.Connected(issued.record)
+        // Capped before the token is handed out, so nobody ever holds it without the cap.
+        val record = try {
+            choice.maxRisk?.let { cap -> tokens().update(issued.record.id) { it.copy(maxRisk = cap) } } ?: issued.record
+        } catch (e: Exception) {
+            log("Limiting the paired agent's token failed", e)
+            deleteNow(issued.record.id)
+            return saveFailed(e)
+        }
+        if (entry.decide(PairingDecision.Approved(issued.plaintext, record.id))) {
+            return PairingApproval.Connected(record)
         }
         // The request ended while the token was being saved: nobody will ever receive it.
-        deleteNow(issued.record.id)
+        deleteNow(record.id)
         return PairingApproval.NoLongerPending
     }
 
-    private fun watchExchange(tokenId: String) {
+    private fun saveFailed(e: Exception) =
+        PairingApproval.Failed("Couldn't save the new agent (${e.message ?: e.javaClass.simpleName}). Try again.")
+
+    private fun watchExchange(pairingId: String, tokenId: String) {
+        lateinit var exchange: Exchange
         // Lazy: in the map before it can run (and remove itself).
         val job = scope.launch(io, start = CoroutineStart.LAZY) {
             delay(exchangeGraceMs)
-            awaitingExchange.remove(tokenId)
-            val record = tokens().tokens.value.firstOrNull { it.id == tokenId }
-            if (record != null && record.lastUsedAt == null) {
-                log("Deleting a paired token the agent never picked up", null)
-                deleteNow(tokenId)
-            }
+            if (awaitingExchange.remove(tokenId, exchange)) deleteIfUnused(tokenId)
         }
-        awaitingExchange.put(tokenId, job)?.cancel()
+        exchange = Exchange(pairingId, job)
+        awaitingExchange.put(tokenId, exchange)?.job?.cancel()
         job.start()
     }
 
     private fun discardToken(tokenId: String) {
-        awaitingExchange.remove(tokenId)?.cancel()
+        awaitingExchange.remove(tokenId)?.job?.cancel()
         scope.launch(io) { deleteNow(tokenId) }
+    }
+
+    /** Deletes a paired token nobody has used yet; one an agent already uses stays. */
+    private fun deleteIfUnused(tokenId: String) {
+        val record = tokens().tokens.value.firstOrNull { it.id == tokenId } ?: return
+        if (record.origin != ORIGIN_PAIRING || record.lastUsedAt != null) return
+        log("Deleting a paired token the agent never picked up", null)
+        deleteNow(tokenId)
     }
 
     private fun deleteNow(tokenId: String) {
@@ -204,6 +235,9 @@ class PairingCoordinator(
 
     companion object {
         const val ORIGIN_PAIRING = "pairing"
+
+        /** [dev.phonebridge.android.tools.support.ApprovalGuard] source: a pairing request is pending. */
+        const val GUARD_SOURCE = "pairing"
 
         /**
          * How long a paired token may stay unused without `pair_complete` before it is deleted:

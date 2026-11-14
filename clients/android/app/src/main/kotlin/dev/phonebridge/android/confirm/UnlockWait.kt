@@ -15,6 +15,9 @@ enum class UnlockOutcome {
 
     /** Still locked (or the screen is off) when the time ran out. */
     TIMED_OUT,
+
+    /** Agent access was paused meanwhile: nothing may run, even once the phone is unlocked. */
+    PAUSED,
 }
 
 /** Pure waiting logic behind [dev.phonebridge.android.tools.support.UnlockPrompt] (unit-tested with virtual time). */
@@ -26,12 +29,14 @@ internal object UnlockWait {
     fun isUsable(screenOn: Boolean, keyguardLocked: Boolean): Boolean = screenOn && !keyguardLocked
 
     /**
-     * Re-checks [isDeclined] and [isUsable] now, after every [wakeups] item and at least every
-     * [pollMs], until the user declined ([UnlockOutcome.DECLINED]), the phone is usable
-     * ([UnlockOutcome.USABLE]) or [timeoutMs] passed (one last check, then [UnlockOutcome.TIMED_OUT]).
+     * Re-checks [isPaused], [isDeclined] and [isUsable] (in that order) now, after every [wakeups] item
+     * and at least every [pollMs], until access was paused ([UnlockOutcome.PAUSED]), the user declined
+     * ([UnlockOutcome.DECLINED]), the phone is usable ([UnlockOutcome.USABLE]) or [timeoutMs] passed
+     * (one last check, then [UnlockOutcome.TIMED_OUT]). Pausing wins over an unlock seen at the same
+     * check, so once paused the wait can never report USABLE.
      *
      * [wakeups] are only hints to re-check early (a broadcast arrived); the outcome always comes from
-     * the two state functions, so a wake-up lost to a poll timeout racing with it changes nothing.
+     * the state functions, so a wake-up lost to a poll timeout racing with it changes nothing.
      * A closed [wakeups] channel just leaves polling. Cancellation propagates to the caller.
      */
     suspend fun await(
@@ -40,26 +45,24 @@ internal object UnlockWait {
         wakeups: ReceiveChannel<Unit>,
         timeoutMs: Long,
         pollMs: Long = POLL_INTERVAL_MS,
+        isPaused: () -> Boolean = { false },
     ): UnlockOutcome {
         require(pollMs > 0) { "pollMs must be positive" }
-        current(isUsable, isDeclined)?.let { return it }
-        return withTimeoutOrNull(timeoutMs.coerceAtLeast(0)) { loop(isUsable, isDeclined, wakeups, pollMs) }
-            ?: current(isUsable, isDeclined)
+        val check = { current(isUsable, isDeclined, isPaused) }
+        check()?.let { return it }
+        return withTimeoutOrNull(timeoutMs.coerceAtLeast(0)) { loop(check, wakeups, pollMs) }
+            ?: check()
             ?: UnlockOutcome.TIMED_OUT
     }
 
-    private fun current(isUsable: () -> Boolean, isDeclined: () -> Boolean): UnlockOutcome? = when {
+    private fun current(isUsable: () -> Boolean, isDeclined: () -> Boolean, isPaused: () -> Boolean): UnlockOutcome? = when {
+        isPaused() -> UnlockOutcome.PAUSED
         isDeclined() -> UnlockOutcome.DECLINED
         isUsable() -> UnlockOutcome.USABLE
         else -> null
     }
 
-    private suspend fun loop(
-        isUsable: () -> Boolean,
-        isDeclined: () -> Boolean,
-        wakeups: ReceiveChannel<Unit>,
-        pollMs: Long,
-    ): UnlockOutcome {
+    private suspend fun loop(check: () -> UnlockOutcome?, wakeups: ReceiveChannel<Unit>, pollMs: Long): UnlockOutcome {
         var open = true
         while (true) {
             if (open) {
@@ -68,7 +71,7 @@ internal object UnlockWait {
             } else {
                 delay(pollMs)
             }
-            current(isUsable, isDeclined)?.let { return it }
+            check()?.let { return it }
         }
     }
 }

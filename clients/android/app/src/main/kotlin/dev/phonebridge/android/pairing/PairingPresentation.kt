@@ -2,6 +2,7 @@ package dev.phonebridge.android.pairing
 
 import dev.phonebridge.android.confirm.DisplayText
 import dev.phonebridge.core.auth.ConfirmPolicy
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.transport.PairingRequest
 import java.util.Locale
@@ -14,6 +15,8 @@ data class AccessLevel(
     /** One short plain-language sentence. */
     val description: String,
     val recommended: Boolean,
+    /** Highest tool risk the level allows ([Scopes.PRESET_MAX_RISK]); null = no cap. */
+    val maxRisk: Risk? = null,
 )
 
 /** What the user chose for a new agent. */
@@ -22,14 +25,16 @@ data class PairingChoice(
     val name: String,
     val scopes: Set<String>,
     val policy: ConfirmPolicy = ConfirmPolicy.SENSITIVE,
+    /** Highest tool risk the agent may use (the chosen level's [AccessLevel.maxRisk]); null = no cap. */
+    val maxRisk: Risk? = null,
 ) {
     companion object {
         /** The recommended choice: the client's name, Assistant, ask before sensitive actions. */
-        fun defaults(request: PairingRequest) = PairingChoice(
-            name = request.clientName,
-            scopes = PairingPresentation.level(PairingPresentation.DEFAULT_LEVEL).scopes,
-            policy = ConfirmPolicy.SENSITIVE,
-        )
+        fun defaults(request: PairingRequest) = of(request.clientName, PairingPresentation.level(PairingPresentation.DEFAULT_LEVEL))
+
+        /** [level]'s scopes and risk cap, named [name]. */
+        fun of(name: String, level: AccessLevel, policy: ConfirmPolicy = ConfirmPolicy.SENSITIVE) =
+            PairingChoice(name = name, scopes = level.scopes, policy = policy, maxRisk = level.maxRisk)
     }
 }
 
@@ -39,7 +44,7 @@ object PairingPresentation {
 
     /** The [Scopes.PRESETS], in order, with descriptions. */
     val ACCESS_LEVELS: List<AccessLevel> = Scopes.PRESETS.map { (name, scopes) ->
-        AccessLevel(name, scopes, levelDescription(name), recommended = name == DEFAULT_LEVEL)
+        AccessLevel(name, scopes, levelDescription(name), recommended = name == DEFAULT_LEVEL, maxRisk = Scopes.PRESET_MAX_RISK[name])
     }
 
     /** Confirmation policies in the order offered (recommended first). */

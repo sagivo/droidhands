@@ -6,6 +6,7 @@ import dev.phonebridge.core.auth.InMemoryTokenStore
 import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.TokenStore
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.transport.PairingDecision
 import dev.phonebridge.core.transport.PairingRequest
@@ -60,6 +61,7 @@ class PairingCoordinatorTest {
         val store = HookedStore()
         val identity = DeviceIdentity.generate()
         val tokens = TokenManager(store, identity.deviceId, clock = { scope.currentTime })
+        val pendingReports = mutableListOf<Boolean>()
         val coordinator = PairingCoordinator(
             tokens = { tokens },
             prompts = prompts,
@@ -67,6 +69,7 @@ class PairingCoordinatorTest {
             scope = scope.backgroundScope,
             io = StandardTestDispatcher(scope.testScheduler),
             clock = { scope.currentTime },
+            onPendingChanged = { pendingReports += it },
         )
 
         fun request(scope: CoroutineScope, request: PairingRequest = pairingRequest()): Deferred<PairingDecision> =
@@ -74,6 +77,14 @@ class PairingCoordinatorTest {
     }
 
     private val assistant = PairingChoice(name = "Claude", scopes = Scopes.PRESET_ASSISTANT)
+
+    /** Approves a fresh request with [choice]; returns the token the relay received. */
+    private suspend fun TestScope.paired(f: Fixture, id: String = "p_abc123", choice: PairingChoice = assistant): PairingDecision.Approved {
+        val decision = f.request(this, pairingRequest(id = id))
+        runCurrent()
+        f.coordinator.approve(id, choice)
+        return decision.await() as PairingDecision.Approved
+    }
 
     @Test
     fun allowIssuesTheChosenTokenAndAnswersTheRelay() = runTest {
@@ -238,6 +249,102 @@ class PairingCoordinatorTest {
         advanceTimeBy(2)
         runCurrent()
         assertTrue(f.tokens.tokens.value.isEmpty())
+    }
+
+    @Test
+    fun pendingRequestsAreReportedBeforeThePromptAndClearedAfter() = runTest {
+        val f = Fixture(this)
+        val decision = f.request(this)
+        runCurrent()
+        assertEquals("guard up while the prompt is open", listOf(true), f.pendingReports)
+        f.coordinator.deny("p_abc123")
+        decision.await()
+        assertEquals(false, f.pendingReports.last())
+    }
+
+    @Test
+    fun readOnlyLevelIssuesATokenCappedAtRead() = runTest {
+        val f = Fixture(this)
+        val decision = f.request(this)
+        runCurrent()
+        val readOnly = PairingChoice.of("Claude", PairingPresentation.level("Read-only"))
+        assertEquals(Risk.READ, readOnly.maxRisk)
+        val connected = f.coordinator.approve("p_abc123", readOnly) as PairingApproval.Connected
+        assertEquals(Risk.READ, connected.token.maxRisk)
+        assertEquals(Scopes.PRESET_READ_ONLY, connected.token.scopes)
+        val answer = decision.await() as PairingDecision.Approved
+        assertEquals(connected.token.id, answer.tokenId)
+        assertEquals("the stored token is capped too", Risk.READ, f.tokens.tokens.value.single().maxRisk)
+    }
+
+    @Test
+    fun uncappedLevelsIssueUncappedTokens() = runTest {
+        val f = Fixture(this)
+        val answer = paired(f, choice = PairingChoice.defaults(pairingRequest()))
+        assertNull(f.tokens.tokens.value.single { it.id == answer.tokenId }.maxRisk)
+        assertNull(PairingChoice.of("Claude", PairingPresentation.level("Full control")).maxRisk)
+    }
+
+    @Test
+    fun failingToCapTheTokenDeletesItAndHandsNothingOut() = runTest {
+        val f = Fixture(this)
+        val decision = f.request(this)
+        runCurrent()
+        var saves = 0
+        f.store.onSave = { if (++saves == 2) throw java.io.IOException("disk full") }
+        val readOnly = PairingChoice.of("Claude", PairingPresentation.level("Read-only"))
+        assertTrue(f.coordinator.approve("p_abc123", readOnly) is PairingApproval.Failed)
+        f.store.onSave = null
+        assertTrue("an uncapped token must not survive", f.tokens.tokens.value.isEmpty())
+        assertNotNull("still pending: the user can try again", f.coordinator.pending("p_abc123"))
+        decision.cancel()
+    }
+
+    @Test
+    fun abandonedNoticeForAnotherTokenIsIgnored() = runTest {
+        val f = Fixture(this)
+        val manual = f.tokens.issue("Laptop", Scopes.PRESET_ASSISTANT, ConfirmPolicy.SENSITIVE, ttlMillis = null)
+        val answer = paired(f)
+        // A relay naming tokens it has seen (but were not issued for this pairing) deletes nothing.
+        f.coordinator.onPairFinished("p_abc123", manual.record.id, completed = false)
+        f.coordinator.onPairFinished("p_other", answer.tokenId, completed = false)
+        f.coordinator.onPairFinished("p_other", manual.record.id, completed = false)
+        runCurrent()
+        assertEquals(setOf(manual.record.id, answer.tokenId), f.tokens.tokens.value.map { it.id }.toSet())
+        // The real notice still works.
+        f.coordinator.onPairFinished("p_abc123", answer.tokenId, completed = false)
+        runCurrent()
+        assertEquals(listOf(manual.record.id), f.tokens.tokens.value.map { it.id })
+    }
+
+    @Test
+    fun abandonedAfterCompletionIsIgnored() = runTest {
+        val f = Fixture(this)
+        val answer = paired(f)
+        f.coordinator.onPairFinished("p_abc123", answer.tokenId, completed = true)
+        f.coordinator.onPairFinished("p_abc123", answer.tokenId, completed = false)
+        runCurrent()
+        assertEquals(listOf(answer.tokenId), f.tokens.tokens.value.map { it.id })
+    }
+
+    @Test
+    fun completionForAnotherPairingDoesNotStopTheCleanup() = runTest {
+        val f = Fixture(this)
+        val answer = paired(f)
+        f.coordinator.onPairFinished("p_other", answer.tokenId, completed = true)
+        advanceTimeBy(PairingCoordinator.EXCHANGE_GRACE_MS + 1)
+        runCurrent()
+        assertTrue("the unused token is still cleaned up", f.tokens.tokens.value.isEmpty())
+    }
+
+    @Test
+    fun abandonedNoticeKeepsATokenAlreadyInUse() = runTest {
+        val f = Fixture(this)
+        val answer = paired(f)
+        f.tokens.authenticate("Bearer ${answer.accessToken}")
+        f.coordinator.onPairFinished("p_abc123", answer.tokenId, completed = false)
+        runCurrent()
+        assertEquals(listOf(answer.tokenId), f.tokens.tokens.value.map { it.id })
     }
 
     @Test

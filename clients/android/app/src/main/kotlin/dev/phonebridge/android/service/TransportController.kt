@@ -47,7 +47,7 @@ fun interface LocalTransportFactory {
  * The public methods never block and are safe to call from any thread.
  *
  * Transports only run while the controller is *active*: [apply] activates it, [stopAll]
- * deactivates it, and [restartRelay]/[refreshLocalUrls] are ignored while inactive.
+ * deactivates it, and [restartRelay]/[retryRelay]/[refreshLocalUrls] are ignored while inactive.
  */
 class TransportController(
     private val scope: CoroutineScope,
@@ -60,7 +60,7 @@ class TransportController(
     private val onLocalStatus: (LocalServerStatus) -> Unit,
     private val log: (message: String, error: Throwable?) -> Unit = { _, _ -> },
 ) {
-    private enum class Command { APPLY, RESTART_RELAY, REFRESH_LOCAL_URLS, STOP_ALL }
+    private enum class Command { APPLY, RESTART_RELAY, RETRY_RELAY, RETRY_STALLED_RELAY, REFRESH_LOCAL_URLS, STOP_ALL }
 
     private class RunningRelay(
         val config: RelayConfig,
@@ -104,6 +104,15 @@ class TransportController(
     /** Reconnects the relay now (e.g. the default network came back), unless it stopped for a fatal reason. */
     fun restartRelay() = submit(Command.RESTART_RELAY)
 
+    /**
+     * Reconnects the relay now if it is waiting to retry after a failure (the screen turned on, the network
+     * changed, a wake-up alarm fired) instead of waiting out the client's backoff, whose timer stalls while the
+     * CPU sleeps. With [alsoWhileConnecting] a connection attempt still in progress is restarted too (the
+     * wake-up alarm found it stuck). No-op while connected, stopped, or after a fatal error.
+     */
+    fun retryRelay(alsoWhileConnecting: Boolean = false) =
+        submit(if (alsoWhileConnecting) Command.RETRY_STALLED_RELAY else Command.RETRY_RELAY)
+
     /** Re-publishes the local server URLs (the device's IP addresses may have changed). */
     fun refreshLocalUrls() = submit(Command.REFRESH_LOCAL_URLS)
 
@@ -121,6 +130,8 @@ class TransportController(
                 reconcile()
             }
             Command.RESTART_RELAY -> if (active) restartRelayNow()
+            Command.RETRY_RELAY -> if (active) retryRelayNow(alsoWhileConnecting = false)
+            Command.RETRY_STALLED_RELAY -> if (active) retryRelayNow(alsoWhileConnecting = true)
             Command.REFRESH_LOCAL_URLS -> if (active) publishLocalRunning()
             Command.STOP_ALL -> {
                 active = false
@@ -195,6 +206,18 @@ class TransportController(
         val running = relay ?: return
         val status = running.transport.status.value
         if (status is RelayStatus.Error && status.fatal) return
+        stopRelay(publishIdle = false)
+        startRelay(running.config)
+    }
+
+    private suspend fun retryRelayNow(alsoWhileConnecting: Boolean) {
+        val running = relay ?: return
+        val waiting = when (val status = running.transport.status.value) {
+            is RelayStatus.Error -> !status.fatal
+            RelayStatus.Connecting -> alsoWhileConnecting
+            else -> false
+        }
+        if (!waiting) return
         stopRelay(publishIdle = false)
         startRelay(running.config)
     }

@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import dev.phonebridge.android.confirm.ApprovalScreens
 import dev.phonebridge.android.confirm.applySecureWindow
 import dev.phonebridge.android.graph.BridgeGraph
 import dev.phonebridge.android.ui.theme.PhoneBridgeTheme
@@ -26,8 +27,9 @@ import kotlinx.coroutines.launch
  *
  * Like the action-approval screen it is not shown over the lock screen, Allow additionally asks
  * the keyguard to be dismissed first, and the window is hardened with [applySecureWindow] (no
- * screenshots, overlays hidden, obscured touches filtered). Finishes as soon as the request is no
- * longer pending (decided elsewhere, cancelled by the relay, or expired).
+ * screenshots, overlays hidden, obscured touches filtered). While resumed, [ApprovalScreens] keeps
+ * PhoneBridge's own screen control paused. Finishes as soon as the request is no longer pending
+ * (decided elsewhere, cancelled by the relay, or expired).
  */
 class PairingActivity : ComponentActivity() {
     private val coordinator by lazy { BridgeGraph.get(this).pairing }
@@ -74,6 +76,16 @@ class PairingActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ApprovalScreens.resumed(this)
+    }
+
+    override fun onPause() {
+        ApprovalScreens.paused(this)
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {

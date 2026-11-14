@@ -116,6 +116,21 @@ class PendingConfirmationsTest {
     }
 
     @Test
+    fun pendingChangesAreReportedBeforeRegisterReturns() {
+        val reported = mutableListOf<Boolean>()
+        val guarded = PendingConfirmations(clock = { now }, onPendingChanged = { reported += it })
+        val a = guarded.register(request("a"), 60_000)!!
+        // The screen-control guard is up before the prompt can be shown.
+        assertEquals(listOf(true), reported)
+        val b = guarded.register(request("b"), 60_000)!!
+        guarded.resolve("a", approved = true)
+        guarded.remove(a)
+        assertEquals("b is still waiting", true, reported.last())
+        guarded.remove(b)
+        assertEquals(false, reported.last())
+    }
+
+    @Test
     fun denyAllDeniesEveryPendingRequest() = runTest {
         val a = registry.register(request("a"), 60_000)!!
         val b = registry.register(request("b"), 60_000)!!

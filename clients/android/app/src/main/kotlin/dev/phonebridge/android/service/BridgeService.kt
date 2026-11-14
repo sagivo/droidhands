@@ -45,12 +45,17 @@ import kotlinx.coroutines.withContext
  *
  * The persistent notification shows relay/local status and the last agent action, updated at most
  * once per second, with Pause/Resume and Open actions.
+ *
+ * While the relay is down it reconnects at once when the network comes back or changes, when the
+ * screen turns on or the phone is unlocked, and from an allow-while-idle alarm if the client's own
+ * retry stalled while the phone slept ([RelayReconnects]).
  */
 class BridgeService : Service() {
     private val graph: BridgeGraph by lazy { BridgeGraph.get(this) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val networkTracker = NetworkChangeTracker<Network>()
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private val reconnects by lazy { RelayReconnects(this) { graph.transports.retryRelay(it) } }
 
     /** Main-thread confined: notification updates are posted only while true. */
     private var inForeground = false
@@ -63,6 +68,7 @@ class BridgeService : Service() {
         super.onCreate()
         if (enterForeground()) graph.setServiceRunning(true)
         registerNetworkCallback()
+        reconnects.start(graph.relayStatus, scope)
         observeStatus()
     }
 
@@ -94,6 +100,7 @@ class BridgeService : Service() {
     override fun onDestroy() {
         inForeground = false
         unregisterNetworkCallback()
+        reconnects.stop()
         graph.transports.stopAll()
         graph.setServiceRunning(false)
         // Agents can't reach the phone any more; persist usage counters now rather than on the debounce.
@@ -199,7 +206,8 @@ class BridgeService : Service() {
         val connectivity = getSystemService(ConnectivityManager::class.java) ?: return
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                if (networkTracker.onAvailable(network)) graph.transports.restartRelay()
+                // A new or regained network: the old socket is probably dead. Otherwise just skip a pending backoff.
+                if (networkTracker.onAvailable(network)) graph.transports.restartRelay() else graph.transports.retryRelay()
                 graph.transports.refreshLocalUrls()
             }
 
@@ -213,6 +221,8 @@ class BridgeService : Service() {
             }
         }
         try {
+            // Started offline, the first onAvailable is the network coming back (a reconnect trigger).
+            networkTracker.start(connectivity.activeNetwork)
             connectivity.registerDefaultNetworkCallback(callback)
             networkCallback = callback
         } catch (e: RuntimeException) {
