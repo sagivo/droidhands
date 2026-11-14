@@ -49,6 +49,35 @@ class PolicyEngineTest {
     }
 
     @Test
+    fun alwaysConfirmToolsNeedApprovalWhateverThePolicyAndAllowRules() {
+        val engine = PolicyEngine(clock = { now })
+        val local = tool(name = "com.app/play", title = "T", description = "d", scope = "", risk = Risk.READ, alwaysConfirm = true) { _, _ ->
+            ToolResult.text("ok")
+        }
+        for (policy in ConfirmPolicy.entries) {
+            assertEquals(PolicyDecision.RequireConfirmation, engine.evaluate(token("tok${policy.ordinal}xxxxxxxx", policy), local), "$policy")
+        }
+        val allowed = token("allowedxxxxx", ConfirmPolicy.NEVER).copy(toolRules = mapOf(local.name to ToolRule.ALLOW))
+        assertEquals(PolicyDecision.RequireConfirmation, engine.evaluate(allowed, local))
+        // BLOCK still refuses.
+        val blocked = token("blockedxxxxx").copy(toolRules = mapOf(local.name to ToolRule.BLOCK))
+        assertIs<PolicyDecision.Deny>(engine.evaluate(blocked, local))
+    }
+
+    @Test
+    fun precheckAppliesRulesCapAndHoursWithoutCountingTheCall() {
+        val engine = PolicyEngine(RateLimits(callsPerMinute = 1), clock = { now })
+        val t = token()
+        repeat(3) { assertEquals(null, engine.precheck(t, action)) }
+        assertIs<PolicyDecision.Allow>(engine.evaluate(t, action)) // The precheck used none of the limit.
+        assertTrue(assertIs<PolicyDecision.Deny>(engine.evaluate(t, action)).rateLimited)
+
+        assertTrue(engine.precheck(t.copy(toolRules = mapOf(action.name to ToolRule.BLOCK)), action)!!.reason.contains("blocked"))
+        assertTrue(engine.precheck(t.copy(maxRisk = Risk.READ), action)!!.reason.contains("read-only tools"))
+        assertEquals(null, engine.precheck(t.copy(toolRules = mapOf(action.name to ToolRule.ASK)), action))
+    }
+
+    @Test
     fun maxRiskRefusesHigherRiskToolsWhateverTheRules() {
         val engine = PolicyEngine(RateLimits(callsPerMinute = 3, sensitiveCallsPerMinute = 3), clock = { now })
         val readOnly = token("readonlyxxxx").copy(maxRisk = Risk.READ, toolRules = mapOf(action.name to ToolRule.ALLOW))
