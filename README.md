@@ -115,3 +115,7 @@ are in **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. Publishing your o
 
 App plugins and code are both welcome: [CONTRIBUTING.md](CONTRIBUTING.md). Please report security problems
 privately ([docs/SECURITY.md](docs/SECURITY.md#reporting-a-vulnerability)).
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
