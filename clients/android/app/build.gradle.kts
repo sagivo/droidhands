@@ -127,6 +127,9 @@ android {
         unitTests.all { test ->
             test.systemProperty("phonebridge.fixturePluginsDir", fixturePluginsDir.absolutePath)
             test.inputs.dir(fixturePluginsDir).withPropertyName("fixturePlugins").withPathSensitivity(PathSensitivity.RELATIVE)
+            // BundledPluginToolsTest checks the bundled plugins' tool recipes against the Android tools.
+            test.systemProperty("phonebridge.pluginsDir", repoPluginsDir.absolutePath)
+            test.inputs.dir(repoPluginsDir).withPropertyName("plugins").withPathSensitivity(PathSensitivity.RELATIVE)
         }
     }
 }
