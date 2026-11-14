@@ -1,9 +1,13 @@
 package dev.phonebridge.core.transport
 
-/** A one-tap pairing request forwarded by the relay (docs/PROTOCOL.md §5.3). */
+/**
+ * A one-tap pairing request, forwarded by the relay (docs/PROTOCOL.md §5.3) or started on the phone's
+ * own local server ([dev.phonebridge.core.oauth.LocalOAuth], §4.1). Ids of both kinds are `p_` +
+ * random base64url and never collide.
+ */
 data class PairingRequest(
     val id: String,
-    /** Registered OAuth client_name (sanitized by the relay), e.g. "Claude". */
+    /** Registered OAuth client_name (sanitized by the relay or local server), e.g. "Claude". */
     val clientName: String,
     /** Host of the OAuth redirect URI, e.g. "claude.ai" or "localhost:33418". */
     val redirectHost: String,
@@ -12,11 +16,11 @@ data class PairingRequest(
     val remoteAddress: String?,
     val userAgent: String?,
     /**
-     * Epoch millis after which the relay gives up. In a request handed to [PairingHandler.onPairRequest]
+     * Epoch millis after which the relay (or local server) gives up. In a request handed to [PairingHandler.onPairRequest]
      * this is on the PHONE's clock (`System.currentTimeMillis()` in production): the relay's `expiresAt`
      * (relay time) converted with the clock offset from the relay's `welcome.serverTime`, and at most
-     * 10 minutes from now. It is when the prompt is cancelled, so compare it with the local clock for
-     * countdowns and expiry checks.
+     * 10 minutes from now; local pairings use the phone's clock directly. It is when the prompt is
+     * cancelled, so compare it with the local clock for countdowns and expiry checks.
      */
     val expiresAt: Long,
 )
@@ -32,14 +36,15 @@ sealed interface PairingDecision {
 interface PairingHandler {
     /**
      * Shows the approval prompt and suspends until the user decides. The coroutine is cancelled on
-     * `pair_cancel`, at [PairingRequest.expiresAt], or when the relay connection drops — the
-     * implementation must then remove its prompt.
+     * `pair_cancel`, at [PairingRequest.expiresAt], when the relay connection drops or the local
+     * server stops — the implementation must then remove its prompt.
      */
     suspend fun onPairRequest(request: PairingRequest): PairingDecision
 
     /**
-     * `pair_complete` ([completed] = true) or `pair_abandoned` ([completed] = false). On abandon the
-     * implementation deletes [tokenId] (if non-null) because no agent ever received it.
+     * `pair_complete` ([completed] = true) or `pair_abandoned` ([completed] = false), or the local
+     * server's equivalent (token delivered / code expired, failed exchange, response not delivered).
+     * On abandon the implementation deletes [tokenId] (if non-null) because no agent ever received it.
      */
     fun onPairFinished(id: String, tokenId: String?, completed: Boolean)
 }

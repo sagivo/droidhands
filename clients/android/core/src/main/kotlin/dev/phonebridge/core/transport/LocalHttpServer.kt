@@ -1,6 +1,7 @@
 package dev.phonebridge.core.transport
 
 import dev.phonebridge.core.mcp.TransportRequest
+import dev.phonebridge.core.oauth.LocalOAuth
 import dev.phonebridge.core.mcp.TransportResponse
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +25,8 @@ import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Minimal HTTP/1.1 server for local mode (docs/PROTOCOL.md §4): `POST /mcp` → [handler],
- * `GET|DELETE /mcp` → 405, `GET /health` → 200 `{"status":"ok"}`, else 404. Rejects requests whose
+ * `GET|DELETE /mcp` → 405, `GET /health` → 200 `{"status":"ok"}`, with [oauth] its one-tap pairing
+ * endpoints under `/.well-known/` and `/oauth/` (§4.1), else 404. Rejects requests whose
  * Origin header is present and not in [allowedOrigins] with 403. Supports Content-Length and
  * chunked request bodies, enforces [maxBodyBytes] (413) and header limits, one request per
  * connection (`Connection: close`). Each connection is handled on its own coroutine.
@@ -41,6 +43,8 @@ import kotlin.coroutines.cancellation.CancellationException
  *   to every path.
  * * Every response has Content-Length, `Connection: close` and `Cache-Control: no-store`.
  *   Handler exceptions become 500 with a JSON-RPC error body.
+ * * With [oauth], a 401 from `/mcp` carries `resource_metadata` (when the request's Host names this
+ *   phone, see [LocalOAuth.challenge]), so MCP clients start one-tap pairing.
  *
  * Lifecycle: [start] on a running server is a no-op; [stop] is idempotent and closes the listening
  * socket and every open connection; the server can be started again after [stop].
@@ -51,6 +55,8 @@ class LocalHttpServer(
     private val handler: suspend (TransportRequest) -> TransportResponse,
     private val allowedOrigins: Set<String> = emptySet(),
     private val maxBodyBytes: Int = 1_048_576,
+    /** One-tap pairing (docs/PROTOCOL.md §4.1); null serves only `/mcp` and `/health`. */
+    private val oauth: LocalOAuth? = null,
 ) {
     private class Running(val socket: ServerSocket, val scope: CoroutineScope)
 
@@ -101,6 +107,8 @@ class LocalHttpServer(
         for (socket in connections.toTypedArray()) closeQuietly(socket)
         connections.clear()
         state.scope.cancel()
+        // Nobody can finish a pairing with this server any more.
+        oauth?.shutdown()
     }
 
     val isRunning: Boolean get() = running?.socket?.isClosed == false
@@ -155,11 +163,13 @@ class LocalHttpServer(
         } catch (e: IOException) {
             return // Connection broken; nobody to answer.
         }
-        try {
+        val sent = try {
             write(socket, output, reply)
+            true
         } catch (e: IOException) {
-            // Client went away.
+            false // Client went away.
         }
+        reply.onSent?.invoke(sent)
     }
 
     private suspend fun process(socket: Socket, input: InputStream, output: OutputStream): Reply {
@@ -169,6 +179,8 @@ class LocalHttpServer(
         if (origin != null && normalizeOrigin(origin) !in origins) {
             return errorResponse(403, "Origin not allowed")
         }
+
+        if (oauth != null && LocalOAuth.isOAuthPath(head.path)) return oauthReply(oauth, socket, head, input, output)
 
         when (head.path) {
             "/mcp" -> if (head.method != "POST") return errorResponse(405, "Use POST", mapOf("Allow" to "POST"))
@@ -181,14 +193,7 @@ class LocalHttpServer(
         }
 
         // POST /mcp: validate before inviting the body with 100 Continue.
-        val declared = HttpWire.contentLength(head)
-        if (declared != null && declared > maxBodyBytes) return errorResponse(413, "Body larger than $maxBodyBytes bytes")
-        val expect = head.header("expect")
-        if (expect != null) {
-            if (!expect.equals("100-continue", ignoreCase = true)) return errorResponse(417, "Unsupported Expect")
-            if (head.version == "HTTP/1.1") HttpWire.writeContinue(output)
-        }
-        val body = HttpWire.readBody(head, input, maxBodyBytes)
+        val body = readBody(head, input, output, maxBodyBytes)
 
         val request = TransportRequest(
             authorization = head.single("authorization"),
@@ -205,13 +210,58 @@ class LocalHttpServer(
         } catch (e: Exception) {
             return Reply(500, JSON_HEADERS, jsonRpcError(-32603, "Internal error"))
         }
-        return Reply(response.status, response.headers, response.body?.toByteArray(Charsets.UTF_8))
+        var headers = response.headers
+        if (response.status == 401 && oauth != null) {
+            oauth.challenge(head.single("host"), socket.localAddress)?.let { challenge ->
+                headers = headers.filterKeys { !it.equals("www-authenticate", ignoreCase = true) } + ("www-authenticate" to challenge)
+            }
+        }
+        return Reply(response.status, headers, response.body?.toByteArray(Charsets.UTF_8))
     }
 
-    private class Reply(val status: Int, val headers: Map<String, String>, val body: ByteArray?)
+    /** Size checks and `Expect: 100-continue`, then the body (at most [limit] bytes). */
+    private fun readBody(head: HttpHead, input: InputStream, output: OutputStream, limit: Int): ByteArray {
+        val declared = HttpWire.contentLength(head)
+        if (declared != null && declared > limit) throw HttpError(413, "Body larger than $limit bytes")
+        val expect = head.header("expect")
+        if (expect != null) {
+            if (!expect.equals("100-continue", ignoreCase = true)) throw HttpError(417, "Unsupported Expect")
+            if (head.version == "HTTP/1.1") HttpWire.writeContinue(output)
+        }
+        return HttpWire.readBody(head, input, limit)
+    }
+
+    private fun oauthReply(oauth: LocalOAuth, socket: Socket, head: HttpHead, input: InputStream, output: OutputStream): Reply {
+        val body = if (head.method == "POST") readBody(head, input, output, LocalOAuth.MAX_BODY_BYTES) else ByteArray(0)
+        val response = oauth.handle(
+            LocalOAuth.Request(
+                method = head.method,
+                path = head.path,
+                query = head.target.substringBefore('#').substringAfter('?', ""),
+                host = head.single("host"),
+                localAddress = socket.localAddress,
+                remoteAddress = socket.inetAddress?.hostAddress,
+                contentType = head.single("content-type"),
+                authorization = head.single("authorization"),
+                userAgent = head.header("user-agent"),
+                body = body.toString(Charsets.UTF_8),
+            ),
+        )
+        return Reply(response.status, response.headers, response.body, headOnly = head.method == "HEAD", onSent = response.onSent)
+    }
+
+    private class Reply(
+        val status: Int,
+        val headers: Map<String, String>,
+        val body: ByteArray?,
+        /** Answering HEAD: the headers of [body], without it. */
+        val headOnly: Boolean = false,
+        /** Told whether the response was written (true) or the connection failed (false). */
+        val onSent: ((Boolean) -> Unit)? = null,
+    )
 
     private fun write(socket: Socket, output: OutputStream, reply: Reply) {
-        HttpWire.writeResponse(output, reply.status, reply.headers, reply.body)
+        HttpWire.writeResponse(output, reply.status, reply.headers, reply.body, includeBody = !reply.headOnly)
         // Half-close and drain briefly so unread request bytes don't turn the close into a TCP reset
         // that could destroy the response before the client reads it.
         try {

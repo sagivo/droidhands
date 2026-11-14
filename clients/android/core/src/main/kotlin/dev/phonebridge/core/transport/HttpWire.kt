@@ -101,7 +101,8 @@ internal object HttpWire {
         return values[0].toLong()
     }
 
-    fun writeResponse(out: OutputStream, status: Int, headers: Map<String, String>, body: ByteArray?) {
+    /** Writes a complete response; [includeBody] false answers HEAD (Content-Length still describes [body]). */
+    fun writeResponse(out: OutputStream, status: Int, headers: Map<String, String>, body: ByteArray?, includeBody: Boolean = true) {
         val head = StringBuilder(256)
         head.append("HTTP/1.1 ").append(status).append(' ').append(reasonPhrase(status)).append("\r\n")
         for ((name, value) in headers) {
@@ -114,7 +115,7 @@ internal object HttpWire {
         head.append("Cache-Control: no-store\r\n")
         head.append("\r\n")
         out.write(head.toString().toByteArray(Charsets.ISO_8859_1))
-        if (body != null) out.write(body)
+        if (body != null && includeBody) out.write(body)
         out.flush()
     }
 
@@ -126,8 +127,10 @@ internal object HttpWire {
     fun reasonPhrase(status: Int): String = when (status) {
         100 -> "Continue"
         200 -> "OK"
+        201 -> "Created"
         202 -> "Accepted"
         204 -> "No Content"
+        303 -> "See Other"
         400 -> "Bad Request"
         401 -> "Unauthorized"
         403 -> "Forbidden"
@@ -136,6 +139,7 @@ internal object HttpWire {
         408 -> "Request Timeout"
         413 -> "Content Too Large"
         417 -> "Expectation Failed"
+        421 -> "Misdirected Request"
         429 -> "Too Many Requests"
         431 -> "Request Header Fields Too Large"
         500 -> "Internal Server Error"
