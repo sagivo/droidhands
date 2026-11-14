@@ -13,7 +13,10 @@ data class PermissionGroup(
     val permissions: List<String>,
     val scopes: List<String>,
 ) {
-    fun isGranted(context: Context) = permissions.all { Perms.has(context, it) }
+    fun isGranted(context: Context) = permissions.all { perm ->
+        // POST_NOTIFICATIONS only exists on API 33+; below that notifications are allowed by default.
+        (perm == Manifest.permission.POST_NOTIFICATIONS && android.os.Build.VERSION.SDK_INT < 33) || Perms.has(context, perm)
+    }
 }
 
 object PermissionCatalog {

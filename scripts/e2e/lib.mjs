@@ -65,7 +65,8 @@ export class McpClient {
 const ADB = process.env.ADB || '/opt/homebrew/share/android-commandlinetools/platform-tools/adb';
 
 export function adb(...args) {
-  return execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim();
+  // Host-level `timeout` as well: a wedged adb client can ignore SIGTERM from execFileSync.
+  return execFileSync('timeout', ['25', ADB, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 30_000 }).trim();
 }
 
 export function shell(cmd) {
