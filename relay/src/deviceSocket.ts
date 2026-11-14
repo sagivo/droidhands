@@ -36,11 +36,22 @@ const OPTIONAL_STRING_FIELDS = ['platform', 'appVersion', 'deviceName', 'accessK
 const MAX_DEVICE_NAME_LENGTH = 60;
 
 /**
+ * How long a socket refused during the handshake may take to complete the close handshake before
+ * it is dropped (ws itself would wait 30 s).
+ */
+const HANDSHAKE_CLOSE_GRACE_MS = 2_000;
+
+/**
  * Drives one device WebSocket from the hello handshake (§3.1) to close: authenticates the device,
  * registers it (replacing an older connection), then dispatches `response`, `pair_response` and
- * `ping` frames.
+ * `ping` frames. [onAuthenticated] runs once the hello is accepted.
  */
-export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: DeviceSocketDeps): void {
+export function acceptDeviceSocket(
+  ws: WebSocket,
+  req: IncomingMessage,
+  deps: DeviceSocketDeps,
+  onAuthenticated: () => void = () => {},
+): void {
   const { config, logger, registry, limiter, sockets, pairings } = deps;
   const ip = clientAddress(req, config.trustProxy);
   const base = publicBaseUrl(req, config.publicUrl, config.trustProxy);
@@ -52,7 +63,7 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
     if (state !== 'hello') return;
     state = 'closed';
     logger.info('device hello timeout', { ip });
-    ws.close(CloseCode.HELLO_TIMEOUT, 'hello timeout');
+    closeHandshake(ws, CloseCode.HELLO_TIMEOUT, 'hello timeout');
   }, config.helloTimeoutMs);
 
   const reject = (code: HandshakeErrorCode, closeCode: number, message: string): void => {
@@ -61,7 +72,7 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
     logger.info('device rejected', { ip, code });
     const frame: ErrorFrame = { type: 'error', code, message };
     ws.send(JSON.stringify(frame));
-    ws.close(closeCode, code);
+    closeHandshake(ws, closeCode, code);
   };
 
   const onHello = (text: string | null): void => {
@@ -107,6 +118,7 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
 
     state = 'open';
     clearTimeout(helloTimer);
+    onAuthenticated();
     const platform = shortString(hello.platform);
     const appVersion = shortString(hello.appVersion);
     const info = { platform, appVersion, deviceName: displayName(hello.deviceName) };
@@ -125,7 +137,7 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
     };
     ws.send(JSON.stringify(welcome));
     logger.info('device connected', { device: deviceTag(deviceId), ip, platform, appVersion, devices: registry.size });
-    pairings.deviceConnected(deviceId);
+    pairings.deviceConnected(deviceId, connection);
   };
 
   const onFrame = (conn: DeviceConnection, text: string | null): void => {
@@ -183,6 +195,15 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
       error: errorMessage(err),
     });
   });
+}
+
+/**
+ * Closes a socket that failed the handshake with [code] (so the device sees why), then drops it if
+ * the close handshake has not finished within [HANDSHAKE_CLOSE_GRACE_MS].
+ */
+function closeHandshake(ws: WebSocket, code: number, reason: string): void {
+  ws.close(code, reason);
+  setTimeout(() => ws.terminate(), HANDSHAKE_CLOSE_GRACE_MS).unref();
 }
 
 function rawToString(data: WebSocket.RawData): string {

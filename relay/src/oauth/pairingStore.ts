@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { constantTimeEqual } from '../encoding.js';
 import { deviceTag, type Logger } from '../logger.js';
 import { NoticeOutbox } from './noticeOutbox.js';
-import { parsePairResponse, type RelayPairFrame } from './pairingFrames.js';
+import { parsePairResponse, type PairRequestFrame, type RelayPairFrame } from './pairingFrames.js';
 import { buildRedirect, redirectHost } from './redirectUris.js';
 
 /**
@@ -27,6 +27,11 @@ export interface AuthorizationRequest {
   readonly state: string | undefined;
   /** `{relay}` as seen by the browser; becomes the `iss` response parameter. */
   readonly issuer: string;
+  /**
+   * True when the request did not name the device (no `resource`) and the relay picked the only
+   * online one (ALLOW_IMPLICIT_DEVICE). The waiting page then does not show the phone's name.
+   */
+  readonly implicitDevice?: boolean;
 }
 
 /** Who started the pairing (shown on the phone, used for per-IP limits). */
@@ -50,6 +55,8 @@ export interface PairingView {
   readonly status: PairingStatus;
   /** Where the browser goes next; set once the pairing is decided. Contains the code if approved. */
   readonly redirect: string | null;
+  /** See [AuthorizationRequest.implicitDevice]. */
+  readonly implicitDevice: boolean;
 }
 
 /** An authorization code's binding (§5.3 step 8), handed to the token endpoint exactly once. */
@@ -135,7 +142,8 @@ interface PairingRecord {
   readonly displayCode: string;
   readonly redirectHost: string;
   readonly expiresAt: number;
-  readonly channel: Channel;
+  /** The connection the pair_request was last sent on; moves to a newer one on reconnect. */
+  channel: Channel;
   status: PairingStatus;
   redirect: string | null;
   decidedAt: number;
@@ -206,37 +214,27 @@ export class PairingStore {
     if (this.recent(ipKey, now) >= this.limits.maxPerIpPerHour) return { ok: false, reason: 'ip_hourly' };
     if (this.records.size >= this.limits.maxRecords) return { ok: false, reason: 'capacity' };
 
-    const id = newPairingId();
-    const displayCode = newDisplayCode();
-    const expiresAt = now + this.options.ttlMs;
-    const host = redirectHost(request.redirectUri);
-    const channel = this.options.deliver(request.deviceId, {
-      type: 'pair_request',
-      id,
-      clientName: request.clientName,
-      redirectHost: host,
-      displayCode,
-      remoteAddress: origin.remoteAddress,
-      ...(origin.userAgent === undefined ? {} : { userAgent: origin.userAgent }),
-      expiresAt,
-    });
+    const prompt = {
+      id: newPairingId(),
+      request,
+      origin,
+      displayCode: newDisplayCode(),
+      redirectHost: redirectHost(request.redirectUri),
+      expiresAt: now + this.options.ttlMs,
+    };
+    const channel = this.options.deliver(request.deviceId, pairRequestFrame(prompt));
     if (channel === null) return { ok: false, reason: 'offline' };
 
     const record: PairingRecord = {
-      id,
-      request,
-      origin,
+      ...prompt,
       pageToken: randomBytes(16).toString('base64url'),
-      displayCode,
-      redirectHost: host,
-      expiresAt,
       channel,
       status: 'pending',
       redirect: null,
       decidedAt: 0,
       tokenId: null,
     };
-    this.records.set(id, record);
+    this.records.set(record.id, record);
     this.remember(deviceKey, now);
     this.remember(ipKey, now);
     this.options.logger.info('pairing requested', { device: deviceTag(request.deviceId), ip: origin.remoteAddress });
@@ -354,9 +352,22 @@ export class PairingStore {
     }
   }
 
-  /** A device (re)connected: delivers notices that could not be sent while it was offline. */
-  deviceConnected(deviceId: string): void {
+  /**
+   * A device (re)connected on [channel]: delivers notices that could not be sent while it was
+   * offline, and re-sends its still-pending pair_requests (same id, code and expiry) that went out
+   * on an older connection. That connection may have been dead without the relay noticing yet, and
+   * the phone drops its prompts when a connection ends; once moved, its close no longer expires them.
+   */
+  deviceConnected(deviceId: string, channel: Channel): void {
     for (const frame of this.notices.drain(deviceId)) this.notify(deviceId, frame);
+    const now = this.now();
+    for (const record of this.records.values()) {
+      if (record.request.deviceId !== deviceId || record.channel === channel) continue;
+      this.expireIfDue(record, now);
+      if (record.status !== 'pending') continue;
+      const sent = this.options.deliver(deviceId, pairRequestFrame(record));
+      if (sent !== null) record.channel = sent;
+    }
   }
 
   /**
@@ -459,6 +470,23 @@ function view(record: PairingRecord): PairingView {
     expiresAt: record.expiresAt,
     status: record.status,
     redirect: record.redirect,
+    implicitDevice: record.request.implicitDevice === true,
+  };
+}
+
+/** The `pair_request` frame that prompts the phone (§5.3 step 5). */
+function pairRequestFrame(
+  prompt: Pick<PairingRecord, 'id' | 'request' | 'origin' | 'displayCode' | 'redirectHost' | 'expiresAt'>,
+): PairRequestFrame {
+  return {
+    type: 'pair_request',
+    id: prompt.id,
+    clientName: prompt.request.clientName,
+    redirectHost: prompt.redirectHost,
+    displayCode: prompt.displayCode,
+    remoteAddress: prompt.origin.remoteAddress,
+    ...(prompt.origin.userAgent === undefined ? {} : { userAgent: prompt.origin.userAgent }),
+    expiresAt: prompt.expiresAt,
   };
 }
 

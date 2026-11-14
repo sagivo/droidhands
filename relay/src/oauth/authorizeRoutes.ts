@@ -7,13 +7,14 @@ import { decodeClientId, type RegisteredClient } from './clientRegistration.js';
 import { deviceIdFromResource } from './metadata.js';
 import type { CreateFailure, PairingView } from './pairingStore.js';
 import { CODE_CHALLENGE_REGEX } from './pkce.js';
-import { buildRedirect } from './redirectUris.js';
+import { matchRedirectUri } from './redirectUris.js';
 
 /**
  * `GET /oauth/authorize` and `GET /oauth/pair/<id>` (docs/PROTOCOL.md §5.3): the browser half of
- * one-tap pairing. Problems with the client itself (unknown client, unregistered redirect URI, no
- * PKCE) are shown as an HTML page and never redirected, so a forged request cannot bounce the user
- * to an arbitrary site.
+ * one-tap pairing. Every problem with the request (unknown client, unregistered redirect URI,
+ * unsupported response type, no PKCE, no device) is shown as an HTML page and never redirected:
+ * anyone can register any https redirect URI, so a forged request must not bounce the user to an
+ * arbitrary site. The browser only leaves for the redirect URI once the phone has decided.
  */
 
 /** Path of the pairing status endpoint; the pairing id follows. */
@@ -75,9 +76,14 @@ export function handleAuthorize(deps: HttpDeps, req: IncomingMessage, res: Serve
   if (state !== undefined && state.length > MAX_STATE_LENGTH) {
     return sendPairingError(req, res, 400, 'The request\'s "state" parameter is too long.', RECONNECT_HINT);
   }
-  const base = relayBase(deps, req);
   if (q.get('response_type') !== 'code') {
-    return redirectWithError(res, redirectUri, base, state, 'unsupported_response_type', 'only response_type=code is supported');
+    return sendPairingError(
+      req,
+      res,
+      400,
+      'Your AI app asked for an unsupported kind of authorization (only response_type=code is supported).',
+      'Update the app, or use an MCP client that supports the MCP authorization spec.',
+    );
   }
   const codeChallenge = q.get('code_challenge');
   if (q.get('code_challenge_method') !== 'S256' || codeChallenge === null || !CODE_CHALLENGE_REGEX.test(codeChallenge)) {
@@ -90,7 +96,9 @@ export function handleAuthorize(deps: HttpDeps, req: IncomingMessage, res: Serve
     );
   }
 
-  const deviceId = selectDevice(deps, req, res, q.get('resource'), base);
+  const base = relayBase(deps, req);
+  const resource = q.get('resource');
+  const deviceId = selectDevice(deps, req, res, resource, base);
   if (deviceId === null) return;
   const connection = deps.registry.get(deviceId);
   if (connection === undefined || !connection.isOpen) return sendOfflinePage(req, res);
@@ -105,6 +113,7 @@ export function handleAuthorize(deps: HttpDeps, req: IncomingMessage, res: Serve
       codeChallenge,
       state,
       issuer: base,
+      implicitDevice: resource === null,
     },
     { ipKey: client.ipKey, remoteAddress: client.ip, userAgent: cleanUserAgent(headerValue(req, 'user-agent')) },
   );
@@ -160,7 +169,8 @@ function sendWaiting(deps: HttpDeps, req: IncomingMessage, res: ServerResponse, 
   const pollUrl = `${publicPathPrefix(deps.config)}${PAIR_STATUS_PREFIX}${pairing.id}?t=${pairing.pageToken}`;
   sendWaitingPage(req, res, {
     pairing,
-    deviceName: deps.registry.get(pairing.deviceId)?.info.deviceName ?? null,
+    // Only name the phone to someone who named it (by its connection URL).
+    deviceName: pairing.implicitDevice ? null : (deps.registry.get(pairing.deviceId)?.info.deviceName ?? null),
     pollUrl,
     pageUrl: `${pollUrl}&view=html`,
     now: Date.now(),
@@ -168,17 +178,19 @@ function sendWaiting(deps: HttpDeps, req: IncomingMessage, res: ServerResponse, 
 }
 
 /**
- * The redirect URI to use: the requested one if registered (exact match), or the only registered
- * one when the request omits it (RFC 6749 §3.1.2.3). Null otherwise.
+ * The redirect URI to use: the requested one if registered (exact match, except that loopback URIs
+ * may use any port, RFC 8252 §7.3), or the only registered one when the request omits it
+ * (RFC 6749 §3.1.2.3). Null otherwise.
  */
 function chooseRedirectUri(client: RegisteredClient, requested: string | null): string | null {
   if (requested === null) return client.redirectUris.length === 1 ? (client.redirectUris[0] as string) : null;
-  return client.redirectUris.includes(requested) ? requested : null;
+  return matchRedirectUri(client.redirectUris, requested) ? requested : null;
 }
 
 /**
- * The device named by `resource`, or the only online device when it is absent (§5.3 step 2).
- * Renders the error page and returns null when there is no single answer.
+ * The device named by `resource` (§5.3 step 2). Without `resource` the request is refused, unless
+ * ALLOW_IMPLICIT_DEVICE restores the legacy fallback to the only online device. Renders the error
+ * page and returns null when there is no single answer.
  */
 function selectDevice(
   deps: HttpDeps,
@@ -199,6 +211,20 @@ function selectDevice(
       );
     }
     return deviceId;
+  }
+  if (!deps.config.allowImplicitDevice) {
+    // Otherwise anyone who knows the relay's address could prompt its only phone.
+    deps.logger.info('authorize: no resource', { ip: clientInfo(deps, req).ip });
+    sendPairingError(
+      req,
+      res,
+      400,
+      "Your AI app didn't say which phone to connect to.",
+      'Add the connection URL shown in the PhoneBridge app (it ends with /d/…/mcp), not the relay address. ' +
+        'If you did, update your AI app: PhoneBridge needs a client that supports the MCP authorization spec ' +
+        '(2025-06-18 or later), which sends the connection URL as the "resource".',
+    );
+    return null;
   }
   const online = [...deps.registry.values()].filter((c) => c.isOpen);
   const only = online.length === 1 ? online[0] : undefined;
@@ -242,22 +268,6 @@ function sendCreateFailure(req: IncomingMessage, res: ServerResponse, reason: Cr
     case 'capacity':
       return sendPairingError(req, res, 503, 'The relay is busy right now.', 'Try again in a few minutes.');
   }
-}
-
-/** RFC 6749 §4.1.2.1 error response, once the redirect URI is known to be the client's own. */
-function redirectWithError(
-  res: ServerResponse,
-  redirectUri: string,
-  issuer: string,
-  state: string | undefined,
-  error: string,
-  description: string,
-): void {
-  res.statusCode = 303;
-  res.setHeader('Location', buildRedirect(redirectUri, { error, error_description: description, state, iss: issuer }));
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  res.setHeader('Content-Length', '0');
-  res.end();
 }
 
 /** The browser's user agent for the phone prompt: printable, bounded. */

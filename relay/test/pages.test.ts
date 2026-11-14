@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { SafeHtml, escapeHtml, html } from '../src/pages/html.js';
-import { connectReady, httpRequest, startRelay, type HttpResult } from './helpers.js';
+import { connectReady, httpRequest, newIdentity, startRelay, type HttpResult } from './helpers.js';
 import { REDIRECT_URI, approveNext, newPkce, openAuthorize, postJson, registerClient, type PairRequestFrame } from './oauthHelpers.js';
 
 function assertPageHeaders(res: HttpResult): void {
@@ -69,12 +69,14 @@ test('error and offline pages carry the security headers', async (t) => {
   assertPageHeaders(offline);
 });
 
+/** An authorization request for a phone that is not connected. */
 async function openAuthorizeRaw(base: string, clientId: string): Promise<HttpResult> {
   const url = new URL(`${base}/oauth/authorize`);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('code_challenge', newPkce().challenge);
   url.searchParams.set('code_challenge_method', 'S256');
+  url.searchParams.set('resource', `${base}/d/${newIdentity().deviceId}/mcp`);
   return httpRequest(url.toString());
 }
 

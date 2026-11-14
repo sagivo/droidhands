@@ -3,7 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { declaredLength, readBody } from './body.js';
 import type { TunnelFailure } from './deviceConnection.js';
 import { admit, clientInfo, relayBase, type HttpDeps } from './httpDeps.js';
-import { sendBody } from './httpUtil.js';
+import { applyOriginCors, sendBody, type OriginCors } from './httpUtil.js';
 import { deviceTag, type Logger } from './logger.js';
 import { headerValue } from './net.js';
 import { connectorChallenge } from './oauth/metadata.js';
@@ -26,14 +26,36 @@ export const OFFLINE_RETRY_AFTER_SEC = 30;
 const UNAUTHORIZED_BODY = jsonRpcError(RpcCode.UNAUTHORIZED, 'Unauthorized');
 const PLAIN_CHALLENGE = 'Bearer realm="phonebridge"';
 
-/** How each tunnel failure is reported to the agent. */
+/** For requests refused before anything was sent to the phone. */
+const SHUTTING_DOWN_MESSAGE = 'Relay is shutting down; retry shortly';
+
+/**
+ * Appended when the request reached (or may have reached) the phone. The phone keeps running a
+ * call whose connection dropped, and tools/call is not idempotent (a message could go out twice),
+ * so the agent must check instead of resending blindly.
+ */
+const MAY_HAVE_RUN =
+  'The phone may already have performed the action: check whether it happened ' +
+  '(for example with sms_list or screen_read) before sending the request again.';
+
+/**
+ * How each tunnel failure of a forwarded request is reported to the agent. None carries
+ * Retry-After or invites a retry: the phone may have performed the action.
+ */
 const FAILURE_RESPONSES: Record<TunnelFailure, { status: number; message: string }> = {
-  timeout: { status: 504, message: 'Device did not respond in time' },
-  disconnected: { status: 502, message: 'Device disconnected before responding' },
-  replaced: { status: 502, message: 'Device reconnected before responding; retry the request' },
-  send_failed: { status: 502, message: 'Could not deliver the request to the device' },
-  invalid_response: { status: 502, message: 'Device sent an invalid response' },
-  shutdown: { status: 503, message: 'Relay is shutting down; retry shortly' },
+  timeout: { status: 504, message: `The phone did not answer in time. ${MAY_HAVE_RUN}` },
+  disconnected: { status: 502, message: `The phone's connection dropped before it answered. ${MAY_HAVE_RUN}` },
+  replaced: { status: 502, message: `The phone reconnected before it answered. ${MAY_HAVE_RUN}` },
+  send_failed: { status: 502, message: `The connection to the phone failed while sending the request. ${MAY_HAVE_RUN}` },
+  invalid_response: { status: 502, message: `The phone sent an invalid response. ${MAY_HAVE_RUN}` },
+  shutdown: { status: 503, message: `The relay shut down before the phone answered. ${MAY_HAVE_RUN}` },
+};
+
+/** CORS for MCP requests from an allowlisted Origin (ALLOWED_ORIGINS), e.g. browser-based clients. */
+const MCP_CORS: OriginCors = {
+  methods: 'POST',
+  allowHeaders: 'Authorization, Content-Type, Accept, Mcp-Protocol-Version, Mcp-Session-Id',
+  exposeHeaders: 'WWW-Authenticate, Mcp-Session-Id, Retry-After',
 };
 
 /** Validates the token, then tunnels the request to its device and relays the answer. */
@@ -51,10 +73,14 @@ export async function handleMcp(deps: HttpDeps, req: IncomingMessage, res: Serve
   /** §5.1: on the connector path every 401 names the resource metadata. */
   const challenge = route.kind === 'connector' ? connectorChallenge(relayBase(deps, req), route.deviceId) : PLAIN_CHALLENGE;
 
+  // The router has already refused any Origin that is not allowlisted.
+  const origin = headerValue(req, 'origin');
+  if (origin !== undefined && applyOriginCors(req, res, origin, MCP_CORS)) return done(204);
+
   if (deps.isShuttingDown()) {
     res.setHeader('Connection', 'close');
     res.setHeader('Retry-After', String(OFFLINE_RETRY_AFTER_SEC));
-    sendRpcError(req, res, 503, FAILURE_RESPONSES.shutdown.message);
+    sendRpcError(req, res, 503, SHUTTING_DOWN_MESSAGE);
     return done(503);
   }
 
@@ -126,7 +152,6 @@ export async function handleMcp(deps: HttpDeps, req: IncomingMessage, res: Serve
   if (deps.isShuttingDown()) res.setHeader('Connection', 'close');
   if (!outcome.ok) {
     const { status, message } = FAILURE_RESPONSES[outcome.failure];
-    if (status === 503) res.setHeader('Retry-After', String(OFFLINE_RETRY_AFTER_SEC));
     sendRpcError(req, res, status, message);
     return done(status);
   }

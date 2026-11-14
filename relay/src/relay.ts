@@ -5,11 +5,12 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { resolveConfig, type RelayConfig } from './config.js';
 import { DeviceRegistry } from './deviceRegistry.js';
 import { acceptDeviceSocket } from './deviceSocket.js';
+import { HandshakeGuard } from './handshakeGuard.js';
 import { createHttpHandler, requestPath } from './httpHandler.js';
 import { createLogger, type Logger } from './logger.js';
 import { clientAddress, rateLimitKey } from './net.js';
 import { PairingStore, type Channel } from './oauth/pairingStore.js';
-import { CloseCode, DEVICE_WS_PATH, MAX_FRAME_BYTES } from './protocol.js';
+import { CloseCode, DEVICE_WS_PATH, MAX_FRAME_BYTES, MAX_PRE_HELLO_BYTES } from './protocol.js';
 import { RateLimiter } from './rateLimit.js';
 import { loadRelaySecret, type RelaySecretSource } from './relaySecret.js';
 
@@ -95,11 +96,17 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
   // Bounds slow uploads; must not cut off agents waiting for a device (the response phase).
   server.requestTimeout = Math.max(300_000, cfg.requestTimeoutMs + 30_000);
 
+  // MAX_FRAME_BYTES applies once a socket is authenticated; before that, `handshakes` caps it far lower.
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_FRAME_BYTES,
     clientTracking: false,
     perMessageDeflate: false,
+  });
+  const handshakes = new HandshakeGuard({
+    maxPending: cfg.maxPendingHandshakes,
+    maxPendingPerKey: cfg.maxPendingHandshakesPerIp,
+    maxBytes: MAX_PRE_HELLO_BYTES,
   });
   const socketDeps = { config: cfg, logger, registry, limiter, sockets, pairings };
 
@@ -107,9 +114,19 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
     socket.on('error', () => socket.destroy());
     if (requestPath(req.url) !== DEVICE_WS_PATH) return abortUpgrade(socket, 404);
     if (shuttingDown) return abortUpgrade(socket, 503);
+    const ip = clientAddress(req, cfg.trustProxy);
+    const ipKey = rateLimitKey(ip);
     // Upgrades share the per-IP request budget, which also bounds handshake spam.
-    if (!limiter.hit(rateLimitKey(clientAddress(req, cfg.trustProxy))).allowed) return abortUpgrade(socket, 429);
-    wss.handleUpgrade(req, socket, head, (ws) => acceptDeviceSocket(ws, req, socketDeps));
+    if (!limiter.hit(ipKey).allowed) return abortUpgrade(socket, 429);
+    const slot = handshakes.admit(ipKey, socket);
+    if (slot === 'global_limit' || slot === 'key_limit') {
+      logger.warn('device handshake refused', { ip, reason: slot, pending: handshakes.pending });
+      return abortUpgrade(socket, slot === 'key_limit' ? 429 : 503);
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      slot.limitBytes(() => logger.info('device sent too much before its hello', { ip }));
+      acceptDeviceSocket(ws, req, socketDeps, slot.release);
+    });
   });
 
   const heartbeat = setInterval(() => {

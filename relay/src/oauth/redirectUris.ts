@@ -3,7 +3,8 @@
  *
  * Accepted:
  * * `https://<host>/…`
- * * loopback `http://localhost|127.0.0.1|[::1]:<port>/…` (native apps, RFC 8252 §7.3)
+ * * loopback `http://localhost|127.0.0.1|[::1][:<port>]/…` (native apps, RFC 8252 §7.3). The port is
+ *   ignored when matching an authorization request against the registration ([matchRedirectUri]).
  * * private-use schemes, e.g. `com.example.app:/cb` (RFC 8252 §7.1) or `cursor://anysphere.cursor-mcp/cb`
  *
  * Never: fragments, credentials, other `http://` hosts, or schemes that execute, read local data or
@@ -59,7 +60,6 @@ export function classifyRedirectUri(uri: string): { kind: RedirectUriKind | null
     if (!LOOPBACK_HOSTS.has(url.hostname)) {
       return fail('http redirect URIs are only allowed for localhost, 127.0.0.1 or [::1]; use https');
     }
-    if (url.port === '') return fail('loopback redirect URIs must include a port, e.g. http://localhost:33418/callback');
     return { kind: 'loopback', problem: null };
   }
   if (!SCHEME_REGEX.test(scheme) || DENIED_SCHEMES.has(scheme)) {
@@ -69,7 +69,26 @@ export function classifyRedirectUri(uri: string): { kind: RedirectUriKind | null
 }
 
 /**
- * What the phone shows as "returns to": the host for https, host:port for loopback, the scheme for
+ * True when [requested] may be used by a client that registered [registered]: an exact match, or
+ * for loopback URIs the same host, path and query on any port (or none). Native apps bind a free
+ * port per run, so RFC 8252 §7.3 requires ignoring it.
+ */
+export function matchRedirectUri(registered: readonly string[], requested: string): boolean {
+  if (registered.includes(requested)) return true;
+  const wanted = loopbackWithoutPort(requested);
+  return wanted !== null && registered.some((uri) => loopbackWithoutPort(uri) === wanted);
+}
+
+/** A valid loopback redirect URI with its port removed, or null for any other URI. */
+function loopbackWithoutPort(uri: string): string | null {
+  if (classifyRedirectUri(uri).kind !== 'loopback') return null;
+  const url = new URL(uri);
+  url.port = '';
+  return url.toString();
+}
+
+/**
+ * What the phone shows as "returns to":the host for https, host:port for loopback, the scheme for
  * private-use URIs. [uri] must be a valid redirect URI.
  */
 export function redirectHost(uri: string): string {

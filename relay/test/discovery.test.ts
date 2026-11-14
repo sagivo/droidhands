@@ -115,6 +115,9 @@ test('registration: redirect URI rules', async (t) => {
     'http://localhost:33418/callback',
     'http://127.0.0.1:6274/oauth/callback',
     'http://[::1]:8080/cb',
+    // RFC 8252 §7.3: loopback without a port (any port is accepted at authorization time).
+    'http://localhost/cb',
+    'http://127.0.0.1/',
     'com.example.app:/oauth2redirect',
     'cursor.app://anysphere.cursor-retrieval/oauth/callback',
     'cursor://anysphere.cursor-mcp/oauth/callback',
@@ -125,7 +128,6 @@ test('registration: redirect URI rules', async (t) => {
   }
   const rejected = [
     'http://example.com/cb',
-    'http://localhost/cb',
     'http://192.168.1.2:8080/cb',
     'https://claude.ai/cb#fragment',
     'https://user:pass@claude.ai/cb',
@@ -147,6 +149,14 @@ test('registration: redirect URI rules', async (t) => {
     assert.equal(body.error, 'invalid_redirect_uri', uri);
     assert.ok(body.error_description.length > 0);
   }
+});
+
+test("registration: VS Code's redirect URIs, including a port-less loopback one", async (t) => {
+  const relay = await startRelay(t);
+  const uris = ['https://insiders.vscode.dev/redirect', 'https://vscode.dev/redirect', 'http://127.0.0.1/', 'http://127.0.0.1:33418/'];
+  const res = await postJson(`${relay.url}/oauth/register`, { client_name: 'Visual Studio Code', redirect_uris: uris });
+  assert.equal(res.status, 201, res.body);
+  assert.deepEqual((JSON.parse(res.body) as { redirect_uris: string[] }).redirect_uris, uris);
 });
 
 test('registration: invalid metadata', async (t) => {

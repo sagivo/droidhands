@@ -17,12 +17,25 @@ export interface RelayConfig {
   readonly accessKey: string | null;
   /** Accept `POST /mcp/<token>` for clients that cannot send headers. */
   readonly allowTokenInUrl: boolean;
-  /** Allowed `Origin` values (normalized, lowercase). `*` allows any. Empty = reject any Origin. */
+  /**
+   * Allowed `Origin` values (normalized, lowercase). `*` allows any. Empty = reject any Origin.
+   * MCP responses to an allowed Origin carry CORS headers for it.
+   */
   readonly allowedOrigins: readonly string[];
+  /**
+   * Legacy: when `/oauth/authorize` has no `resource`, pair with the only online device instead of
+   * showing an error. Off by default, because then anyone who knows the relay URL can send pairing
+   * prompts to a personal relay's phone.
+   */
+  readonly allowImplicitDevice: boolean;
   readonly requestTimeoutMs: number;
   readonly maxBodyBytes: number;
   readonly maxInflightPerDevice: number;
   readonly helloTimeoutMs: number;
+  /** Device sockets that may wait for their hello at the same time, relay-wide (§3.1). */
+  readonly maxPendingHandshakes: number;
+  /** Device sockets that may wait for their hello at the same time, per client IP. */
+  readonly maxPendingHandshakesPerIp: number;
   readonly logLevel: LogLevel;
   /** WebSocket-level ping interval; a device missing 2 consecutive pongs is dropped. */
   readonly heartbeatIntervalMs: number;
@@ -55,10 +68,13 @@ export const DEFAULT_CONFIG: RelayConfig = Object.freeze({
   accessKey: null,
   allowTokenInUrl: false,
   allowedOrigins: [],
+  allowImplicitDevice: false,
   requestTimeoutMs: 150_000,
   maxBodyBytes: 1_048_576,
   maxInflightPerDevice: 32,
   helloTimeoutMs: 10_000,
+  maxPendingHandshakes: 512,
+  maxPendingHandshakesPerIp: 16,
   logLevel: 'info',
   heartbeatIntervalMs: 25_000,
   rateLimitRequestsPerMin: 600,
@@ -91,6 +107,8 @@ const ENV_NAMES: Partial<Record<keyof RelayConfig, string>> = {
   maxBodyBytes: 'MAX_BODY_BYTES',
   maxInflightPerDevice: 'MAX_INFLIGHT_PER_DEVICE',
   helloTimeoutMs: 'HELLO_TIMEOUT_MS',
+  maxPendingHandshakes: 'MAX_PENDING_HANDSHAKES',
+  maxPendingHandshakesPerIp: 'MAX_PENDING_HANDSHAKES_PER_IP',
   logLevel: 'LOG_LEVEL',
   rateLimitRequestsPerMin: 'RATE_LIMIT_REQUESTS_PER_MIN',
   rateLimitAuthFailuresPerMin: 'RATE_LIMIT_AUTH_FAILURES_PER_MIN',
@@ -122,6 +140,8 @@ export function resolveConfig(overrides: Partial<RelayConfig> = {}): RelayConfig
     maxBodyBytes: checkInt(merged.maxBodyBytes, label('maxBodyBytes'), 1, MAX_BODY_LIMIT),
     maxInflightPerDevice: checkInt(merged.maxInflightPerDevice, label('maxInflightPerDevice'), 1),
     helloTimeoutMs: checkInt(merged.helloTimeoutMs, label('helloTimeoutMs'), 1, MAX_TIMER_MS),
+    maxPendingHandshakes: checkInt(merged.maxPendingHandshakes, label('maxPendingHandshakes'), 1),
+    maxPendingHandshakesPerIp: checkInt(merged.maxPendingHandshakesPerIp, label('maxPendingHandshakesPerIp'), 1),
     heartbeatIntervalMs: checkInt(merged.heartbeatIntervalMs, label('heartbeatIntervalMs'), 1, MAX_TIMER_MS),
     rateLimitRequestsPerMin: checkInt(merged.rateLimitRequestsPerMin, label('rateLimitRequestsPerMin'), 1),
     rateLimitAuthFailuresPerMin: checkInt(merged.rateLimitAuthFailuresPerMin, label('rateLimitAuthFailuresPerMin'), 1),
@@ -167,10 +187,13 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RelayCo
     accessKey: env.RELAY_ACCESS_KEY ? env.RELAY_ACCESS_KEY : undefined,
     allowTokenInUrl: bool('ALLOW_TOKEN_IN_URL'),
     allowedOrigins: str('ALLOWED_ORIGINS')?.split(','),
+    allowImplicitDevice: bool('ALLOW_IMPLICIT_DEVICE'),
     requestTimeoutMs: int('REQUEST_TIMEOUT_MS'),
     maxBodyBytes: int('MAX_BODY_BYTES'),
     maxInflightPerDevice: int('MAX_INFLIGHT_PER_DEVICE'),
     helloTimeoutMs: int('HELLO_TIMEOUT_MS'),
+    maxPendingHandshakes: int('MAX_PENDING_HANDSHAKES'),
+    maxPendingHandshakesPerIp: int('MAX_PENDING_HANDSHAKES_PER_IP'),
     logLevel: logLevel === undefined ? undefined : checkLogLevel(logLevel.toLowerCase(), 'LOG_LEVEL'),
     rateLimitRequestsPerMin: int('RATE_LIMIT_REQUESTS_PER_MIN'),
     rateLimitAuthFailuresPerMin: int('RATE_LIMIT_AUTH_FAILURES_PER_MIN'),
