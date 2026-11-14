@@ -19,6 +19,7 @@ object SettingsCodec {
     internal const val KEY_NEVER_ALLOW_APPS = "never_allow_apps"
     internal const val KEY_REDACT_ONE_TIME_CODES = "redact_one_time_codes"
     internal const val KEY_SECURITY_DEFAULTS_APPLIED = "security_defaults_applied"
+    internal const val KEY_LOCAL_PLUGINS_ENABLED = "local_plugins_enabled"
 
     /** Java/Android package name: at least two dot-separated segments, each starting with a letter. */
     private val PACKAGE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
@@ -64,6 +65,7 @@ object SettingsCodec {
                 neverAllowApps = strings(KEY_NEVER_ALLOW_APPS, defaults.neverAllowApps),
                 redactOneTimeCodes = bool(KEY_REDACT_ONE_TIME_CODES, defaults.redactOneTimeCodes),
                 securityDefaultsApplied = bool(KEY_SECURITY_DEFAULTS_APPLIED, defaults.securityDefaultsApplied),
+                localPluginsEnabled = bool(KEY_LOCAL_PLUGINS_ENABLED, defaults.localPluginsEnabled),
             ),
         )
     }
@@ -81,6 +83,7 @@ object SettingsCodec {
         KEY_NEVER_ALLOW_APPS to settings.neverAllowApps.toSet(),
         KEY_REDACT_ONE_TIME_CODES to settings.redactOneTimeCodes,
         KEY_SECURITY_DEFAULTS_APPLIED to settings.securityDefaultsApplied,
+        KEY_LOCAL_PLUGINS_ENABLED to settings.localPluginsEnabled,
     )
 
     /** Android's limit is far lower in practice; this only bounds pathological stored values. */

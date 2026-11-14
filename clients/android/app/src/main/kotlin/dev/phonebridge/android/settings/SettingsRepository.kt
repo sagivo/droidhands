@@ -34,13 +34,19 @@ data class BridgeSettings(
      * the user's later choices are kept.
      */
     val securityDefaultsApplied: Boolean = false,
+    /**
+     * Settings > Developer > Local plugins: use app plugins imported on the phone (unreviewed; every action
+     * of theirs asks for approval). Off by default (docs/PLUGINS.md §10).
+     */
+    val localPluginsEnabled: Boolean = false,
 ) {
     /** Never print the access key (e.g. in crash logs or debug output). */
     override fun toString(): String =
         "BridgeSettings(relayEnabled=$relayEnabled, relayUrl=$relayUrl, relayAccessKey=${if (relayAccessKey.isEmpty()) "" else "***"}, " +
             "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBindAll=$localServerBindAll, " +
             "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot, neverAllowApps=${neverAllowApps.size} apps, " +
-            "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied)"
+            "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied, " +
+            "localPluginsEnabled=$localPluginsEnabled)"
 }
 
 /**

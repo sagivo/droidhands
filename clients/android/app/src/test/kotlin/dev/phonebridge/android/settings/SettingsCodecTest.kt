@@ -62,9 +62,10 @@ class SettingsCodecTest {
             neverAllowApps = setOf("com.ideomobile.hapoalim", "com.x8bit.bitwarden"),
             redactOneTimeCodes = false,
             securityDefaultsApplied = true,
+            localPluginsEnabled = true,
         )
         val encoded = SettingsCodec.encode(settings)
-        assertEquals(11, encoded.size)
+        assertEquals(12, encoded.size)
         assertEquals(settings, SettingsCodec.decode(encoded))
     }
 
@@ -74,6 +75,8 @@ class SettingsCodecTest {
         assertTrue("one-time codes are hidden by default", defaults.redactOneTimeCodes)
         assertTrue(defaults.neverAllowApps.isEmpty())
         assertFalse("first run still has to pre-select sensitive apps", defaults.securityDefaultsApplied)
+        assertFalse("unreviewed local plugins are off until the user turns them on", defaults.localPluginsEnabled)
+        assertFalse(SettingsCodec.decode(emptyMap<String, Any>()).localPluginsEnabled)
     }
 
     @Test
