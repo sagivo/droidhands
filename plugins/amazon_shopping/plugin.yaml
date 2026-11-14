@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: amazon_shopping
+name: Amazon Shopping
+description: Amazon's shopping app.
+category: shopping
+homepage: https://www.amazon.com
+status: experimental
+android:
+  packages: [com.amazon.mShop.android.shopping]
+
+actions:
+  - id: search
+    title: Search products
+    description: >-
+      Opens Amazon's search results for a product query in the Amazon app. Nothing is added to the cart or bought.
+      Pick the user's own Amazon store (the country they shop in); a different store may make the app switch
+      country or show other prices.
+    keywords: [shop, shopping, product, products, find, price, compare, store, amazon]
+    risk: action
+    params:
+      query:
+        description: What to look for, e.g. "usb c charger 65w".
+        required: true
+        max_length: 200
+      store:
+        description: The Amazon store (website) to search.
+        enum: [amazon.com, amazon.ca, amazon.com.mx, amazon.com.br, amazon.co.uk, amazon.ie, amazon.de, amazon.fr,
+          amazon.es, amazon.it, amazon.nl, amazon.com.be, amazon.se, amazon.pl, amazon.com.tr, amazon.ae, amazon.sa,
+          amazon.eg, amazon.co.za, amazon.co.jp, amazon.sg, amazon.com.au]
+        default: amazon.com
+    confirm: Search {{store}} for "{{query}}"
+    android:
+      url: "https://www.{{store}}/s?k={{query}}"
+    examples:
+      - params: {query: usb c charger}
+        expect: {url: "https://www.amazon.com/s?k=usb%20c%20charger"}
+      - params: {query: wasserkocher, store: amazon.de}
+        expect: {url: "https://www.amazon.de/s?k=wasserkocher"}
+      - params: {query: kettle, store: evil.example}
+        expect: {error: store}
+      - params: {}
+        expect: {error: query}
+
+  - id: product
+    title: Open a product page
+    description: >-
+      Opens a product's page in the Amazon app by its ASIN, the 10-character code after /dp/ in Amazon product links
+      (e.g. B08N5WRWNW). Nothing is added to the cart or bought.
+    keywords: [product, item, link, asin, price, details, reviews]
+    risk: action
+    params:
+      asin:
+        description: The product's 10-character ASIN, e.g. B08N5WRWNW
+        required: true
+        pattern: "^[A-Z0-9]{10}$"
+      store:
+        description: The Amazon store (website) the product is from.
+        enum: [amazon.com, amazon.ca, amazon.com.mx, amazon.com.br, amazon.co.uk, amazon.ie, amazon.de, amazon.fr,
+          amazon.es, amazon.it, amazon.nl, amazon.com.be, amazon.se, amazon.pl, amazon.com.tr, amazon.ae, amazon.sa,
+          amazon.eg, amazon.co.za, amazon.co.jp, amazon.sg, amazon.com.au]
+        default: amazon.com
+    confirm: Open {{store}} product {{asin}}
+    android:
+      url: "https://www.{{store}}/dp/{{asin}}"
+    examples:
+      - params: {asin: B08N5WRWNW}
+        expect: {url: "https://www.amazon.com/dp/B08N5WRWNW"}
+      - params: {asin: B08N5WRWNW, store: amazon.co.uk}
+        expect: {url: "https://www.amazon.co.uk/dp/B08N5WRWNW"}
+      - params: {asin: "b08n5wrwnw/ref=x"}
+        expect: {error: asin}

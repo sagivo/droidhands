@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: firefox
+name: Firefox
+description: Mozilla's web browser.
+category: browser
+homepage: https://www.mozilla.org/firefox/
+status: experimental
+android:
+  # Release Firefox only: open_url pins this exact package (Beta and Nightly have their own).
+  packages: [org.mozilla.firefox]
+
+actions:
+  - id: open_url
+    title: Open a web page
+    description: >-
+      Opens a web page in Firefox (not in another browser or app), given its full http:// or https:// address.
+      It only loads the page; nothing on it is clicked or submitted.
+    keywords: [web, website, page, link, url, browse, internet, open site]
+    params:
+      url:
+        description: The full address, starting with https:// or http://, e.g. https://en.wikipedia.org/wiki/Firefox
+        required: true
+        max_length: 2000
+        pattern: '^https?://\S+$'
+    android:
+      tool:
+        name: url_open
+        args: {url: "{{url}}", package: org.mozilla.firefox}
+    examples:
+      - params: {url: "https://en.wikipedia.org/wiki/Firefox"}
+        expect:
+          tool: {name: url_open, args: {url: "https://en.wikipedia.org/wiki/Firefox", package: org.mozilla.firefox}}
+      - params: {url: "ftp://example.com/file"}
+        expect: {error: url}
+
+  - id: search_google
+    title: Search Google
+    description: >-
+      Opens Google search results for a query in Firefox. It always searches Google, whatever Firefox's default
+      search engine is. Nothing else is opened until someone taps a result.
+    keywords: [search, web search, google, look up, find, internet]
+    risk: action
+    params:
+      query:
+        description: What to search for.
+        required: true
+        max_length: 500
+    confirm: Search Google for "{{query}}" in Firefox
+    android:
+      url: "https://www.google.com/search?q={{query}}"
+    examples:
+      - params: {query: weather in Paris}
+        expect: {url: "https://www.google.com/search?q=weather%20in%20Paris"}
+      - params: {}
+        expect: {error: query}

@@ -1,0 +1,239 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: settings
+name: Settings
+description: Android's system settings.
+category: system
+status: experimental
+android:
+  packages: [com.android.settings]
+
+# Every action only opens a settings screen. None changes a setting: someone still has to flip the switch there.
+# Phone makers may leave out or move a screen; then the action fails and nothing opens.
+actions:
+  - id: wifi
+    title: Open Wi-Fi settings
+    description: >-
+      Opens the Wi-Fi settings screen (on/off switch, nearby and saved networks). It changes nothing by itself;
+      someone still has to switch Wi-Fi or pick a network there.
+    keywords: [wifi, wi-fi, wireless, network, internet, hotspot, connect, wlan]
+    risk: action
+    android:
+      intent: {action: android.settings.WIFI_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.WIFI_SETTINGS, package: com.android.settings}
+
+  - id: bluetooth
+    title: Open Bluetooth settings
+    description: >-
+      Opens the Bluetooth settings screen (on/off switch, paired and nearby devices). It changes nothing by itself;
+      someone still has to switch Bluetooth or pair a device there.
+    keywords: [bluetooth, pair, pairing, headphones, earbuds, speaker, car, devices, connect]
+    risk: action
+    android:
+      intent: {action: android.settings.BLUETOOTH_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.BLUETOOTH_SETTINGS}
+
+  - id: airplane_mode
+    title: Open airplane mode settings
+    description: >-
+      Opens the settings screen with the airplane mode switch (on many phones, the network and internet screen).
+      It does not turn airplane mode on or off by itself.
+    keywords: [airplane, aeroplane, flight mode, flight, plane, offline, radio]
+    risk: action
+    android:
+      intent: {action: android.settings.AIRPLANE_MODE_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.AIRPLANE_MODE_SETTINGS}
+
+  - id: display
+    title: Open display settings
+    description: >-
+      Opens the display settings screen (brightness, dark theme, screen timeout, font size). It changes nothing by
+      itself.
+    keywords: [display, screen, brightness, dark mode, dark theme, timeout, font size, night light]
+    risk: action
+    android:
+      intent: {action: android.settings.DISPLAY_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.DISPLAY_SETTINGS}
+
+  - id: sound
+    title: Open sound settings
+    description: >-
+      Opens the sound and vibration settings screen (volumes, ringtone, Do Not Disturb). It changes nothing by
+      itself; to change a volume directly use volume_set or ringer_mode_set.
+    keywords: [sound, volume, ringtone, vibration, vibrate, silent, do not disturb, notification sound]
+    risk: action
+    android:
+      intent: {action: android.settings.SOUND_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.SOUND_SETTINGS}
+
+  - id: battery
+    title: Open battery settings
+    description: >-
+      Opens the battery screen with battery level and usage by app. It changes nothing by itself. For the level and
+      charging state alone, device_status is faster.
+    keywords: [battery, power, usage, charge, charging, drain, battery life]
+    risk: action
+    android:
+      intent: {action: android.intent.action.POWER_USAGE_SUMMARY}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.intent.action.POWER_USAGE_SUMMARY}
+
+  - id: battery_saver
+    title: Open battery saver settings
+    description: >-
+      Opens the battery saver settings screen. It does not turn battery saver on or off by itself.
+    keywords: [battery saver, power saving, low power, save battery, battery]
+    risk: action
+    android:
+      intent: {action: android.settings.BATTERY_SAVER_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.BATTERY_SAVER_SETTINGS}
+
+  - id: location
+    title: Open location settings
+    description: >-
+      Opens the location settings screen (location on/off and which apps may use it). It changes nothing by itself.
+    keywords: [location, gps, position, location services, tracking, where]
+    risk: action
+    android:
+      intent: {action: android.settings.LOCATION_SOURCE_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.LOCATION_SOURCE_SETTINGS}
+
+  - id: notifications
+    title: Open notification settings
+    description: >-
+      Opens the list of apps that send notifications, where each app's notifications can be turned on or off. It
+      changes nothing by itself. Needs Android 13 or later; use app_notifications for one app.
+    keywords: [notifications, alerts, notify, badges, app notifications, mute]
+    risk: action
+    android:
+      intent: {action: android.settings.ALL_APPS_NOTIFICATION_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.ALL_APPS_NOTIFICATION_SETTINGS}
+
+  - id: app_notifications
+    title: Open an app's notification settings
+    description: >-
+      Opens the notification settings of one app, by package name (apps_list shows it). It changes nothing by
+      itself. PhoneBridge's own settings can't be opened this way.
+    keywords: [notifications, alerts, mute, app notifications, notification channels]
+    risk: action
+    params:
+      package:
+        description: The app's package name, e.g. com.whatsapp (apps_list shows it).
+        required: true
+        max_length: 200
+        pattern: '^(?!dev\.phonebridge(\.|$))[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
+    confirm: Open the notification settings of {{package}}
+    android:
+      intent:
+        action: android.settings.APP_NOTIFICATION_SETTINGS
+        extras:
+          android.provider.extra.APP_PACKAGE: "{{package}}"
+    examples:
+      - params: {package: com.whatsapp}
+        expect:
+          intent:
+            action: android.settings.APP_NOTIFICATION_SETTINGS
+            package: com.android.settings
+            extras: {android.provider.extra.APP_PACKAGE: com.whatsapp}
+      - params: {package: dev.phonebridge.android}
+        expect: {error: package}
+      - params: {package: WhatsApp}
+        expect: {error: package}
+
+  - id: app_details
+    title: Open an app's info page
+    description: >-
+      Opens the App info page of one app, by package name (apps_list shows it): storage, permissions, battery use,
+      Open and Force stop buttons. It changes nothing by itself. PhoneBridge's own page can't be opened this way.
+    keywords: [app info, app details, permissions, storage, cache, force stop, app settings, uninstall]
+    risk: action
+    params:
+      package:
+        description: The app's package name, e.g. com.spotify.music (apps_list shows it).
+        required: true
+        max_length: 200
+        pattern: '^(?!dev\.phonebridge(\.|$))[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
+    confirm: Open the App info page of {{package}}
+    android:
+      intent:
+        action: android.settings.APPLICATION_DETAILS_SETTINGS
+        data: "package:{{package}}"
+    examples:
+      - params: {package: com.spotify.music}
+        expect:
+          intent:
+            action: android.settings.APPLICATION_DETAILS_SETTINGS
+            package: com.android.settings
+            data: "package:com.spotify.music"
+      - params: {package: dev.phonebridge}
+        expect: {error: package}
+      - params: {package: dev.phonebridge.android.debug}
+        expect: {error: package}
+      - params: {}
+        expect: {error: package}
+
+  - id: storage
+    title: Open storage settings
+    description: >-
+      Opens the storage settings screen (used and free space by category). It deletes nothing by itself.
+    keywords: [storage, space, free space, memory, disk, full, files]
+    risk: action
+    android:
+      intent: {action: android.settings.INTERNAL_STORAGE_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.INTERNAL_STORAGE_SETTINGS}
+
+  - id: date_time
+    title: Open date and time settings
+    description: >-
+      Opens the date and time settings screen (automatic time, time zone, 24-hour format). It changes nothing by
+      itself.
+    keywords: [date, time, time zone, timezone, clock, 24-hour, format]
+    risk: action
+    android:
+      intent: {action: android.settings.DATE_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.DATE_SETTINGS}
+
+  - id: data_usage
+    title: Open mobile data usage
+    description: >-
+      Opens the data usage screen (mobile data used by app and the data warning or limit). It changes nothing by
+      itself. Needs Android 9 or later and a phone with mobile data.
+    keywords: [data, mobile data, cellular, usage, data limit, roaming, sim]
+    risk: action
+    android:
+      intent: {action: android.settings.DATA_USAGE_SETTINGS}
+    examples:
+      - params: {}
+        expect:
+          intent: {action: android.settings.DATA_USAGE_SETTINGS}

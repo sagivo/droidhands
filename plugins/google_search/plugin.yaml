@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_search
+name: Google
+description: The Google app for Google Search.
+category: browser
+homepage: https://www.google.com
+status: experimental
+android:
+  packages: [com.google.android.googlequicksearchbox]
+
+actions:
+  # Replaces the discovered web_search action (same intent) with a better description.
+  - id: web_search
+    title: Search the web
+    description: >-
+      Searches the web with Google and shows the results in the Google app. Nothing else is opened until someone
+      taps a result.
+    keywords: [search, google, look up, find, web, internet, question, answer]
+    risk: action
+    params:
+      query:
+        description: What to search for.
+        required: true
+        max_length: 500
+    confirm: Search Google for "{{query}}"
+    android:
+      intent:
+        action: android.intent.action.WEB_SEARCH
+        extras:
+          query: "{{query}}"
+    examples:
+      - params: {query: weather tomorrow}
+        expect:
+          intent:
+            action: android.intent.action.WEB_SEARCH
+            package: com.google.android.googlequicksearchbox
+            extras: {query: weather tomorrow}
+      - params: {}
+        expect: {error: query}
