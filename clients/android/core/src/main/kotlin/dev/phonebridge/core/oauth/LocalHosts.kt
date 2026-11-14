@@ -11,7 +11,7 @@ import java.net.UnknownHostException
  *
  * The issuer and resource URLs are built from the `Host` the agent used, so they work over every
  * route (adb forward, Tailscale, Wi-Fi) without configuration. A `Host` is only trusted when it
- * names the address the connection actually arrived on ([localAddress], the socket's own address),
+ * names the address the connection actually arrived on (the socket's own address),
  * so a web page that rebinds its DNS name to the phone (or anything else lying in `Host`) gets no
  * metadata and cannot start a pairing:
  *
@@ -40,11 +40,12 @@ object LocalHosts {
     private const val MAGIC_DNS_SUFFIX = ".ts.net"
 
     /**
-     * `http://<authority>` for a request carrying [hostHeader] that arrived on [localAddress], or null
+     * `http://<authority>` for a request carrying [hostHeader] that arrived on [arrivedOn], or null
      * when that `Host` does not name this phone on that route (see the class comment).
      */
-    fun issuer(hostHeader: String?, localAddress: InetAddress?): String? {
-        val route = localAddress?.let(::route) ?: return null
+    fun issuer(hostHeader: String?, arrivedOn: InetAddress?): String? {
+        val localAddress = arrivedOn?.let(::unmapped) ?: return null
+        val route = route(localAddress) ?: return null
         val host = hostHeader?.let(::parse) ?: return null
         val accepted = when {
             host.address != null -> when (route) {
@@ -57,8 +58,9 @@ object LocalHosts {
         return if (accepted) "http://${host.authority}" else null
     }
 
-    /** How a connection that arrived on [address] reached the phone, or null for any other address. */
-    fun route(address: InetAddress): Route? {
+    /** How a connection that arrived on [arrivedOn] reached the phone, or null for any other address. */
+    fun route(arrivedOn: InetAddress): Route? {
+        val address = unmapped(arrivedOn)
         val b = address.address.map { it.toInt() and 0xff }
         return when {
             address.isLoopbackAddress -> Route.LOOPBACK
@@ -111,6 +113,13 @@ object LocalHosts {
         }
         // The agent's own spelling (e.g. `::1`), so the URLs match the one it was given.
         return HostHeader(hostPart, port, address)
+    }
+
+    /** [address] as IPv4 if it is an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`, as dual-stack sockets may report). */
+    private fun unmapped(address: InetAddress): InetAddress {
+        val b = address.address
+        if (b.size != 16 || (0 until 10).any { b[it] != 0.toByte() } || b[10] != 0xff.toByte() || b[11] != 0xff.toByte()) return address
+        return InetAddress.getByAddress(b.copyOfRange(12, 16))
     }
 
     /** An IP literal (already syntax-checked, so no name lookup happens). */

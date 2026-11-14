@@ -1,6 +1,7 @@
 package dev.phonebridge.core.oauth
 
 import org.junit.Test
+import java.net.Inet6Address
 import java.net.InetAddress
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -67,6 +68,13 @@ class LocalHostsTest {
         assertNull(LocalHosts.issuer("pixel.local:8765", local))
         assertNull(LocalHosts.issuer("pixel.tail1234.ts.net:8765", local))
         assertNull(LocalHosts.issuer("localhost:8765", local))
+    }
+
+    @Test
+    fun ipv4MappedSocketAddressesCountAsIpv4() {
+        val mapped = Inet6Address.getByAddress(null, ByteArray(16).also { it[10] = -1; it[11] = -1; it[12] = 192.toByte(); it[13] = 168.toByte(); it[14] = 1; it[15] = 20 }, -1)
+        assertEquals(LocalHosts.Route.LAN, LocalHosts.route(mapped))
+        assertEquals("http://192.168.1.20:8765", LocalHosts.issuer("192.168.1.20:8765", mapped))
     }
 
     @Test
