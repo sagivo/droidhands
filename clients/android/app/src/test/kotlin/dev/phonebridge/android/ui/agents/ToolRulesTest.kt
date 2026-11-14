@@ -66,4 +66,16 @@ class ToolRulesTest {
         assertEquals("1 blocked", ToolRules.summary(rules, visibleTools = setOf("a", "zzz")))
         assertEquals("No rules: the approval setting decides", ToolRules.summary(rules, visibleTools = emptySet()))
     }
+
+    @Test
+    fun appActionRunOffersNoAllowBecauseItCannotSkipApprovals() {
+        val run = ToolInfo("app_action_run", "Run an app action", Scopes.APPS, Risk.ACTION)
+        assertEquals(listOf(RuleChoice.DEFAULT, RuleChoice.ASK, RuleChoice.BLOCK), ToolRules.choices(run, RuleChoice.DEFAULT))
+        // An Allow rule set earlier stays visible so it can be changed.
+        assertEquals(RuleChoice.entries, ToolRules.choices(run, RuleChoice.ALLOW))
+        assertEquals(RuleChoice.entries, ToolRules.choices(tools[1], RuleChoice.DEFAULT))
+        assertEquals("Asks you first before every app action", ToolRules.meaning(RuleChoice.ASK, run, ConfirmPolicy.NEVER))
+        assertEquals("Each app action's own rule and risk decide", ToolRules.meaning(RuleChoice.ALLOW, run, ConfirmPolicy.NEVER))
+        assertEquals("Always asks you first", ToolRules.meaning(RuleChoice.ASK, tools[1], ConfirmPolicy.NEVER))
+    }
 }

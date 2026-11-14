@@ -347,6 +347,27 @@ class McpDispatchTest {
     }
 
     @Test
+    fun anAskRuleOnTheDispatchingToolForcesOneApproval() = runTest {
+        val s = server()
+        val token = issue(policy = ConfirmPolicy.NEVER) { it.copy(toolRules = mapOf("run_it" to ToolRule.ASK)) }
+        s.run(token, """{"to":"com.app/play","q":"x"}""")
+        assertEquals("com.app/play", prompts.single().toolName)
+        assertEquals("approved by user; via run_it", lastAudit().detail)
+        // An internally-confirming resolved tool still asks exactly once, with its resolved details.
+        prompts.clear()
+        assertFalse(s.run(token, """{"to":"real_send"}""").isError())
+        assertEquals("Send 'hi' to Tania Cohen", prompts.single().summary)
+        assertEquals(2, sideEffects.get())
+    }
+
+    @Test
+    fun anAllowRuleOnTheDispatchingToolKeepsTheResolvedToolsApproval() = runTest {
+        val token = issue { it.copy(toolRules = mapOf("run_it" to ToolRule.ALLOW)) }
+        server().run(token, """{"to":"com.app/send","q":"hi"}""")
+        assertEquals("com.app/send", prompts.single().toolName)
+    }
+
+    @Test
     fun rateLimitsCountEachDispatchedCallOnce() = runTest {
         val s = server(RateLimits(callsPerMinute = 2))
         val token = issue()

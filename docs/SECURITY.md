@@ -120,7 +120,8 @@ on import. They never widen what an agent may do:
 
 * Each app action is checked as a tool of its own, `<package>/<action id>`, against the agent's scopes,
   risk cap, per-tool rules, active hours and rate limits, approved according to its risk and audited
-  under that name. `app_action_run` itself needs `apps` and must not be blocked or above the risk cap.
+  under that name. `app_action_run` itself needs `apps` and must not be blocked or above the risk cap; an ASK rule on it
+  makes every action ask first.
   Actions that alias a built-in tool run exactly as that tool, with its scope, approval and audit entry.
 * App access applies first: blocked apps' actions are hidden and refused (`DENIED_APP`).
 * Intents and links are pinned to the app's package, call intents and dangerous URL schemes are refused

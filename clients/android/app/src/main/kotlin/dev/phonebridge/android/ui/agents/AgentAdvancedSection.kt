@@ -134,26 +134,27 @@ internal fun ToolGroupHeader(scope: String) {
     )
 }
 
-/** One tool with its Default / Allow / Ask / Block choice. */
+/** One tool with its Default / Allow / Ask / Block choice ([ToolRules.choices]). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ToolRuleRow(tool: ToolInfo, choice: RuleChoice, policy: ConfirmPolicy, onChoose: (RuleChoice) -> Unit) {
+    val choices = ToolRules.choices(tool, choice)
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(tool.title, style = MaterialTheme.typography.bodyLarge)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tool.name, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                " · ${ToolRules.riskLabel(tool.risk)} · ${ToolRules.choiceMeaning(choice, tool.risk, policy)}",
+                " · ${ToolRules.riskLabel(tool.risk)} · ${ToolRules.meaning(choice, tool, policy)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            RuleChoice.entries.forEachIndexed { index, option ->
+            choices.forEachIndexed { index, option ->
                 SegmentedButton(
                     selected = option == choice,
                     onClick = { onChoose(option) },
-                    shape = SegmentedButtonDefaults.itemShape(index, RuleChoice.entries.size),
+                    shape = SegmentedButtonDefaults.itemShape(index, choices.size),
                     icon = {},
                     modifier = Modifier.semantics { contentDescription = "${option.label} for ${tool.title}" },
                 ) { Text(option.label, maxLines = 1) }

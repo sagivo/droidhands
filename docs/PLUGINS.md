@@ -393,8 +393,9 @@ At run time:
   `<package>/<action id>` (e.g. `com.spotify.music/play`), against the agent's scopes, risk cap
   and per-tool rules. It is approved according to its `risk`, rate-limited, and audited under that
   name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
-  Read-only agent can't run app actions). Parameters are checked, and the recipe rendered, before
-  any approval prompt. In the app, these rules are set per agent under *Agents → (agent) → Advanced →
+  Read-only agent can't run app actions). An *Ask* rule on `app_action_run` makes every app action ask
+  first; an *Allow* rule on it never skips the approval an action needs, so the app doesn't offer it there.
+  Parameters are checked, and the recipe rendered, before any approval prompt. In the app, these rules are set per agent under *Agents → (agent) → Advanced →
   App action rules* (grouped by app); the global never-allow list also has a switch on each app's page,
   *Apps → (app) → Block for all agents*.
 * **Pinned and confined:** intents and links are pinned to the app's package, and recipes act only
