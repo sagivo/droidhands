@@ -40,7 +40,8 @@ sealed interface PairingApproval {
 
 /**
  * One-tap agent pairing on the phone (docs/PROTOCOL.md §5.3 step 7): implements the core
- * [PairingHandler] that the relay client calls for `pair_request`, shows the prompt through
+ * [PairingHandler] that the relay client calls for `pair_request` (and the local server's
+ * [dev.phonebridge.core.oauth.LocalOAuth] for local pairings, §4.1), shows the prompt through
  * [prompts], and mints the agent's token when the user allows it.
  *
  * * [onPairRequest] suspends until the user decides, the request expires, or the relay cancels

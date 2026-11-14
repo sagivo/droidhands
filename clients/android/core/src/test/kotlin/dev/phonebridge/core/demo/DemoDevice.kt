@@ -109,7 +109,7 @@ fun main() {
 
     env["DEMO_LOCAL_PORT"]?.trim()?.toIntOrNull()?.let { port ->
         val oauth = pairing?.let {
-            LocalOAuth(it, identity.deriveKey(LOCAL_OAUTH_KEY_PURPOSE), deviceName = { "Demo device" }, log = System.err::println)
+            LocalOAuth(it, identity.deriveKey(LocalOAuth.CLIENT_KEY_PURPOSE), deviceName = { "Demo device" }, log = System.err::println)
         }
         val local = LocalHttpServer(port = port, handler = server::handle, oauth = oauth)
         local.start()
@@ -139,9 +139,6 @@ fun main() {
 
     runBlocking { awaitCancellation() }
 }
-
-/** [DeviceIdentity.deriveKey] purpose of the local server's OAuth client ids (as in the app). */
-private const val LOCAL_OAUTH_KEY_PURPOSE = "local-oauth-clients"
 
 /**
  * Pairing handler for `DEMO_PAIR` = `approve` | `deny` | `ignore`; null (answer `busy`) otherwise.

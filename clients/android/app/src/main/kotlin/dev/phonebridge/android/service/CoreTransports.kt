@@ -7,6 +7,7 @@ import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.core.auth.DeviceIdentity
 import dev.phonebridge.core.mcp.TransportRequest
 import dev.phonebridge.core.mcp.TransportResponse
+import dev.phonebridge.core.oauth.LocalOAuth
 import dev.phonebridge.core.transport.DeviceHello
 import dev.phonebridge.core.transport.LocalHttpServer
 import dev.phonebridge.core.transport.PairingHandler
@@ -59,9 +60,16 @@ internal object CoreTransports {
         }
     }
 
-    fun localFactory(handler: suspend (TransportRequest) -> TransportResponse): LocalTransportFactory =
+    /**
+     * @param oauth one-tap pairing on the local server (docs/PROTOCOL.md §4.1); resolved when each
+     *   server is created, null serves only `/mcp` (manual tokens).
+     */
+    fun localFactory(
+        handler: suspend (TransportRequest) -> TransportResponse,
+        oauth: () -> LocalOAuth? = { null },
+    ): LocalTransportFactory =
         LocalTransportFactory { config ->
-            val server = LocalHttpServer(port = config.port, bindAddress = config.bindAddress, handler = handler)
+            val server = LocalHttpServer(port = config.port, bindAddress = config.bindAddress, handler = handler, oauth = oauth())
             object : LocalTransport {
                 override fun start() = server.start()
                 override fun stop() = server.stop()

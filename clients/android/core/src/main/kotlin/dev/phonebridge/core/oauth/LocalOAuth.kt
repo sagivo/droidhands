@@ -702,6 +702,9 @@ class LocalOAuth(
         json(405, error("invalid_request", "use ${allow.substringBefore(',')}"), mapOf("allow" to allow))
 
     companion object {
+        /** [dev.phonebridge.core.auth.DeviceIdentity.deriveKey] purpose of the [clientKey] platforms use. */
+        const val CLIENT_KEY_PURPOSE = "local-oauth-clients"
+
         /** Longest OAuth request body (registration metadata, token requests) the server reads. */
         const val MAX_BODY_BYTES = 16 * 1024
 

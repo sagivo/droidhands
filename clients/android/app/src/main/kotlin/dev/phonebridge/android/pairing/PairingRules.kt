@@ -5,7 +5,8 @@ import dev.phonebridge.core.transport.PairingDecision
 import dev.phonebridge.core.transport.PairingRequest
 
 /**
- * Validation and sanitizing of relay `pair_request`s before anything is shown (pure, unit-tested).
+ * Validation and sanitizing of `pair_request`s (from the relay or the local server) before anything
+ * is shown (pure, unit-tested).
  * The relay is not trusted with what the user reads: names and hosts are cleaned of control and
  * bidi characters, and malformed requests are refused without a prompt.
  */

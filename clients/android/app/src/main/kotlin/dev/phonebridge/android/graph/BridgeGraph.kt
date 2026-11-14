@@ -42,6 +42,7 @@ import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.mcp.McpServer
 import dev.phonebridge.core.mcp.ServerInfo
 import dev.phonebridge.core.mcp.capabilitiesTool
+import dev.phonebridge.core.oauth.LocalOAuth
 import dev.phonebridge.core.plugins.AppActionCatalog
 import dev.phonebridge.core.plugins.PluginSource
 import dev.phonebridge.core.policy.GlobalSecurity
@@ -152,6 +153,20 @@ class BridgeGraph private constructor(val app: Application) {
         )
     }
 
+    /**
+     * One-tap pairing on the local server (docs/PROTOCOL.md §4.1): the relay's OAuth flow answered
+     * by the phone itself, prompting through [pairing] like relay pairings. Client ids are signed
+     * with a key derived from the device identity, so registrations survive restarts.
+     */
+    val localOAuth: LocalOAuth by lazy {
+        LocalOAuth(
+            pairing = pairing,
+            clientKey = identity.deriveKey(LocalOAuth.CLIENT_KEY_PURPOSE),
+            deviceName = { CoreTransports.deviceName(app) },
+            log = { Log.i(TAG, it) },
+        )
+    }
+
     private val mcpServerLazy = lazy {
         McpServer(
             registry = registry,
@@ -204,7 +219,7 @@ class BridgeGraph private constructor(val app: Application) {
             scope = appScope,
             settings = { settings.state.value },
             relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle, pairingHandler = { pairing }),
-            localFactory = CoreTransports.localFactory(requestHandler::handle),
+            localFactory = CoreTransports.localFactory(requestHandler::handle, oauth = { localOAuth }),
             lanAddresses = NetworkAddresses::nonLoopbackIpv4,
             onRelayStatus = ::updateRelayStatus,
             onLocalStatus = ::updateLocalServerStatus,
