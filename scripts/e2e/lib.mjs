@@ -114,6 +114,13 @@ export function fixtureEvents(pkg) {
   });
 }
 
+/** Thrown (via skip()) by a step whose prerequisites are missing: reported as SKIP, not as a failure. */
+export class Skip extends Error {}
+
+export function skip(reason) {
+  throw new Skip(reason);
+}
+
 /** Very small test runner with readable output. */
 export class Runner {
   constructor() { this.results = []; }
@@ -128,6 +135,11 @@ export class Runner {
       this.results.push({ name, ok: true, ms, detail });
     } catch (e) {
       const ms = Date.now() - t0;
+      if (e instanceof Skip) {
+        console.log(`SKIP (${e.message})`);
+        this.results.push({ name, ok: true, skipped: true, ms, detail: e.message });
+        return;
+      }
       console.log(`FAIL (${ms} ms)\n    ${String(e?.stack || e).slice(0, 1500).replace(/\n/g, '\n    ')}`);
       this.results.push({ name, ok: false, ms, error: String(e?.message || e) });
     }
@@ -135,7 +147,10 @@ export class Runner {
 
   summary() {
     const failed = this.results.filter((r) => !r.ok);
-    console.log(`\n${this.results.length - failed.length}/${this.results.length} passed`);
+    const skipped = this.results.filter((r) => r.skipped);
+    const ran = this.results.length - skipped.length;
+    console.log(`\n${ran - failed.length}/${ran} passed${skipped.length ? `, ${skipped.length} skipped` : ''}`);
+    for (const s of skipped) console.log(`  - ${s.name}: skipped (${s.detail})`);
     for (const f of failed) console.log(`  ✗ ${f.name}: ${f.error.slice(0, 300)}`);
     return failed.length === 0;
   }
