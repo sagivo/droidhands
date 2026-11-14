@@ -33,6 +33,11 @@ class PendingConfirmation internal constructor(
 class PendingConfirmations(
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
+    /**
+     * Called with [hasPending]'s new value, synchronously and in order, whenever it is published: by the
+     * time [register] returns (before the prompt is shown) it has been told `true`.
+     */
+    private val onPendingChanged: (Boolean) -> Unit = {},
 ) {
     private val entries = ConcurrentHashMap<String, PendingConfirmation>()
     private val sequence = AtomicLong()
@@ -95,6 +100,7 @@ class PendingConfirmations(
         val pending = all().map { it.request }
         _requests.value = pending
         _hasPending.value = pending.isNotEmpty()
+        onPendingChanged(pending.isNotEmpty())
     }
 
     private fun newNonce(): String {

@@ -22,7 +22,7 @@ import dev.phonebridge.android.ui.theme.PhoneBridgeTheme
  * dismisses it. The window is hardened with [applySecureWindow]: no screenshots or recording
  * (FLAG_SECURE), other apps' overlays hidden on Android 12+, obscured touches filtered (tapjacking)
  * and, on Android 14+, accessibility-data-sensitive so non-tool accessibility services can't read or
- * press it.
+ * press it. While resumed, [ApprovalScreens] keeps PhoneBridge's own screen control paused.
  * Finishes when none of the requests it was opened for is pending any more.
  */
 class ConfirmationActivity : ComponentActivity() {
@@ -56,6 +56,16 @@ class ConfirmationActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ApprovalScreens.resumed(this)
+    }
+
+    override fun onPause() {
+        ApprovalScreens.paused(this)
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {

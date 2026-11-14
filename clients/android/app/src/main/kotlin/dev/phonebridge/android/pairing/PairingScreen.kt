@@ -184,7 +184,7 @@ internal fun PairingScreen(
                 Button(
                     onClick = {
                         val level = PairingPresentation.level(levelName)
-                        onAllow(PairingChoice(name = name, scopes = level.scopes, policy = policy))
+                        onAllow(PairingChoice.of(name, level, policy))
                     },
                     enabled = armed && secondsLeft > 0 && !approving,
                     modifier = Modifier.weight(1f),

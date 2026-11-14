@@ -57,6 +57,11 @@ class PendingPairing internal constructor(
 class PendingPairings(
     private val maxPending: Int = PairingRules.MAX_PENDING,
     private val random: SecureRandom = SecureRandom(),
+    /**
+     * Called with "at least one request is pending", synchronously and in order, whenever [requests] is
+     * published: by the time [register] returns (before the prompt is shown) it has been told `true`.
+     */
+    private val onPendingChanged: (Boolean) -> Unit = {},
 ) {
     private val entries = ConcurrentHashMap<String, PendingPairing>()
     private val sequence = AtomicLong()
@@ -100,7 +105,9 @@ class PendingPairings(
 
     /** Must hold the monitor. */
     private fun publish() {
-        _requests.value = all().map { it.request }
+        val pending = all().map { it.request }
+        _requests.value = pending
+        onPendingChanged(pending.isNotEmpty())
     }
 
     private fun newNonce(): String {

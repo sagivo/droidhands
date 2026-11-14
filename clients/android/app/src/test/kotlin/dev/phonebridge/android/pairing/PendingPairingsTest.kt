@@ -24,6 +24,20 @@ class PendingPairingsTest {
     }
 
     @Test
+    fun pendingChangesAreReportedBeforeRegisterReturns() {
+        val reported = mutableListOf<Boolean>()
+        val guarded = PendingPairings(maxPending = 3, onPendingChanged = { reported += it })
+        val a = guarded.register(pairingRequest(id = "p_1"))!!
+        // The screen-control guard is up before the prompt can be shown.
+        assertEquals(listOf(true), reported)
+        val b = guarded.register(pairingRequest(id = "p_2"))!!
+        guarded.remove(a)
+        assertEquals("p_2 is still waiting", true, reported.last())
+        guarded.remove(b)
+        assertEquals(false, reported.last())
+    }
+
+    @Test
     fun duplicateIdsAndOverflowFailClosed() {
         assertNotNull(registry.register(pairingRequest(id = "p_1")))
         assertNull(registry.register(pairingRequest(id = "p_1")))

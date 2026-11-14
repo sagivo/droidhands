@@ -237,6 +237,53 @@ class TransportControllerTest {
     }
 
     @Test
+    fun retryRelayOnlyRestartsARelayWaitingToRetry() = runTest {
+        val h = Harness(this, relayOn)
+        h.controller.retryRelay()
+        runCurrent()
+        assertTrue("inactive controller ignores retries", h.relays.isEmpty())
+
+        h.controller.apply()
+        runCurrent()
+        h.controller.retryRelay()
+        runCurrent()
+        assertEquals("a connection attempt in progress is left alone", 1, h.relays.size)
+
+        h.relays[0].status.value = RelayStatus.Connected("https://relay.example.com/mcp")
+        runCurrent()
+        h.controller.retryRelay(alsoWhileConnecting = true)
+        runCurrent()
+        assertEquals("a connected relay is never restarted", 1, h.relays.size)
+
+        h.relays[0].status.value = RelayStatus.Error("relay restarting", retryInMs = 32_000)
+        runCurrent()
+        h.controller.retryRelay()
+        runCurrent()
+        assertEquals("waiting out a backoff: reconnect now", 2, h.relays.size)
+        assertEquals(1, h.relays[0].stops)
+        assertEquals(1, h.relays[1].starts)
+        assertEquals(RelayStatus.Connecting, h.relayStatus)
+
+        h.relays[1].status.value = RelayStatus.Error("access key rejected", null, fatal = true)
+        runCurrent()
+        h.controller.retryRelay(alsoWhileConnecting = true)
+        runCurrent()
+        assertEquals("fatal errors wait for a settings change", 2, h.relays.size)
+    }
+
+    @Test
+    fun retryRelayWhileConnectingRestartsAStalledAttempt() = runTest {
+        val h = Harness(this, relayOn)
+        h.controller.apply()
+        runCurrent()
+        assertEquals(RelayStatus.Connecting, h.relays[0].status.value)
+        h.controller.retryRelay(alsoWhileConnecting = true)
+        runCurrent()
+        assertEquals(2, h.relays.size)
+        assertEquals(1, h.relays[0].stops)
+    }
+
+    @Test
     fun refreshLocalUrlsPicksUpNewAddresses() = runTest {
         val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBindAll = true))
         h.controller.apply()

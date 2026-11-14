@@ -79,6 +79,41 @@ class UnlockWaitTest {
     }
 
     @Test
+    fun pausedBeforeTheWaitNeverReportsUsable() = runTest {
+        assertEquals(UnlockOutcome.PAUSED, UnlockWait.await({ true }, never, Channel(), timeoutMs = 60_000, isPaused = { true }))
+        assertEquals(UnlockOutcome.PAUSED, UnlockWait.await({ true }, { true }, Channel(), timeoutMs = 60_000, isPaused = { true }))
+        assertEquals(0L, currentTime)
+    }
+
+    @Test
+    fun pausingDuringTheWaitEndsItEvenIfThePhoneIsThenUnlocked() = runTest {
+        var paused = false
+        var usable = false
+        val wakeups = Channel<Unit>(Channel.CONFLATED)
+        val wait = async { UnlockWait.await({ usable }, never, wakeups, timeoutMs = 60_000, isPaused = { paused }) }
+        advanceTimeBy(5_000)
+        // The user taps Pause on the lock screen, then unlocks to look: the unlock broadcast must not let the call run.
+        paused = true
+        usable = true
+        wakeups.send(Unit)
+        runCurrent()
+        assertEquals(UnlockOutcome.PAUSED, wait.await())
+        assertEquals(5_000L, currentTime)
+    }
+
+    @Test
+    fun pollingNoticesAPauseWithoutBroadcasts() = runTest {
+        var paused = false
+        val wait = async { UnlockWait.await(never, never, Channel(), timeoutMs = 60_000, isPaused = { paused }) }
+        launch {
+            delay(2_100)
+            paused = true
+        }
+        assertEquals(UnlockOutcome.PAUSED, wait.await())
+        assertTrue("found by the 500 ms poll, at $currentTime", currentTime in 2_100..2_600)
+    }
+
+    @Test
     fun timesOutWhenStillLocked() = runTest {
         val outcome = UnlockWait.await(never, never, Channel(), timeoutMs = 60_000)
         assertEquals(UnlockOutcome.TIMED_OUT, outcome)
@@ -115,5 +150,6 @@ class UnlockWaitTest {
         assertTrue(declined, declined.startsWith("Sending a WhatsApp message needs the phone unlocked") && declined.contains("Don't retry"))
         val timedOut = UnlockPrompt.timedOutMessage("This action", 60_000)
         assertTrue(timedOut, timedOut.contains("60 s") && timedOut.contains("Ask the user to unlock the phone"))
+        assertTrue(UnlockPrompt.PAUSED_MESSAGE, UnlockPrompt.PAUSED_MESSAGE.contains("paused") && UnlockPrompt.PAUSED_MESSAGE.contains("nothing was done"))
     }
 }
