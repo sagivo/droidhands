@@ -29,6 +29,14 @@ class ToolRulesTest {
     }
 
     @Test
+    fun toolsAboveTheRiskCapAreNotOffered() {
+        val all = setOf(Scopes.MESSAGES_SEND, Scopes.DEVICE, Scopes.SCREEN_CONTROL)
+        assertEquals(listOf("device_status"), ToolRules.groups(tools, all, Risk.READ).flatMap { g -> g.tools.map { it.name } })
+        assertEquals(listOf("device_status", "ui_tap"), ToolRules.groups(tools, all, Risk.ACTION).flatMap { g -> g.tools.map { it.name } })
+        assertEquals(4, ToolRules.groups(tools, all, null).sumOf { it.tools.size })
+    }
+
+    @Test
     fun choicesMapToRules() {
         RuleChoice.entries.forEach { assertEquals(it, RuleChoice.of(it.rule)) }
         assertEquals(RuleChoice.DEFAULT, RuleChoice.of(null))

@@ -78,9 +78,7 @@ class TokensViewModel(app: Application) : AndroidViewModel(app) {
         creating = true
         viewModelScope.launch {
             try {
-                val issued = withContext(Dispatchers.IO) {
-                    tokenManager.issue(d.trimmedName, d.scopes, d.policy, d.expiry.ttlMillis)
-                }
+                val issued = withContext(Dispatchers.IO) { issue(d) }
                 _screen.value = TokenScreen.Created(issued)
             } catch (e: CancellationException) {
                 throw e
@@ -90,6 +88,26 @@ class TokensViewModel(app: Application) : AndroidViewModel(app) {
             } finally {
                 creating = false
             }
+        }
+    }
+
+    /**
+     * Issues the token, then applies the draft's risk cap. Nobody holds the plaintext before this
+     * returns, so the token can't be used uncapped; if the cap can't be saved, the token is deleted
+     * rather than handed out without the limit the user chose. Blocking (disk).
+     */
+    private fun issue(d: TokenDraft): IssuedToken {
+        val issued = tokenManager.issue(d.trimmedName, d.scopes, d.policy, d.expiry.ttlMillis)
+        val cap = d.maxRisk ?: return issued
+        return try {
+            issued.copy(record = tokenManager.update(issued.record.id) { it.copy(maxRisk = cap) })
+        } catch (e: Exception) {
+            try {
+                tokenManager.delete(issued.record.id)
+            } catch (cleanup: Exception) {
+                e.addSuppressed(cleanup)
+            }
+            throw e
         }
     }
 

@@ -27,13 +27,18 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.ui.components.StatusPill
+import dev.phonebridge.android.ui.components.rememberArming
 import dev.phonebridge.android.ui.connect.PairingWatch
 import dev.phonebridge.android.ui.setup.SetupProgress
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.core.confirm.ConfirmationRequest
 import dev.phonebridge.core.tools.Risk
 
-/** An agent action waiting for the user's decision (also shown as a notification). */
+/**
+ * An agent action waiting for the user's decision (also shown as a notification). Like the full
+ * approval screen, Allow arms after [dev.phonebridge.android.ui.components.ARM_DELAY_MS]; the screen
+ * showing it applies the window hardening (`TouchShieldEffect`, `SecureWindowEffect`).
+ */
 @Composable
 internal fun PendingApprovalCard(
     request: ConfirmationRequest,
@@ -71,9 +76,11 @@ internal fun PendingApprovalCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
+            // Allow arms only after the card has stayed in place (it pops in above whatever the user was tapping).
+            val arming = rememberArming(request.id)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 OutlinedButton(onClick = onDeny) { Text("Deny") }
-                Button(onClick = onAllow) { Text("Allow") }
+                Button(onClick = onAllow, enabled = arming.armed, modifier = arming.modifier) { Text("Allow") }
             }
         }
     }

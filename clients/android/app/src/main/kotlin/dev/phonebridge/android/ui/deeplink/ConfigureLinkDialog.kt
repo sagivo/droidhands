@@ -12,14 +12,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.ui.components.ApprovalScreenEffect
 import dev.phonebridge.android.ui.components.CodeBlock
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
+import dev.phonebridge.android.ui.components.TouchShieldEffect
+import dev.phonebridge.android.ui.components.rememberArming
 import dev.phonebridge.android.ui.settings.RelayUrls
 
 /**
  * Asks before applying a `phonebridge://configure` link: any website can open such a link, so it
  * is never applied without an explicit tap. Shows the full relay URL (the access key masked).
+ *
+ * Connecting hands the phone's identity to that relay, so the prompt is hardened like the approval
+ * screens: Connect arms only after [dev.phonebridge.android.ui.components.ARM_DELAY_MS], taps through
+ * other apps' overlays are dropped and overlays hidden ([TouchShieldEffect]), and agents' screen
+ * control is paused while it shows ([ApprovalScreenEffect]).
  */
 @Composable
 fun ConfigureLinkDialog(
@@ -40,10 +48,13 @@ fun ConfigureLinkDialog(
             val current = RelayUrls.normalize(settings.relayUrl)
             val replaces = current.isNotEmpty() && !current.equals(request.relayUrl, ignoreCase = true)
             val alreadySet = ConfigureLinks.isAlreadyApplied(settings, request)
+            ApprovalScreenEffect()
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text("Connect to relay ${request.host}?") },
                 text = {
+                    // Composed inside the dialog, so it shields the dialog's own window.
+                    TouchShieldEffect()
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("A setup link wants to connect PhoneBridge to this relay:", style = MaterialTheme.typography.bodyMedium)
                         CodeBlock(request.displayLink)
@@ -61,10 +72,15 @@ fun ConfigureLinkDialog(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        onDismiss()
-                        onConfirm(request)
-                    }) { Text("Connect") }
+                    val arming = rememberArming(request)
+                    TextButton(
+                        onClick = {
+                            onDismiss()
+                            onConfirm(request)
+                        },
+                        enabled = arming.armed,
+                        modifier = arming.modifier,
+                    ) { Text("Connect") }
                 },
                 dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
             )

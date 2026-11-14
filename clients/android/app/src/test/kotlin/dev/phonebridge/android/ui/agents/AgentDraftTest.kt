@@ -1,12 +1,14 @@
 package dev.phonebridge.android.ui.agents
 
 import dev.phonebridge.android.ui.tokens.ExpiryOption
+import dev.phonebridge.android.ui.tokens.TokenPresentation
 import dev.phonebridge.core.auth.ActiveHours
 import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.AppPolicy
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.ToolRule
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,6 +47,7 @@ class AgentDraftTest {
         val applied = edited.applyTo(record, now)
         assertEquals("Claude laptop", applied.name)
         assertEquals(Scopes.PRESET_READ_ONLY, applied.scopes)
+        assertEquals(Risk.READ, applied.maxRisk)
         assertEquals(ConfirmPolicy.ALL_ACTIONS, applied.confirmPolicy)
         assertEquals(now + 7 * day, applied.expiresAt)
         assertEquals(mapOf("sms_send" to ToolRule.BLOCK), applied.toolRules)
@@ -52,7 +55,8 @@ class AgentDraftTest {
         assertEquals(ActiveHours(480, 1380), applied.activeHours)
         // Immutable fields are left alone.
         assertEquals(record.copy(name = applied.name, scopes = applied.scopes, confirmPolicy = applied.confirmPolicy,
-            expiresAt = applied.expiresAt, toolRules = applied.toolRules, appPolicy = applied.appPolicy, activeHours = applied.activeHours), applied)
+            expiresAt = applied.expiresAt, toolRules = applied.toolRules, appPolicy = applied.appPolicy, activeHours = applied.activeHours,
+            maxRisk = applied.maxRisk), applied)
     }
 
     @Test
@@ -99,5 +103,34 @@ class AgentDraftTest {
         val custom = draft.toggleScope(Scopes.CALLS)
         assertEquals(AccessLevel.CUSTOM, custom.accessLevel)
         assertEquals(AccessLevel.ASSISTANT, custom.toggleScope(Scopes.CALLS).accessLevel)
+    }
+
+    @Test
+    fun theReadOnlyLevelCarriesItsRiskCap() {
+        val readOnly = AgentDraft.from(record).withLevel(AccessLevel.READ_ONLY)
+        assertEquals(Risk.READ, readOnly.maxRisk)
+        assertEquals(AccessLevel.READ_ONLY, readOnly.accessLevel)
+        // Other presets lift it; a hand-picked selection has none unless it is exactly a preset's scopes.
+        assertNull(readOnly.withLevel(AccessLevel.ASSISTANT).maxRisk)
+        val custom = readOnly.toggleScope(Scopes.LOCATION)
+        assertNull(custom.maxRisk)
+        assertEquals(AccessLevel.CUSTOM, custom.accessLevel)
+        assertEquals(AccessLevel.READ_ONLY, custom.toggleScope(Scopes.LOCATION).accessLevel)
+        // Saved and read back.
+        val saved = readOnly.applyTo(record, now)
+        assertEquals(Risk.READ, saved.maxRisk)
+        assertEquals(readOnly.copy(expiry = null), AgentDraft.from(saved))
+        assertFalse(AgentDraft.from(saved).differsFrom(saved))
+        assertTrue(AgentDraft.from(saved).withLevel(AccessLevel.ASSISTANT).differsFrom(saved))
+    }
+
+    @Test
+    fun readOnlyScopesWithoutTheCapAreCustomAndSaySo() {
+        // Agents saved before the cap existed: same scopes, no cap, so they can still act.
+        val legacy = AgentDraft.from(record.copy(scopes = Scopes.PRESET_READ_ONLY))
+        assertEquals(AccessLevel.CUSTOM, legacy.accessLevel)
+        assertEquals(TokenPresentation.UNCAPPED_READ_ONLY, legacy.capNotice)
+        assertEquals(TokenPresentation.READ_ONLY_CAP, legacy.withLevel(AccessLevel.READ_ONLY).capNotice)
+        assertNull(AgentDraft.from(record).capNotice)
     }
 }

@@ -48,8 +48,9 @@ private const val LIST_MAX_LIMIT = 200
 private const val SMS_MAX_PARTS = 30
 
 private const val RECIPIENT_HELP =
-    "Pass 'to' (phone number, international format preferred, e.g. +14155550123) or 'contact' (a name; it must " +
-        "match exactly one contact, otherwise the error lists the candidates so you can ask the user)."
+    "Pass 'to' (phone number, international format preferred, e.g. +14155550123; phone codes with * or #, such as " +
+        "USSD/MMI codes, are refused) or 'contact' (a name; it must match exactly one contact, otherwise the error " +
+        "lists the candidates so you can ask the user)."
 
 private fun smsList(context: Context): Tool = tool(
     name = "sms_list",

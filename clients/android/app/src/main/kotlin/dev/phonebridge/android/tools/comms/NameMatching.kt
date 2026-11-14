@@ -51,10 +51,18 @@ internal class NameKey private constructor(
  * | tier | meaning | literal | Latin | phonetic | abjad |
  * |---|---|---|---|---|---|
  * | exact | same tokens, same order (or same letters ignoring spaces) | 1.00 | 0.97 | 0.95 | 0.94 |
- * | prefix | query is the start of the name ("Tan", "Tania" → "Tania Cohen") | 0.90 | 0.88 | 0.87 | 0.86 |
- * | tokens | every query token equals a name token, any order ("Cohen Tania") | 0.87 | 0.86 | 0.85 | 0.84 |
- * | token prefix | every query token starts a name token ("T Coh") | 0.85 | 0.84 | 0.83 | 0.82 |
+ * | prefix | the query's whole tokens start the name ("Tania" → "Tania Cohen") | 0.90 | 0.88 | 0.87 | 0.86 |
+ * | tokens | every query token equals a name token, any order ("Cohen Tania", "Cohen") | 0.87 | 0.86 | 0.85 | 0.84 |
+ * | partial prefix | as prefix, but the last query token only starts a name token ("Tan", "Tania C") | 0.83 | 0.82 | 0.81 | 0.80 |
+ * | token prefix | every query token starts a name token ("T Coh", "Coh") | 0.81 | 0.80 | 0.79 | 0.78 |
  * | contained | every name token is in a longer query ("Tania Cohen" → "Tania") | 0.78 | 0.77 | 0.76 | 0.75 |
+ *
+ * Only whole-token tiers can reach [AUTO_PICK]: a query token that is just the start of a name token
+ * ("Dan" → "Danielle") may abbreviate that name or be a different, unsaved name, so such a match is
+ * listed as a candidate but never picked on its own. Partial tiers stay below [AUTO_PICK] minus
+ * [ContactRanking.STARRED_BOOST] and at or above [RecipientSelection.RUNNER_UP_MAX], so a contact that
+ * merely starts with the query ("Dan" → "Dana Levi") also keeps a whole-token match ("Dan" → "Dan
+ * Katz") from being picked automatically.
  *
  * Literal compares the names as written (accents and punctuation removed); Latin after
  * transliterating Hebrew/Arabic/Cyrillic/Greek; phonetic after [Phonetic] folding (Tanya ~ Tania);
@@ -77,13 +85,14 @@ internal object NameMatching {
     /** Shortest phonetic query (letters) for which fuzzy matching is attempted. */
     private const val FUZZY_MIN_QUERY_LENGTH = 3
 
-    private enum class Tier { EXACT, PREFIX, TOKENS, TOKEN_PREFIX, CONTAINED }
+    /** Strongest first; the [Level] score arrays follow this order. */
+    private enum class Tier { EXACT, PREFIX, TOKENS, PARTIAL_PREFIX, TOKEN_PREFIX, CONTAINED }
 
     private enum class Level(private val scores: DoubleArray) {
-        LITERAL(doubleArrayOf(1.00, 0.90, 0.87, 0.85, 0.78)),
-        LATIN(doubleArrayOf(0.97, 0.88, 0.86, 0.84, 0.77)),
-        PHONETIC(doubleArrayOf(0.95, 0.87, 0.85, 0.83, 0.76)),
-        ABJAD(doubleArrayOf(0.94, 0.86, 0.84, 0.82, 0.75)),
+        LITERAL(doubleArrayOf(1.00, 0.90, 0.87, 0.83, 0.81, 0.78)),
+        LATIN(doubleArrayOf(0.97, 0.88, 0.86, 0.82, 0.80, 0.77)),
+        PHONETIC(doubleArrayOf(0.95, 0.87, 0.85, 0.81, 0.79, 0.76)),
+        ABJAD(doubleArrayOf(0.94, 0.86, 0.84, 0.80, 0.78, 0.75)),
         ;
 
         fun score(tier: Tier): Double = scores[tier.ordinal]
@@ -177,11 +186,10 @@ internal object NameMatching {
         val rel = Array(queryCount) { q -> Array(nameCount) { n -> relationOf(q, n) } }
         if (queryCount <= nameCount) {
             val last = queryCount - 1
-            val positional = (0 until last).all { rel[it][it] == Rel.EQUAL } && rel[last][last] != Rel.NONE
-            if (positional) {
-                return if (queryCount == nameCount && rel[last][last] == Rel.EQUAL) Tier.EXACT else Tier.PREFIX
-            }
+            val leadingEqual = (0 until last).all { rel[it][it] == Rel.EQUAL }
+            if (leadingEqual && rel[last][last] == Rel.EQUAL) return if (queryCount == nameCount) Tier.EXACT else Tier.PREFIX
             if (assignable(queryCount, nameCount) { q, n -> rel[q][n] == Rel.EQUAL }) return Tier.TOKENS
+            if (leadingEqual && rel[last][last] == Rel.PREFIX) return Tier.PARTIAL_PREFIX
             if (assignable(queryCount, nameCount) { q, n -> rel[q][n] != Rel.NONE }) return Tier.TOKEN_PREFIX
             return null
         }

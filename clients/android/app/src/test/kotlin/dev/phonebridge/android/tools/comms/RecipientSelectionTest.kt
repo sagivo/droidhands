@@ -62,6 +62,32 @@ class RecipientSelectionTest {
         assertFalse((ambiguous as ContactChoice.Ambiguous).weak)
     }
 
+    /** Scores [names] against [query] with the real matcher, like ContactsRepository.search. */
+    private fun choose(query: String, vararg names: String): ContactChoice = RecipientSelection.chooseContact(
+        names.mapIndexed { i, name -> contact(i + 1L, name, NameMatching.score(query, name)) }
+            .filter { it.score >= NameMatching.FUZZY_MIN },
+    )
+
+    @Test
+    fun aNameThatOnlyStartsAContactIsNeverPicked() {
+        // "Dan" isn't saved; the only Dan* contact is someone else.
+        val choice = choose("Dan", "Danielle Smith", "Ronit Levi") as ContactChoice.Ambiguous
+        assertTrue(choice.weak)
+        assertEquals(listOf("Danielle Smith"), choice.candidates.map { it.name })
+        assertTrue(RecipientSelection.ambiguousMessage("Dan", choice, "to").contains("Ask the user whether that is the right person"))
+        assertTrue(choose("Chris", "Christine Adams") is ContactChoice.Ambiguous)
+        assertTrue(choose("Tania C", "Tania Cohen") is ContactChoice.Ambiguous)
+    }
+
+    @Test
+    fun aWholeTokenMatchIsPickedOnlyWhenNoOtherContactStartsWithIt() {
+        assertEquals("Dan Katz", chosen(choose("Dan", "Dan Katz", "Ronit Levi")).name)
+        assertEquals("Tania Cohen", chosen(choose("Cohen", "Tania Cohen", "Dana Levi")).name)
+        val shared = choose("Dan", "Dan Katz", "Dana Levi") as ContactChoice.Ambiguous
+        assertFalse(shared.weak)
+        assertEquals(listOf("Dan Katz", "Dana Levi"), shared.candidates.map { it.name })
+    }
+
     @Test
     fun autoPickThresholdIsInclusive() {
         val top = contact(1, "Tania Cohen", 0.85)

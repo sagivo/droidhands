@@ -31,7 +31,7 @@ private fun intentStart(context: Context) = tool(
         "action android.settings.WIFI_SETTINGS, or VIEW with data and package). Short names are expanded: action " +
         "\"VIEW\" -> android.intent.action.VIEW, category \"BROWSABLE\" -> android.intent.category.BROWSABLE. class_name " +
         "may be relative to package (\".MainActivity\"). extras: string, number, boolean or array-of-strings values. " +
-        "Cannot target PhoneBridge itself and never grants file/URI access. Refused when the app that would handle it is " +
+        "Cannot target PhoneBridge itself or place calls (use phone_call) and never grants file/URI access. Refused when the app that would handle it is " +
         "blocked for this agent; if several apps could handle it and some are blocked, the error lists the allowed ones " +
         "to pass as 'package'. Prefer app_open/url_open when they fit.",
     scope = Scopes.INTENTS,

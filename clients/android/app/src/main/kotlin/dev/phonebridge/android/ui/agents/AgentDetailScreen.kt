@@ -106,7 +106,7 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
     val dirty = vm.isDirty()
     val today = remember(now) { Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate() }
     val recent = remember(entries, record.id) { entries.asSequence().filter { it.tokenId == record.id }.take(RECENT_ROWS).toList() }
-    val groups = remember(tools, draft.scopes) { ToolRules.groups(tools, draft.scopes) }
+    val groups = remember(tools, draft.scopes, draft.maxRisk) { ToolRules.groups(tools, draft.scopes, draft.maxRisk) }
     val visibleToolNames = remember(groups) { groups.flatMap { g -> g.tools.map { it.name } }.toSet() }
     val colors = statusColors()
 
@@ -239,7 +239,7 @@ private fun AgentHeader(record: TokenRecord, lastCallAt: Long?, state: TokenStat
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                AgentPresentation.clientLabel(record) + " · " + AccessLevel.of(record.scopes).label,
+                AgentPresentation.clientLabel(record) + " · " + AccessLevel.of(record).label,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )

@@ -11,6 +11,18 @@ internal object PhoneText {
     /** Loose comparisons need at least this many trailing digits, like PhoneNumberUtils.compare. */
     const val MIN_MATCH_DIGITS = 7
 
+    /**
+     * Fewest digits of a number to call or message. Shorter strings are not phone numbers, and GSM
+     * treats a dialed 1-2 digit string as a USSD request (3GPP TS 22.030 §6.5.3.2).
+     */
+    const val MIN_DIAL_DIGITS = 3
+
+    /** `*` and `#` (also full-width): GSM supplementary-service / USSD syntax. */
+    private const val SERVICE_CODE_CHARS = "*#＊＃"
+
+    /** Besides letters and control characters: service-code syntax and pause/wait (post-dial DTMF) markers. */
+    private const val NOT_DIALABLE = "$SERVICE_CODE_CHARS,;"
+
     private const val E164_MIN_DIGITS = 7
     private const val E164_MAX_DIGITS = 15
 
@@ -18,7 +30,8 @@ internal object PhoneText {
      * Strips formatting from a phone number: spaces (including no-break and bidi marks), dashes,
      * dots, slashes and brackets; converts non-ASCII digits (Arabic-Indic, full-width…) to ASCII;
      * drops a `tel:` prefix and anything after a pause/wait/extension marker (`,` `;` `x` `ext`).
-     * Keeps a leading `+` and `*`/`#`.
+     * Keeps a leading `+` and `*`/`#` (fine for matching; call and message targets must pass
+     * [cleanDialable] instead).
      *
      * Returns null if the text contains anything else (letters, a `+` in the middle) or no digit.
      */
@@ -42,6 +55,32 @@ internal object PhoneText {
             }
         }
         return out.toString().takeIf { text -> text.any { it.isDigit() } }
+    }
+
+    /**
+     * [raw] [clean]ed if an agent may call or message it (`to`, or a number passed as `contact`), else
+     * null. Only plain phone numbers pass: digits with an optional leading `+`, formatted with spaces,
+     * dashes, dots, slashes or brackets (invisible bidi marks are ignored). Refused:
+     * * `*` and `#`: dialed by an app holding CALL_PHONE, a GSM MMI/USSD code runs without the dialer,
+     *   e.g. `**21*<number>#` forwards every incoming call to that number;
+     * * letters (so also `tel:`, pause/wait and extension markers), `,`, `;` and control characters;
+     * * fewer than [MIN_DIAL_DIGITS] digits.
+     */
+    fun cleanDialable(raw: String): String? {
+        val s = raw.trim()
+        if (s.any { it in NOT_DIALABLE || it.isLetter() || Character.isISOControl(it) }) return null
+        return clean(s)?.takeIf { digitCount(it) >= MIN_DIAL_DIGITS }
+    }
+
+    /** Agent-facing error for a value of argument [arg] that is not [cleanDialable]. */
+    fun notDialableMessage(raw: String, arg: String): String {
+        if (raw.any { it in SERVICE_CODE_CHARS }) {
+            return "'$arg' contains * or #: phone codes (USSD/MMI, e.g. call forwarding or balance checks) can't be " +
+                "dialed through PhoneBridge. Pass a plain phone number, e.g. +14155550123."
+        }
+        val hint = if (arg == "to") " To use a contact name, pass it as 'contact' instead." else ""
+        return "'$arg' must be a phone number, preferably international (e.g. +14155550123): digits with an optional " +
+            "leading +, nothing else.$hint"
     }
 
     private fun isSeparator(cp: Int): Boolean {

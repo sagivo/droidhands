@@ -23,9 +23,9 @@ internal class RecipientResolver(private val context: Context) {
             number != null && name != null -> throw ToolException(
                 "Pass either 'to' (phone number) or 'contact' (contact name), not both.",
             )
-            number != null -> forNumber(number)
+            number != null -> forNumber(number, arg = "to")
             // A number passed as 'contact' means that number, not "some number of whoever has it".
-            name != null && PhoneText.looksLikePhoneNumber(name) -> forNumber(name)
+            name != null && PhoneText.looksLikePhoneNumber(name) -> forNumber(name, arg = "contact")
             name != null -> forContact(name, preferWhatsApp)
             else -> throw ToolException("Missing recipient: pass 'to' (phone number) or 'contact' (contact name).")
         }
@@ -55,14 +55,9 @@ internal class RecipientResolver(private val context: Context) {
         }
     }
 
-    private fun forNumber(raw: String): Recipient {
-        val cleaned = PhoneText.clean(raw)
-        if (cleaned == null || PhoneText.digitCount(cleaned) < MIN_DIGITS) {
-            throw ToolException(
-                "'to' must be a phone number, preferably international (e.g. +14155550123). " +
-                    "To use a contact name, pass it as 'contact' instead.",
-            )
-        }
+    /** [raw] given as argument [arg]: only plain phone numbers, never USSD/MMI codes ([PhoneText.cleanDialable]). */
+    private fun forNumber(raw: String, arg: String): Recipient {
+        val cleaned = PhoneText.cleanDialable(raw) ?: throw ToolException(PhoneText.notDialableMessage(raw, arg))
         val number = E164Formatter.toE164(context, cleaned) ?: PhoneText.internationalize(cleaned)
         val owner = ownerOf(number)
         return Recipient(displayName = owner?.name ?: number, number = number, contact = owner)
@@ -81,7 +76,6 @@ internal class RecipientResolver(private val context: Context) {
 
     private companion object {
         const val TAG = "PhoneBridge/Recipient"
-        const val MIN_DIGITS = 3
 
         /** Enough to see the runner-up and list candidates. */
         const val SEARCH_LIMIT = 10

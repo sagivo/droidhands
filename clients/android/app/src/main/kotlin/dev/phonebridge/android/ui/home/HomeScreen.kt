@@ -28,6 +28,7 @@ import dev.phonebridge.android.ui.components.OverflowMenu
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SecureWindowEffect
 import dev.phonebridge.android.ui.components.SectionHeader
+import dev.phonebridge.android.ui.components.TouchShieldEffect
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
 import dev.phonebridge.android.ui.components.rememberNow
@@ -66,8 +67,10 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
     val context = LocalContext.current
     val copy = rememberCopier()
 
-    // Approvals show exactly what an agent is about to do: keep them out of screenshots and Recents.
+    // Approvals show exactly what an agent is about to do: keep them out of screenshots and Recents, and
+    // drop taps through other apps' overlays (tapjacking) while Allow is on screen.
     SecureWindowEffect(enabled = pending.isNotEmpty())
+    TouchShieldEffect(enabled = pending.isNotEmpty())
 
     val pairings = remember(allPairings, now) { allPairings.filter { it.expiresAt > now } }
     val activeAgents = remember(tokens, now) { AgentPresentation.activeCount(tokens, now) }
