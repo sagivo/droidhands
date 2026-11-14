@@ -11,6 +11,7 @@ import dev.phonebridge.core.confirm.ConfirmationResult
 import dev.phonebridge.core.mcp.McpServer
 import dev.phonebridge.core.mcp.ServerInfo
 import dev.phonebridge.core.mcp.capabilitiesTool
+import dev.phonebridge.core.oauth.LocalOAuth
 import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
@@ -46,10 +47,11 @@ import kotlinx.serialization.json.put
  * * `DEMO_LOCAL_PORT`: start the local HTTP server on 127.0.0.1:<port> (0 = any free port).
  * * `DEMO_RELAY_URL`, `DEMO_ACCESS_KEY`: connect to a relay.
  * * `DEMO_DEVICE_SECRET`: base64url device secret for a stable device id (default: random).
- * * `DEMO_PAIR`: how to answer one-tap pairing requests from the relay (docs/PROTOCOL.md §5):
- *   `approve` (issues a real token named after the client, origin "pairing", all scopes, the
- *   `DEMO_POLICY` confirmation policy), `deny`, or `ignore` (never answers, so the relay expires it).
- *   Unset: no pairing handler, so the device answers `busy`.
+ * * `DEMO_PAIR`: how to answer one-tap pairing requests from the relay (docs/PROTOCOL.md §5) and the
+ *   local server (§4.1): `approve` (issues a real token named after the client, origin "pairing", all
+ *   scopes, the `DEMO_POLICY` confirmation policy), `deny`, or `ignore` (never answers, so the request
+ *   expires). Unset: no pairing handler, so the device answers `busy` and the local server has no
+ *   OAuth endpoints.
  *
  * Stdout: exactly one `DEMO_TOKEN=<token>` and one `DEMO_DEVICE_ID=<id>` line, then
  * `DEMO_LOCAL_PORT=<port>` if local mode is on, then one `RELAY_STATUS=<status>` line per relay
@@ -103,9 +105,13 @@ fun main() {
     System.out.flush()
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val pairing = demoPairingHandler(env["DEMO_PAIR"]?.trim()?.lowercase(), tokens, policy)
 
     env["DEMO_LOCAL_PORT"]?.trim()?.toIntOrNull()?.let { port ->
-        val local = LocalHttpServer(port = port, handler = server::handle)
+        val oauth = pairing?.let {
+            LocalOAuth(it, identity.deriveKey(LOCAL_OAUTH_KEY_PURPOSE), deviceName = { "Demo device" }, log = System.err::println)
+        }
+        val local = LocalHttpServer(port = port, handler = server::handle, oauth = oauth)
         local.start()
         Runtime.getRuntime().addShutdownHook(Thread { local.stop() })
         println("DEMO_LOCAL_PORT=${local.boundPort}")
@@ -119,7 +125,7 @@ fun main() {
             hello = DeviceHello("demo", "0.1.0", "Demo device", accessKey = env["DEMO_ACCESS_KEY"]),
             handler = server::handle,
             scope = scope,
-            pairingHandler = demoPairingHandler(env["DEMO_PAIR"]?.trim()?.lowercase(), tokens, policy),
+            pairingHandler = pairing,
         )
         scope.launch {
             relay.status.collect {
@@ -133,6 +139,9 @@ fun main() {
 
     runBlocking { awaitCancellation() }
 }
+
+/** [DeviceIdentity.deriveKey] purpose of the local server's OAuth client ids (as in the app). */
+private const val LOCAL_OAUTH_KEY_PURPOSE = "local-oauth-clients"
 
 /**
  * Pairing handler for `DEMO_PAIR` = `approve` | `deny` | `ignore`; null (answer `busy`) otherwise.
