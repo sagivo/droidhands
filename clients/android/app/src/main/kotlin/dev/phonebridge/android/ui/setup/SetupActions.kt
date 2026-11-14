@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -20,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import dev.phonebridge.android.ui.components.LocalSnackbarHostState
 import dev.phonebridge.android.ui.components.SystemIntents
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.findActivity
 import kotlinx.coroutines.launch
 
@@ -96,12 +96,12 @@ internal fun WithSetupActions(vm: SetupViewModel, content: @Composable (SetupAct
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TertiaryButton("Continue", onClick = {
                     backgroundLocationDialog = false
                     actions.requestPermissions(listOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
-                }) { Text("Continue") }
+                })
             },
-            dismissButton = { TextButton(onClick = { backgroundLocationDialog = false }) { Text("Not now") } },
+            dismissButton = { TertiaryButton("Not now", onClick = { backgroundLocationDialog = false }) },
         )
     }
 }

@@ -5,25 +5,28 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBox
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,7 +34,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -47,14 +49,23 @@ import dev.phonebridge.android.plugins.LocalPluginEntry
 import dev.phonebridge.android.plugins.PluginImports
 import dev.phonebridge.android.service.TailscaleState
 import dev.phonebridge.android.settings.LocalBind
+import dev.phonebridge.android.ui.components.Accents
 import dev.phonebridge.android.ui.components.BottomActionBar
-import dev.phonebridge.android.ui.components.CodeBlock
+import dev.phonebridge.android.ui.components.CardPadding
 import dev.phonebridge.android.ui.components.ConfirmDialog
+import dev.phonebridge.android.ui.components.IconRowInset
+import dev.phonebridge.android.ui.components.IconTile
+import dev.phonebridge.android.ui.components.ListDivider
+import dev.phonebridge.android.ui.components.ListRow
+import dev.phonebridge.android.ui.components.ListSection
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
+import dev.phonebridge.android.ui.components.PrimaryButton
+import dev.phonebridge.android.ui.components.RowValue
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.SwitchRow
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
 import dev.phonebridge.android.ui.connect.ActiveRoutesCard
@@ -73,10 +84,11 @@ class SettingsActions(
 )
 
 /**
- * Settings: How agents reach this phone (the connection URLs of the routes that are on, then the
- * relay, Tailscale, the local server and boot; saved together from the bottom bar),
- * Permissions & access, Security (never-allow apps, hidden one-time codes, revoke all), Developer
- * (local plugins) and About.
+ * Settings, as inset grouped lists (the iOS Settings pattern): how agents reach this phone (the
+ * connection URLs of the routes that are on, then the relay and Tailscale), General (permissions,
+ * boot, the activity notification), Security (never-allow apps, hidden one-time codes), Advanced
+ * (the local server), Developer (local plugins), About, and Revoke all last. Connection changes are
+ * saved together from the bottom bar; switches outside the form apply at once.
  */
 @Composable
 fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int, actions: SettingsActions) {
@@ -112,29 +124,30 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
 
     ScreenScaffold(
         title = "Settings",
+        large = true,
         bottomBar = {
             if (dirty || vm.saving) {
                 BottomActionBar {
-                    TextButton(onClick = vm::discard, enabled = !vm.saving) { Text("Discard") }
-                    Button(onClick = vm::save, enabled = validation.isValid && !vm.saving) {
-                        if (vm.saving) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        Text("Save")
-                    }
+                    TertiaryButton("Discard", onClick = vm::discard, enabled = !vm.saving)
+                    PrimaryButton(
+                        if (vm.saving) "Saving…" else "Save",
+                        onClick = vm::save,
+                        enabled = validation.isValid && !vm.saving,
+                    )
                 }
             }
         },
     ) { padding ->
-        LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item(key = "connection-header") { SectionHeader("How agents reach this phone") }
+        LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             item(key = "routes") {
-                val routes = remember(current, relayStatus, localStatus) { ConnectionRoutes.active(current, relayStatus, localStatus) }
-                if (routes.isEmpty()) {
-                    Notice("Agents can't reach this phone yet. Turn on the relay or Tailscale below, then tap Save.", kind = NoticeKind.WARNING)
-                } else {
-                    ActiveRoutesCard(routes)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SectionHeader("How agents reach this phone")
+                    val routes = remember(current, relayStatus, localStatus) { ConnectionRoutes.active(current, relayStatus, localStatus) }
+                    if (routes.isEmpty()) {
+                        Notice("Agents can't reach this phone yet. Turn on the relay or Tailscale below, then tap Save.", kind = NoticeKind.WARNING)
+                    } else {
+                        ActiveRoutesCard(routes)
+                    }
                 }
             }
             item(key = "relay") {
@@ -142,43 +155,41 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                 RelaySection(form, validation, usingDefault, vm::edit)
             }
             item(key = "tailscale") { TailscaleSection(form, tailscale, vm::edit) }
-            item(key = "local") { LocalServerSection(form, validation, vm::edit) }
             item(key = "general") {
-                SettingsCard {
+                ListSection(
+                    title = "General",
+                    footer = "While an agent's action runs, a notification says which agent and what it is doing, with Stop " +
+                        "and Pause all. On Android 16 it also shows in the status bar. Message text and codes are never " +
+                        "shown in it.",
+                ) {
+                    PermissionsRow(setup, actions.onOpenPermissions)
+                    ListDivider(IconRowInset)
                     SwitchRow(
                         title = "Start on boot",
                         subtitle = "Reconnect automatically after the phone restarts.",
                         checked = form.startOnBoot,
                         onCheckedChange = { v -> vm.edit { it.copy(startOnBoot = v) } },
+                        leading = { IconTile(Icons.Filled.PlayArrow, Accents.Gray) },
                     )
-                }
-            }
-            item(key = "activity-notification") {
-                SettingsCard {
+                    ListDivider(IconRowInset)
                     SwitchRow(
                         title = "Show when agents are working",
-                        subtitle = "While an agent's action runs, a notification says which agent and what it is doing, " +
-                            "with Stop and Pause all. On Android 16 it also shows in the status bar. Message text and " +
-                            "codes are never shown in it.",
+                        subtitle = "A notification with Stop and Pause all.",
                         checked = current.showAgentActivity,
                         onCheckedChange = vm::setShowAgentActivity,
+                        leading = { IconTile(Icons.Filled.Notifications, Accents.Indigo) },
                     )
                 }
             }
-            item(key = "permissions-header") { SectionHeader("Permissions & access") }
-            item(key = "permissions") { PermissionsRow(setup, actions.onOpenPermissions) }
-            item(key = "security-header") { SectionHeader("Security") }
             item(key = "security") {
                 SecuritySection(
                     neverAllowCount = neverAllow.size,
                     redactOneTimeCodes = redact,
-                    activeAgents = activeAgents,
                     onOpenNeverAllow = actions.onOpenNeverAllow,
                     onRedactChange = vm::setRedactOneTimeCodes,
-                    onRevokeAll = actions.onRevokeAll,
                 )
             }
-            item(key = "developer-header") { SectionHeader("Developer") }
+            item(key = "local") { LocalServerSection(form, validation, vm::edit) }
             item(key = "developer") {
                 DeveloperSection(
                     enabled = localPluginsOn,
@@ -189,7 +200,6 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                     onRemove = { removing = it },
                 )
             }
-            item(key = "about-header") { SectionHeader("About") }
             item(key = "about") {
                 AboutSection(
                     deviceId = vm.deviceId,
@@ -199,10 +209,12 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                     onCheckForUpdatesChange = vm::setCheckForUpdates,
                 )
             }
+            item(key = "revoke-all") { RevokeAllSection(activeAgents, actions.onRevokeAll) }
         }
     }
 }
 
+/** The relay switch, its URL and access key, and "Your own relay" with Scan QR code. */
 @Composable
 private fun RelaySection(
     form: SettingsForm,
@@ -211,103 +223,126 @@ private fun RelaySection(
     edit: ((SettingsForm) -> SettingsForm) -> Unit,
 ) {
     var showKey by rememberSaveable { mutableStateOf(false) }
-    SettingsCard {
+    ListSection(
+        footer = "The relay works with every agent, including claude.ai and ChatGPT, from anywhere. The phone connects out " +
+            "to it, so it works behind NAT and on mobile data. " + ConnectionRoutes.OWN_RELAY_SCRIPT,
+    ) {
         SwitchRow(
             title = "Relay",
-            subtitle = "Works with every agent, including claude.ai and ChatGPT, from anywhere. The phone connects out " +
-                "to the relay, so it works behind NAT and on mobile data.",
+            subtitle = "Every agent, from anywhere.",
             checked = form.relayEnabled,
             onCheckedChange = { v -> edit { it.copy(relayEnabled = v) } },
+            leading = { IconTile(Icons.Filled.Share, Accents.Indigo) },
         )
-        OutlinedTextField(
-            value = form.relayUrl,
-            onValueChange = { v -> edit { it.copy(relayUrl = v) } },
-            label = { Text("Relay URL") },
-            placeholder = { Text("https://relay.example.com") },
-            isError = validation.relayUrlError != null,
-            supportingText = {
-                Text(validation.relayUrlError ?: "Base URL of your relay. Agents connect to <URL>/mcp.")
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false, imeAction = ImeAction.Next),
-            modifier = Modifier.fillMaxWidth(),
+        ListDivider(IconRowInset)
+        SectionBlock {
+            OutlinedTextField(
+                value = form.relayUrl,
+                onValueChange = { v -> edit { it.copy(relayUrl = v) } },
+                label = { Text("Relay URL") },
+                placeholder = { Text("https://relay.example.com") },
+                isError = validation.relayUrlError != null,
+                supportingText = {
+                    Text(validation.relayUrlError ?: "Base URL of your relay. Agents connect to <URL>/mcp.")
+                },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false, imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            validation.relayUrlWarning?.let { Notice(it, kind = NoticeKind.DANGER) }
+            if (usingDefault) Notice(DEFAULT_RELAY_NOTE, title = "The relay this app comes with")
+            OutlinedTextField(
+                value = form.relayAccessKey,
+                onValueChange = { v -> edit { it.copy(relayAccessKey = v) } },
+                label = { Text("Access key (optional)") },
+                supportingText = { Text("Must match RELAY_ACCESS_KEY on the relay, if the relay sets one.") },
+                singleLine = true,
+                shape = MaterialTheme.shapes.medium,
+                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
+                trailingIcon = { TertiaryButton(if (showKey) "Hide" else "Show", onClick = { showKey = !showKey }) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        ListDivider()
+        ListRow(
+            title = ConnectionRoutes.OWN_RELAY_TITLE,
+            subtitle = "Scan the QR code it prints, open its setup link on this phone, or enter its URL above.",
+            leading = { IconTile(Icons.Filled.Home, Accents.Indigo) },
+            trailing = { ScanSetupQrButton() },
         )
-        validation.relayUrlWarning?.let { Notice(it, kind = NoticeKind.DANGER) }
-        if (usingDefault) Notice(DEFAULT_RELAY_NOTE, title = "The relay this app comes with")
-        OutlinedTextField(
-            value = form.relayAccessKey,
-            onValueChange = { v -> edit { it.copy(relayAccessKey = v) } },
-            label = { Text("Access key (optional)") },
-            supportingText = { Text("Must match RELAY_ACCESS_KEY on the relay, if the relay sets one.") },
-            singleLine = true,
-            visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
-            trailingIcon = {
-                TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            "${ConnectionRoutes.OWN_RELAY_TITLE}: scan the QR code it prints, open its setup link on this phone, or " +
-                "enter its URL above. " + ConnectionRoutes.OWN_RELAY_SCRIPT,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        ScanSetupQrButton()
     }
 }
 
 /** The Tailscale route: the local server on the tailnet only (the same switch as "Tailscale only" below). */
 @Composable
 private fun TailscaleSection(form: SettingsForm, tailscale: TailscaleState, edit: ((SettingsForm) -> SettingsForm) -> Unit) {
-    SettingsCard {
+    ListSection(footer = ConnectionRoutes.TAILSCALE_SUMMARY) {
         SwitchRow(
             title = ConnectionRoutes.TAILSCALE_TITLE,
-            subtitle = ConnectionRoutes.TAILSCALE_SUMMARY,
+            subtitle = "Your own devices, directly.",
             checked = form.tailscaleOn,
             onCheckedChange = { v -> edit { it.withTailscale(v) } },
+            leading = { IconTile(Icons.Filled.Lock, Accents.Teal) },
         )
-        TailscaleStatus(tailscale)
+        ListDivider(IconRowInset)
+        TailscaleStatus(
+            tailscale,
+            Modifier
+                .fillMaxWidth()
+                .padding(start = IconRowInset, end = CardPadding, top = 12.dp, bottom = 12.dp),
+        )
     }
 }
 
+/** Advanced: the local server switch and port, then where it listens. */
 @Composable
 private fun LocalServerSection(form: SettingsForm, validation: SettingsForm.Validation, edit: ((SettingsForm) -> SettingsForm) -> Unit) {
-    SettingsCard {
-        SwitchRow(
-            title = "Local server (advanced)",
-            subtitle = "Serve agents from this phone without a relay: over USB (adb forward), Tailscale or your own network.",
-            checked = form.localServerEnabled,
-            onCheckedChange = { v -> edit { it.copy(localServerEnabled = v) } },
-        )
-        OutlinedTextField(
-            value = form.localServerPort,
-            onValueChange = { v -> edit { it.copy(localServerPort = v.filter { c -> c in '0'..'9' }.take(5)) } },
-            label = { Text("Port") },
-            isError = validation.portError != null,
-            supportingText = { Text(validation.portError ?: "Default ${SettingsForm.DEFAULT_PORT}.") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text("Listen on", style = MaterialTheme.typography.labelLarge)
-        Column(Modifier.selectableGroup()) {
-            BIND_CHOICES.forEach { (bind, title, subtitle) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(selected = form.localServerBind == bind, role = Role.RadioButton) {
+    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        ListSection(
+            title = "Advanced",
+            footer = "Serve agents from this phone without a relay: over USB (adb forward), Tailscale or your own network.",
+        ) {
+            SwitchRow(
+                title = "Local server",
+                subtitle = "Without a relay.",
+                checked = form.localServerEnabled,
+                onCheckedChange = { v -> edit { it.copy(localServerEnabled = v) } },
+                leading = { IconTile(Icons.Filled.Phone, Accents.Gray) },
+            )
+            ListDivider(IconRowInset)
+            SectionBlock {
+                OutlinedTextField(
+                    value = form.localServerPort,
+                    onValueChange = { v -> edit { it.copy(localServerPort = v.filter { c -> c in '0'..'9' }.take(5)) } },
+                    label = { Text("Port") },
+                    isError = validation.portError != null,
+                    supportingText = { Text(validation.portError ?: "Default ${SettingsForm.DEFAULT_PORT}.") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        ListSection(title = "Listen on") {
+            Column(Modifier.selectableGroup()) {
+                BIND_CHOICES.forEachIndexed { index, (bind, title, subtitle) ->
+                    if (index > 0) ListDivider()
+                    val selected = form.localServerBind == bind
+                    ListRow(
+                        title = title,
+                        subtitle = subtitle,
+                        modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) {
                             edit { it.copy(localServerBind = bind) }
-                        }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(selected = form.localServerBind == bind, onClick = null)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(title, style = MaterialTheme.typography.bodyLarge)
-                        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                        },
+                        trailing = if (selected) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                        } else {
+                            null
+                        },
+                    )
                 }
             }
         }
@@ -324,35 +359,38 @@ private fun AboutSection(
     onCheckForUpdatesChange: (Boolean) -> Unit,
 ) {
     val copy = rememberCopier()
-    SettingsCard {
-        Text("Version", style = MaterialTheme.typography.labelLarge)
-        Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.bodyMedium)
+    ListSection(
+        title = "About",
+        footer = "The device ID is part of every token; the relay routes requests by it. It isn't a secret on its own.\n\n$DOCS",
+    ) {
+        ListRow(
+            title = "Version",
+            leading = { IconTile(Icons.Filled.Info, Accents.Gray) },
+            trailing = { RowValue(BuildConfig.VERSION_NAME) },
+        )
         if (checkForUpdates != null) {
+            ListDivider(IconRowInset)
             SwitchRow(
                 title = "Check for updates",
-                subtitle = "Once a day, ask GitHub whether a newer PhoneBridge is out, and say so on Home. The request " +
-                    "carries no account or phone data, and nothing is installed without you.",
+                subtitle = "Once a day, ask GitHub and say so on Home. Sends no account or phone data; nothing installs " +
+                    "without you.",
                 checked = checkForUpdates,
                 onCheckedChange = onCheckForUpdatesChange,
+                leading = { IconTile(Icons.Filled.Refresh, Accents.Gray) },
             )
         }
-        Text("Device ID", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-        CodeBlock(deviceId)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Part of every token; the relay routes requests by it. Not a secret on its own.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = { copy("Device ID", deviceId, false) }) { Text("Copy") }
-        }
-        OutlinedButton(onClick = onRunSetupAgain, modifier = Modifier.padding(top = 8.dp)) { Text("Run setup again") }
-        Text("Documentation", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-        Text(
-            DOCS,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ListDivider(IconRowInset)
+        ListRow(
+            title = "Device ID",
+            subtitle = deviceId,
+            leading = { IconTile(Icons.Filled.AccountBox, Accents.Gray) },
+            trailing = { TertiaryButton("Copy", onClick = { copy("Device ID", deviceId, false) }) },
+        )
+        ListDivider(IconRowInset)
+        ListRow(
+            title = "Run setup again",
+            leading = { IconTile(Icons.Filled.Settings, Accents.Indigo) },
+            onClick = onRunSetupAgain,
         )
     }
 }
@@ -364,7 +402,7 @@ private val BIND_CHOICES = listOf(
     Triple(LocalBind.ALL_INTERFACES, "All networks", "Anyone on the same Wi-Fi, hotspot or VPN. Unencrypted http://."),
 )
 
-private const val DOCS = """In the PhoneBridge repository:
+private const val DOCS = """Documentation, in the PhoneBridge repository:
 • docs/CONNECTING.md: the ways agents reach this phone (relay, Tailscale, your own relay)
 • docs/ARCHITECTURE.md: how agent, relay and phone fit together
 • docs/SECURITY.md: threat model, scopes and approval policies
@@ -372,9 +410,14 @@ private const val DOCS = """In the PhoneBridge repository:
 • docs/PROTOCOL.md: MCP endpoint, relay tunnel and token format
 • relay/: self-host the relay (Node.js or Docker)"""
 
+/** Free content (fields, notices) inside a [ListSection], padded like a row. */
 @Composable
-internal fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
-    OutlinedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
-    }
+internal fun SectionBlock(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = CardPadding, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        content = content,
+    )
 }

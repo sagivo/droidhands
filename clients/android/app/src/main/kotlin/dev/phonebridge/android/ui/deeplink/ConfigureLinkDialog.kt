@@ -7,7 +7,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -16,6 +15,7 @@ import dev.phonebridge.android.ui.components.ApprovalScreenEffect
 import dev.phonebridge.android.ui.components.CodeBlock
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
+import dev.phonebridge.android.ui.components.TertiaryButton
 import dev.phonebridge.android.ui.components.TouchShieldEffect
 import dev.phonebridge.android.ui.components.rememberArming
 import dev.phonebridge.android.ui.settings.RelayUrls
@@ -41,7 +41,7 @@ fun ConfigureLinkDialog(
             onDismissRequest = onDismiss,
             title = { Text("Can't use this setup link") },
             text = { Text("${result.message} Open the setup page of your relay again, or enter the relay URL in Settings.") },
-            confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+            confirmButton = { TertiaryButton("OK", onClick = onDismiss) },
         )
         is ConfigureLinkResult.Valid -> {
             val request = result.request
@@ -73,16 +73,17 @@ fun ConfigureLinkDialog(
                 },
                 confirmButton = {
                     val arming = rememberArming(request)
-                    TextButton(
+                    TertiaryButton(
+                        "Connect",
                         onClick = {
                             onDismiss()
                             onConfirm(request)
                         },
                         enabled = arming.armed,
                         modifier = arming.modifier,
-                    ) { Text("Connect") }
+                    )
                 },
-                dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+                dismissButton = { TertiaryButton("Cancel", onClick = onDismiss) },
             )
         }
     }
