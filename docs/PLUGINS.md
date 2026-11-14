@@ -47,6 +47,9 @@ runs its examples (§7) on your computer, with no phone needed. It needs a JDK 1
 plugin and the field, e.g. `spotify: actions[1].android.intent.extras.count: …`, and unknown keys
 suggest the closest known one.
 
+The Android build copies every `plugins/<id>/plugin.yaml` (folders starting with `_` excepted) into the
+app, so a merged plugin ships with the next release.
+
 ## 2. A complete example
 
 ```yaml
@@ -119,7 +122,8 @@ actions:
 
 Unknown keys are errors, so typos are caught. `ios` sections are kept but not checked yet. A `stable`
 plugin needs at least one `tested` record and examples for every action. Package names starting with
-`dev.phonebridge` (PhoneBridge itself, any build) are refused.
+`dev.phonebridge` (PhoneBridge itself, any build) are refused, except the emulator-only E2E fixture
+apps (`dev.phonebridge.fixture.*`), which test plugins target.
 
 ## 4. Action fields
 
@@ -218,8 +222,10 @@ android:
   url: "https://www.google.com/maps/dir/?api=1&destination={{destination}}&travelmode={{mode}}"
 ```
 
-Opens `ACTION_VIEW` (with `CATEGORY_BROWSABLE`), pinned to the plugin's package. If that package
-can't open the link, the call fails. It does not fall back to a browser.
+Opens `ACTION_VIEW` (with `CATEGORY_BROWSABLE`), pinned to the plugin's package. If no activity of
+that package accepts the link as browsable, PhoneBridge tries once more without the category, still
+only in that package. If that package can't open the link, the call fails. It does not fall back to a
+browser.
 
 ### 6.4 `steps`: a screen recipe
 
@@ -254,11 +260,13 @@ android:
 | `back: true` | Presses Back. |
 | `sleep: 500` | Waits (≤ 3000 ms). |
 | `expect: <selector>` + `fail: "<message>"` | Fails the action with the message if the element doesn't show up. Without `fail`, the agent gets a generic message. |
-| `if_present: <selector>` + `then: [steps]` | Runs the nested steps only if the element is on screen now (one level deep). |
+| `if_present: <selector>` + `then: [steps]` | Runs the nested steps only if the element is on screen now, once the screen has settled (one level deep). With a `timeout_ms`, it waits up to that long for the element. |
 
 Every step may also carry `optional: true` (failure is ignored) and `timeout_ms` (default 5000,
 max 15000). For `wait_for`, `tap`, `long_press`, `expect` and `if_present` they may also go inside the
-selector's map, as in `wait_for: {text_contains: "{{query}}", timeout_ms: 8000}`.
+selector's map, as in `wait_for: {text_contains: "{{query}}", timeout_ms: 8000}`. An optional step's
+failure is never ignored when it is a refusal: a blocked app, another app in the foreground, access
+paused, the agent revoked, or an approval waiting on the phone.
 
 **Selectors** match elements in the plugin's app only:
 `{id, text, text_contains, desc, desc_contains, class, clickable, index}`, at least one of them other
@@ -267,11 +275,12 @@ than `index`. `id` may be short (`search_src_text`, which gets the app's package
 `android` (framework ids such as `android:id/button1`). `class` matches the simple class name
 (`EditText`). Text matches ignore case. `index` picks the nth match (default 0, max 50). A plain string
 (`tap: Send`) matches an element whose text or description equals it. Templates are allowed in
-`text`, `text_contains`, `desc` and `desc_contains`.
+`text`, `text_contains`, `desc` and `desc_contains`. A text criterion that renders empty (an optional
+parameter left out) matches nothing.
 
-**Confinement:** before every tap, long-press, type or scroll, PhoneBridge checks that the plugin's
-app is in the foreground. If another app is, the action stops with an error naming it. Recipes can't
-press Home, open the notification shade, or touch other apps or PhoneBridge itself.
+**Confinement:** before every tap, long-press, type, scroll or Back, PhoneBridge checks that the
+plugin's app is in the foreground. If another app is, the action stops with an error naming it.
+Recipes can't press Home, open the notification shade, or touch other apps or PhoneBridge itself.
 
 **Limits:** 40 steps in total (nested ones included), and 90 s per action.
 
@@ -335,8 +344,15 @@ updated or removed.
 | `play_from_search` | the app handles `MEDIA_PLAY_FROM_SEARCH` | `query` | action |
 | `web_search` | the app handles `ACTION_WEB_SEARCH` | `query` | action |
 | `show_on_map` | the app handles `geo:` links | `query` | action |
-| `shortcut_<id>` | each static launcher shortcut whose target is exported and not a call action | none | action |
+| `shortcut_<id>` | each static launcher shortcut whose target is exported and not a call action | none | action; `sensitive` when its id or label says it sends, pays, orders, calls or deletes (§9 word check) |
 | `<capability>` | each App Actions capability in the app's `shortcuts.xml` (e.g. `actions.intent.GET_THING` → `get_thing`), with its parameters | per capability | action; `sensitive` for messaging, calling, ordering, booking and payment capabilities |
+
+Ids are made from the declared names: lowercase, `camelCase` split with `_`, other characters
+replaced by `_`, at most 40 characters. A shortcut or capability is skipped unless its target is an
+exported activity of the app itself, with a literal, allowed data URL. A capability's parameters are
+named after their `android:key` (`messageText` → `message_text`); they reach the app as extras with
+that key, or through its `<url-template>`, of which the RFC 6570 forms `{var}`, `{?a,b}` and `{&a}` are
+supported (a parameter left out gives an empty value there).
 
 When a plugin defines an action with the same id, the plugin's version wins. A plugin applies to the
 first of its `android.packages` that is installed; other installed packages it lists get discovered
@@ -356,7 +372,8 @@ The validator, at build time and when a local plugin is imported, rejects:
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,
   `type`, `categories`, `class` or extra keys;
 * URL templates whose scheme isn't literal;
-* `android.packages` containing PhoneBridge itself.
+* `android.packages` containing PhoneBridge itself (the E2E fixture apps, `dev.phonebridge.fixture.*`,
+  are not PhoneBridge).
 
 The word check matches whole words, ignoring case, in the `id` (split at `_`), the `title` and the
 `confirm` text (placeholders ignored): the verbs *send, post, pay, buy, purchase, checkout, order,
@@ -389,7 +406,10 @@ At run time:
 2. `./scripts/plugin-check.sh plugins/myapp` validates the plugin and runs its examples.
 3. Try it on your phone without rebuilding the app. Turn on *Settings → Developer → Local plugins*,
    then **Import plugin** and pick your `plugin.yaml`. On a debug build connected over USB, run
-   `./scripts/plugin-push.sh plugins/myapp` instead.
+   `./scripts/plugin-push.sh plugins/myapp` instead: it copies the file into the app's private
+   storage (`files/local-plugins/<id>.yaml`, with `adb shell run-as`), and the app uses it from the
+   next call. Run it again after each edit; `--remove myapp` deletes it. Files the app can't load are
+   listed with their problems under *Settings → Developer*.
 4. Ask your agent to use it, or call `app_action_run` directly, and check the Activity log.
 5. Optionally, add yourself to `tested` with the app version you used. Then open a pull request.
 

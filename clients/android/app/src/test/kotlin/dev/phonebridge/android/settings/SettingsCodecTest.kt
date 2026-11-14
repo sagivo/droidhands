@@ -120,12 +120,13 @@ class SettingsCodecTest {
             neverAllowApps = setOf("com.ideomobile.hapoalim", "com.x8bit.bitwarden"),
             redactOneTimeCodes = false,
             securityDefaultsApplied = true,
+            localPluginsEnabled = true,
             defaultRelayDecided = true,
             relayFromDefault = true,
             checkForUpdates = false,
         )
         val encoded = SettingsCodec.encode(settings)
-        assertEquals(14, encoded.size)
+        assertEquals(15, encoded.size)
         assertEquals(settings, SettingsCodec.decode(encoded))
         // Fresh-install values survive a save too (the store is no longer empty afterwards).
         val fresh = BridgeSettings(securityDefaultsApplied = true)
@@ -138,6 +139,8 @@ class SettingsCodecTest {
         assertTrue("one-time codes are hidden by default", defaults.redactOneTimeCodes)
         assertTrue(defaults.neverAllowApps.isEmpty())
         assertFalse("first run still has to pre-select sensitive apps", defaults.securityDefaultsApplied)
+        assertFalse("unreviewed local plugins are off until the user turns them on", defaults.localPluginsEnabled)
+        assertFalse(SettingsCodec.decode(emptyMap<String, Any>()).localPluginsEnabled)
     }
 
     @Test

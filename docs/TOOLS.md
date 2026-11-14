@@ -87,7 +87,11 @@ Results of intent, link and screen-recipe actions:
 `{app, package, action, done, opened?, note?, next?, integration_note?, …}`. `done: false` (actions
 with `completes: false`) means the app is open at the right place but someone still has to finish
 there: `next` says to use `screen_read` and `ui_tap` or ask the user. `integration_note` appears for
-experimental community plugins: if the action fails, fall back to the screen tools.
+experimental community plugins: if the action fails, fall back to the screen tools. On Android, intent
+and link actions add `activity` (the screen that was opened) and `note` (e.g. the phone is locked);
+screen recipes add `steps_run`, `optional_steps_skipped` (if any) and a `note` ending with the
+foreground app, and their errors name the step that failed. `bridge_capabilities` reports
+`status.app_plugins`: `{plugins, local_unreviewed}`.
 
 ## Intents — scope `intents` (advanced)
 

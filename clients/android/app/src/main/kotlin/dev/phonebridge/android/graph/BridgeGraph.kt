@@ -12,6 +12,9 @@ import dev.phonebridge.android.confirm.NotificationConfirmationProvider
 import dev.phonebridge.android.notify.BridgeNotificationListener
 import dev.phonebridge.android.pairing.PairingCoordinator
 import dev.phonebridge.android.pairing.PairingNotifications
+import dev.phonebridge.android.plugins.BundledPlugins
+import dev.phonebridge.android.plugins.LocalPlugins
+import dev.phonebridge.android.plugins.PluginRepository
 import dev.phonebridge.android.service.BridgeService
 import dev.phonebridge.android.service.CoreTransports
 import dev.phonebridge.android.service.NetworkAddresses
@@ -23,6 +26,7 @@ import dev.phonebridge.android.settings.SecurityDefaults
 import dev.phonebridge.android.settings.SensitiveApps
 import dev.phonebridge.android.settings.SettingsRepository
 import dev.phonebridge.android.tools.AndroidToolCatalog
+import dev.phonebridge.android.tools.actions.AndroidAppActions
 import dev.phonebridge.android.tools.support.ApprovalGuard
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.android.update.UpdateChecker
@@ -36,10 +40,13 @@ import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.mcp.McpServer
 import dev.phonebridge.core.mcp.ServerInfo
 import dev.phonebridge.core.mcp.capabilitiesTool
+import dev.phonebridge.core.plugins.AppActionCatalog
+import dev.phonebridge.core.plugins.PluginSource
 import dev.phonebridge.core.policy.GlobalSecurity
 import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.ToolRegistry
 import dev.phonebridge.core.transport.RelayStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,8 +97,28 @@ class BridgeGraph private constructor(val app: Application) {
         ToolRegistry().also { registry ->
             // First, so agents see it at the top of tools/list.
             registry.register(capabilitiesTool(registry, ::extraStatus))
-            registry.registerAll(AndroidToolCatalog.build(app))
+            registry.registerAll(AndroidToolCatalog.build(app, appActions))
         }
+    }
+
+    /**
+     * App plugins (docs/PLUGINS.md): the reviewed ones shipped in the app, plus the local ones imported on this
+     * phone while Settings > Developer > Local plugins is on (read per call, so the switch applies at once).
+     */
+    val plugins: PluginRepository by lazy {
+        PluginRepository(
+            bundledFiles = { BundledPlugins.files(app.assets) },
+            local = LocalPlugins(File(app.filesDir, LocalPlugins.DIR)),
+            localEnabled = { settings.state.value.localPluginsEnabled },
+            log = { Log.w(TAG, it) },
+        )
+    }
+
+    private val actionsPlatform by lazy { AndroidAppActions(app) }
+
+    /** Every installed app's actions (plugins plus what apps declare): behind apps_list, app_actions_list and app_action_run. */
+    val appActions: AppActionCatalog by lazy {
+        AppActionCatalog(plugins::catalog, actionsPlatform, builtInTool = { name -> registry.get(name) })
     }
 
     val confirmations: NotificationConfirmationProvider by lazy { NotificationConfirmationProvider(app) }
@@ -182,7 +209,10 @@ class BridgeGraph private constructor(val app: Application) {
             Log.w(TAG, "Could not create notification channels", e)
         }
         app.registerComponentCallbacks(FlushOnTrim(::flushUsage))
-        appScope.launch { warmUp() }
+        appScope.launch {
+            warmUp()
+            warmUpAppActions()
+        }
     }
 
     /**
@@ -348,7 +378,16 @@ class BridgeGraph private constructor(val app: Application) {
             "local_server" to StatusText.localState(current.localServerEnabled, localServerStatus.value),
             "android_version" to "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             "app_version" to BuildConfig.VERSION_NAME,
+            "app_plugins" to appPluginsStatus(),
         )
+    }
+
+    /** How many app plugins are in use (app_actions_list / app_action_run); local ones are unreviewed. */
+    private fun appPluginsStatus(): Map<String, Any?> = try {
+        val all = plugins.catalog().plugins
+        linkedMapOf("plugins" to all.size, "local_unreviewed" to all.count { it.source == PluginSource.LOCAL })
+    } catch (e: Exception) {
+        mapOf("error" to "Could not load app plugins (${e.message ?: e.javaClass.simpleName})")
     }
 
     // The service is in the foreground, so plain startService() is allowed even from the background.
@@ -389,12 +428,24 @@ class BridgeGraph private constructor(val app: Application) {
             "tokens" to { tokenManager },
             "usage" to { usage },
             "audit" to { audit },
+            "app plugins" to { plugins.catalog() },
         ).forEach { (name, init) ->
             try {
                 init()
             } catch (e: Exception) {
                 Log.e(TAG, "Initializing $name failed", e)
             }
+        }
+    }
+
+    /** Scans installed apps for their discovered actions (docs/PLUGINS.md §8), so agents' first calls find them ready. */
+    private suspend fun warmUpAppActions() {
+        try {
+            actionsPlatform.warmUp { message, error -> Log.w(TAG, message, error) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Scanning installed apps failed", e)
         }
     }
 

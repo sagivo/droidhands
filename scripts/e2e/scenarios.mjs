@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // End-to-end use-case scenarios against a real PhoneBridge device (emulator + fixture apps).
 // usage: PB_URL=http://127.0.0.1:8787/mcp PB_TOKEN=pb1... node scripts/e2e/scenarios.mjs [filter]
-import { McpClient, Runner, adb, shell, sleep, waitFor, fixtureEvents, assert } from './lib.mjs';
+// App-action scenarios ("app actions: ..."): the local-plugin one pushes clients/android/fixtures/plugins/fakemail_test
+// with scripts/plugin-push.sh (debug build) and needs Settings > Developer > Local plugins on; it skips otherwise.
+// PB_BLOCKED_APP=<package> (an app blocked for this token) adds a check with that app; PhoneBridge itself is always used.
+import { execFileSync } from 'node:child_process';
+import { McpClient, Runner, adb, shell, sleep, waitFor, fixtureEvents, assert, skip } from './lib.mjs';
 
 const url = process.env.PB_URL || 'http://127.0.0.1:8787/mcp';
 const token = process.env.PB_TOKEN;
@@ -166,6 +170,113 @@ await step('location_get after a GPS fix', async () => {
   const r = ok(await c.call('location_get', { accuracy: 'high', timeout_seconds: 20 }), 'location_get');
   assert(Math.abs(r.json.latitude - 32.0853) < 0.01, r.text);
   return r.text;
+});
+
+// ---- App actions (docs/PLUGINS.md): apps_list -> app_actions_list -> app_action_run ----
+
+const BRIDGE = 'dev.phonebridge.android';
+const PLUGIN_PUSH = new URL('../plugin-push.sh', import.meta.url).pathname;
+const FAKEMAIL_PLUGIN = new URL('../../clients/android/fixtures/plugins/fakemail_test', import.meta.url).pathname;
+const UI = new URL('./ui.py', import.meta.url).pathname;
+const ui = (...a) => execFileSync('timeout', ['-k', '2', '60', 'python3', '-I', UI, ...a], { encoding: 'utf8' }).trim();
+
+/** Approves the pending PhoneBridge prompt whose title contains `title`: opens it from the shade, then taps Allow. */
+async function approveOnPhone(title) {
+  shell('cmd statusbar expand-notifications');
+  await sleep(1500);
+  ui('tap', title);
+  await sleep(1500); // Allow is enabled shortly after the approval screen appears.
+  ui('tap', 'Allow');
+}
+
+const topActivity = () => shell("dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | head -n 1");
+
+await step('app actions: apps_list and app_actions_list show what Fixture Mail can do', async () => {
+  const apps = ok(await c.call('apps_list', { query: 'Fixture Mail' }), 'apps_list');
+  const entry = apps.json?.find((a) => a.package === MAIL);
+  assert(entry, `Fixture Mail not listed: ${apps.text.slice(0, 300)}`);
+  assert(['basic', 'local', 'plugin'].includes(entry.integration), JSON.stringify(entry));
+  assert(entry.actions?.includes('open') && entry.actions.includes('share_text'), JSON.stringify(entry));
+  const list = ok(await c.call('app_actions_list', { app: 'Fixture Mail' }), 'app_actions_list');
+  const share = list.json?.actions?.find((a) => a.action === 'share_text');
+  assert(share?.params?.properties?.text && share.completes === false, list.text.slice(0, 500));
+  return JSON.stringify(entry);
+});
+
+await step('app actions: app_actions_list for WhatsApp shows the bundled plugin\'s send_message', async () => {
+  const r = ok(await c.call('app_actions_list', { app: WA }), 'app_actions_list');
+  if (r.json?.integration !== 'plugin') skip(`this build has no bundled WhatsApp plugin (integration: ${r.json?.integration})`);
+  const send = r.json.actions.find((a) => a.action === 'send_message');
+  assert(send, `no send_message in: ${r.json.actions.map((a) => a.action).join(', ')}`);
+  assert(send.params?.properties?.message, JSON.stringify(send.params));
+  return `${send.title}: ${JSON.stringify(send.params).slice(0, 200)}`;
+});
+
+await step('app actions: app_actions_list(query) finds which app can do something', async () => {
+  const r = ok(await c.call('app_actions_list', { query: 'share text', limit: 20 }), 'app_actions_list');
+  const matches = r.json?.matches || [];
+  assert(matches.some((m) => m.action === 'share_text'), r.text.slice(0, 500));
+  assert(matches.every((m) => m.package !== BRIDGE), 'PhoneBridge itself must never be listed');
+  assert(/app_action_run/.test(r.json.how_to_run || ''), r.text.slice(0, 300));
+  return matches.slice(0, 5).map((m) => `${m.app}/${m.action}`).join(', ');
+});
+
+await step('app actions: app_action_run opens Settings (discovered "open")', async () => {
+  shell('input keyevent KEYCODE_HOME');
+  await sleep(500);
+  const r = ok(await c.call('app_action_run', { app: 'com.android.settings', action: 'open' }), 'app_action_run');
+  assert(r.json?.done === true && r.json?.package === 'com.android.settings', r.text);
+  const top = await waitFor(() => (/com\.android\.settings/.test(topActivity()) ? topActivity() : null), { what: 'Settings in front' });
+  shell('input keyevent KEYCODE_HOME');
+  return `${r.text.slice(0, 200)}\n top: ${top}`;
+});
+
+await step('app actions: a local plugin asks for approval (unreviewed) and sends with a screen recipe', async () => {
+  try {
+    execFileSync(PLUGIN_PUSH, [FAKEMAIL_PLUGIN], { encoding: 'utf8', timeout: 60_000, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    skip(`plugin-push.sh failed (needs a debug build): ${String(e.stderr || e.message).trim().slice(0, 200)}`);
+  }
+  const list = ok(await c.call('app_actions_list', { app: MAIL }), 'app_actions_list');
+  if (list.json?.integration !== 'local') skip('turn on Settings > Developer > Local plugins on the phone to run this scenario');
+  assert(list.json.actions.some((a) => a.action === 'send_email'), list.text.slice(0, 400));
+  assert(/review/i.test(list.json.note || ''), `no unreviewed-plugin note: ${list.text.slice(0, 300)}`);
+
+  shell('input keyevent KEYCODE_HOME');
+  const t0 = Date.now();
+  const subject = `Plugin test ${t0}`;
+  const pending = c.call('app_action_run', {
+    app: MAIL, action: 'send_email', params: { to: 'bob@example.com', subject, body: 'Sent by a local plugin' },
+  });
+  // Local plugins always ask, whatever the token's approval policy, and the prompt says the plugin is unreviewed.
+  await waitFor(() => /unreviewed plugin/i.test(shell("dumpsys notification --noredact | grep -i 'unreviewed plugin' || true")), {
+    what: 'approval prompt for the unreviewed plugin', timeoutMs: 20_000,
+  });
+  await approveOnPhone('wants to:');
+  const r = ok(await pending, 'app_action_run send_email');
+  assert(r.json?.done === true && r.json?.steps_run >= 8, r.text);
+  const ev = await waitFor(() => lastEvent(MAIL, 'EMAIL_SENT', t0), { what: 'fixture EMAIL_SENT event' });
+  assert(ev.to.includes('bob@example.com') && ev.subject === subject && ev.body === 'Sent by a local plugin', JSON.stringify(ev));
+  shell('input keyevent KEYCODE_HOME');
+  return `${r.text.slice(0, 300)}\n fixture recorded: ${JSON.stringify(ev)}`;
+});
+
+await step('app actions: blocked apps are refused and never listed', async () => {
+  // PhoneBridge itself is on every agent's never-allow list.
+  const run = await c.call('app_action_run', { app: BRIDGE, action: 'open' });
+  assert(run.isError && /blocked|never-allow/i.test(run.text), run.text);
+  const list = await c.call('app_actions_list', { app: BRIDGE });
+  assert(list.isError && /blocked|never-allow/i.test(list.text), list.text);
+  const blocked = process.env.PB_BLOCKED_APP;
+  if (blocked) {
+    const r = await c.call('app_action_run', { app: blocked, action: 'open' });
+    assert(r.isError && /blocked/i.test(r.text), `expected a refusal for ${blocked}: ${r.text}`);
+    const apps = ok(await c.call('apps_list', {}), 'apps_list');
+    assert(!apps.json?.some((a) => a.package === blocked), `${blocked} is listed`);
+    const q = ok(await c.call('app_actions_list', { query: 'open', limit: 50 }), 'app_actions_list');
+    assert(!(q.json?.matches || []).some((m) => m.package === blocked), `${blocked} has listed actions`);
+  }
+  return run.text.slice(0, 200);
 });
 
 console.log();

@@ -53,8 +53,12 @@ object PluginLoader {
     }
 
     /** Loads [file], checking its id against its folder. */
-    fun load(file: PluginFile, source: PluginSource = PluginSource.BUNDLED, toolNames: Set<String> = ToolNames.ALL): PluginLoadResult =
-        load(file.text, source, file.folder, file.path, toolNames)
+    fun load(
+        file: PluginFile,
+        source: PluginSource = PluginSource.BUNDLED,
+        toolNames: Set<String> = ToolNames.ALL,
+        runExamples: Boolean = true,
+    ): PluginLoadResult = load(file.text, source, file.folder, file.path, toolNames, runExamples)
 }
 
 /** A catalog plus the files that could not be added to it. */
@@ -129,18 +133,20 @@ class PluginCatalog private constructor(val plugins: List<AppPlugin>) {
         /**
          * Loads [files] (each fully checked by [PluginLoader]) into a catalog. Files in folders starting with
          * `_` (such as `_template`) are never loaded. Invalid files, duplicate ids and conflicting plugins are
-         * left out and reported in [PluginCatalogLoad.errors].
+         * left out and reported in [PluginCatalogLoad.errors]. [runExamples]: also run each plugin's examples
+         * (a device loading its bundled plugins can skip them: `:core:test` already ran them).
          */
         fun load(
             files: List<PluginFile>,
             source: PluginSource = PluginSource.BUNDLED,
             toolNames: Set<String> = ToolNames.ALL,
+            runExamples: Boolean = true,
         ): PluginCatalogLoad {
             var catalog = EMPTY
             val errors = ArrayList<String>()
             for (file in files.sortedBy { it.path }) {
                 if (file.folder?.startsWith("_") == true) continue
-                val result = PluginLoader.load(file, source, toolNames)
+                val result = PluginLoader.load(file, source, toolNames, runExamples)
                 val plugin = result.plugin
                 when {
                     plugin == null -> errors += result.errors

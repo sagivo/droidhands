@@ -1,5 +1,7 @@
 package dev.phonebridge.android.ui.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -20,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,8 +37,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.BuildConfig
+import dev.phonebridge.android.plugins.LocalPluginEntry
+import dev.phonebridge.android.plugins.PluginImports
 import dev.phonebridge.android.ui.components.BottomActionBar
 import dev.phonebridge.android.ui.components.CodeBlock
+import dev.phonebridge.android.ui.components.ConfirmDialog
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.ScreenScaffold
@@ -56,16 +62,35 @@ class SettingsActions(
 
 /**
  * Settings: Connection (relay, local server, boot; saved together from the bottom bar),
- * Permissions & access, Security (never-allow apps, hidden one-time codes, revoke all) and About.
+ * Permissions & access, Security (never-allow apps, hidden one-time codes, revoke all), Developer
+ * (local plugins) and About.
  */
 @Composable
 fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int, actions: SettingsActions) {
     val current by vm.settings.collectAsStateWithLifecycle()
     val neverAllow by vm.neverAllowApps.collectAsStateWithLifecycle()
     val redact by vm.redactOneTimeCodes.collectAsStateWithLifecycle()
+    val localPluginsOn by vm.localPluginsEnabled.collectAsStateWithLifecycle()
+    val localPlugins by vm.localPlugins.collectAsStateWithLifecycle()
     val form = vm.form
     val validation = remember(form) { form.validate() }
     val dirty = form.differsFrom(current)
+    var removing by remember { mutableStateOf<LocalPluginEntry?>(null) }
+    val pickPlugin = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importPlugin) }
+
+    // Files pushed with scripts/plugin-push.sh show up whenever Settings opens.
+    LaunchedEffect(localPluginsOn) { if (localPluginsOn) vm.refreshLocalPlugins() }
+    vm.importErrors?.let { ImportErrorsDialog(it, onDismiss = vm::dismissImportErrors) }
+    removing?.let { entry ->
+        ConfirmDialog(
+            title = "Remove ${entry.plugin?.name ?: entry.id}?",
+            text = "Its actions disappear for every agent. You can import it again later.",
+            confirmLabel = "Remove",
+            destructive = true,
+            onConfirm = { vm.removeLocalPlugin(entry.id) },
+            onDismiss = { removing = null },
+        )
+    }
 
     ScreenScaffold(
         title = "Settings",
@@ -112,6 +137,17 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                     onOpenNeverAllow = actions.onOpenNeverAllow,
                     onRedactChange = vm::setRedactOneTimeCodes,
                     onRevokeAll = actions.onRevokeAll,
+                )
+            }
+            item(key = "developer-header") { SectionHeader("Developer") }
+            item(key = "developer") {
+                DeveloperSection(
+                    enabled = localPluginsOn,
+                    plugins = localPlugins,
+                    importing = vm.importing,
+                    onEnabledChange = vm::setLocalPluginsEnabled,
+                    onImport = { pickPlugin.launch(PluginImports.MIME_TYPES) },
+                    onRemove = { removing = it },
                 )
             }
             item(key = "about-header") { SectionHeader("About") }

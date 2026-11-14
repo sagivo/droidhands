@@ -19,6 +19,7 @@ object SettingsCodec {
     internal const val KEY_NEVER_ALLOW_APPS = "never_allow_apps"
     internal const val KEY_REDACT_ONE_TIME_CODES = "redact_one_time_codes"
     internal const val KEY_SECURITY_DEFAULTS_APPLIED = "security_defaults_applied"
+    internal const val KEY_LOCAL_PLUGINS_ENABLED = "local_plugins_enabled"
     internal const val KEY_DEFAULT_RELAY_DECIDED = "default_relay_decided"
     internal const val KEY_RELAY_FROM_DEFAULT = "relay_from_default"
     internal const val KEY_CHECK_FOR_UPDATES = "check_for_updates"
@@ -78,6 +79,7 @@ object SettingsCodec {
                 neverAllowApps = strings(KEY_NEVER_ALLOW_APPS, defaults.neverAllowApps),
                 redactOneTimeCodes = bool(KEY_REDACT_ONE_TIME_CODES, defaults.redactOneTimeCodes),
                 securityDefaultsApplied = bool(KEY_SECURITY_DEFAULTS_APPLIED, defaults.securityDefaultsApplied),
+                localPluginsEnabled = bool(KEY_LOCAL_PLUGINS_ENABLED, defaults.localPluginsEnabled),
                 defaultRelayDecided = bool(KEY_DEFAULT_RELAY_DECIDED, values.isNotEmpty()),
                 relayFromDefault = bool(KEY_RELAY_FROM_DEFAULT, defaults.relayFromDefault),
                 checkForUpdates = bool(KEY_CHECK_FOR_UPDATES, defaults.checkForUpdates),
@@ -98,6 +100,7 @@ object SettingsCodec {
         KEY_NEVER_ALLOW_APPS to settings.neverAllowApps.toSet(),
         KEY_REDACT_ONE_TIME_CODES to settings.redactOneTimeCodes,
         KEY_SECURITY_DEFAULTS_APPLIED to settings.securityDefaultsApplied,
+        KEY_LOCAL_PLUGINS_ENABLED to settings.localPluginsEnabled,
         KEY_DEFAULT_RELAY_DECIDED to settings.defaultRelayDecided,
         KEY_RELAY_FROM_DEFAULT to settings.relayFromDefault,
         KEY_CHECK_FOR_UPDATES to settings.checkForUpdates,

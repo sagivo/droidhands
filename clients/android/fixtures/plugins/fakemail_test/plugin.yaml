@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=../../../../../plugins/plugin.schema.json
+#
+# E2E TEST PLUGIN for the Fixture Mail app (clients/android/fixtures/fakemail). It is never bundled: the
+# E2E run pushes it to a debug build as a LOCAL plugin with
+#   ./scripts/plugin-push.sh clients/android/fixtures/plugins/fakemail_test
+# (Settings > Developer > Local plugins must be on). scripts/e2e/scenarios.mjs uses it; FixturePluginsTest
+# validates it and runs its example.
+id: fakemail_test
+name: Fixture Mail
+description: Test plugin for the E2E fixture mail app (emulators only).
+category: email
+status: experimental
+android:
+  packages: [dev.phonebridge.fixture.mail]
+
+actions:
+  - id: send_email
+    title: Send an email
+    description: >-
+      Writes a new email in Fixture Mail and taps Send, with a screen recipe (steps). For E2E tests only.
+    keywords: [email, mail]
+    risk: sensitive
+    params:
+      to: {description: Recipient email address, required: true, max_length: 200}
+      subject: {description: Subject line, required: true, max_length: 200}
+      body: {description: The email text, required: true, max_length: 2000}
+    confirm: 'Send "{{subject}}" to {{to}} with Fixture Mail'
+    completes: true
+    android:
+      steps:
+        - launch: {fresh: true}
+        - tap: {id: compose}
+        - wait_for: {id: to}
+        - type: {into: {id: to}, text: "{{to}}"}
+        - type: {into: {id: subject}, text: "{{subject}}"}
+        - type: {into: {id: body}, text: "{{body}}"}
+        - tap: {desc: Send}
+        - expect: {id: inbox_title, timeout_ms: 8000}
+          fail: Fixture Mail did not go back to its inbox after Send, so the email may not have been sent.
+    examples:
+      - params: {to: bob@example.com, subject: Plugin test, body: Sent by a steps recipe}
+        expect:
+          steps:
+            - launch: {fresh: true}
+            - tap: {id: compose}
+            - wait_for: {id: to}
+            - type: {into: {id: to}, text: bob@example.com}
+            - type: {into: {id: subject}, text: Plugin test}
+            - type: {into: {id: body}, text: Sent by a steps recipe}
+            - tap: {desc: Send}
+            - expect: {id: inbox_title, timeout_ms: 8000}
+              fail: Fixture Mail did not go back to its inbox after Send, so the email may not have been sent.
+      - params: {to: bob@example.com, subject: Hi}
+        expect: {error: body}

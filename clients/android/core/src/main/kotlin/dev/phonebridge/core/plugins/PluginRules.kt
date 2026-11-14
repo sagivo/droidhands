@@ -36,9 +36,16 @@ object PluginRules {
     /** Packages that are PhoneBridge itself (any build variant); plugins may not target them (§9). */
     const val BRIDGE_PACKAGE_PREFIX = "dev.phonebridge"
 
-    /** True if [packageName] is PhoneBridge (or one of its variants). */
+    /**
+     * The emulator-only E2E fixture apps (`clients/android/fixtures`, e.g. `dev.phonebridge.fixture.mail`):
+     * not PhoneBridge, so test plugins may target them.
+     */
+    const val FIXTURE_PACKAGE_PREFIX = "dev.phonebridge.fixture."
+
+    /** True if [packageName] is PhoneBridge (or one of its variants); the E2E fixture apps are not. */
     fun isBridgePackage(packageName: String): Boolean =
-        packageName == BRIDGE_PACKAGE_PREFIX || packageName.startsWith("$BRIDGE_PACKAGE_PREFIX.")
+        (packageName == BRIDGE_PACKAGE_PREFIX || packageName.startsWith("$BRIDGE_PACKAGE_PREFIX.")) &&
+            !packageName.startsWith(FIXTURE_PACKAGE_PREFIX)
 
     /** Intent actions that place calls; intent recipes may never use them (§6.2). */
     val CALL_ACTIONS: Set<String> = setOf("CALL", "CALL_PRIVILEGED", "CALL_EMERGENCY")

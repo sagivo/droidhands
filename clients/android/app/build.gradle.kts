@@ -1,5 +1,6 @@
 import com.android.build.api.variant.impl.VariantOutputImpl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Locale
 
 plugins {
     id("com.android.application")
@@ -7,6 +8,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
+
+// App plugins (docs/PLUGINS.md): every plugins/<id>/plugin.yaml of the repository ships inside the app as
+// assets/plugins/<id>.yaml; folders starting with "_" (such as _template) are left out. :core:test validates
+// them all, so a bad plugin fails the build before it ships (the app still skips and logs a bad file).
+val repoPluginsDir: File = rootDir.resolve("../../plugins").normalize()
+
+// E2E test plugins (local plugins for the fixture apps), validated by FixturePluginsTest.
+val fixturePluginsDir: File = rootDir.resolve("fixtures/plugins")
 
 // ---- Build inputs (docs/RELEASING.md) ----
 // Each value comes from a Gradle property (-Pname=value or ~/.gradle/gradle.properties) or an
@@ -115,6 +124,46 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            test.systemProperty("phonebridge.fixturePluginsDir", fixturePluginsDir.absolutePath)
+            test.inputs.dir(fixturePluginsDir).withPropertyName("fixturePlugins").withPathSensitivity(PathSensitivity.RELATIVE)
+        }
+    }
+}
+
+/** Copies plugins/<id>/plugin.yaml (folders not starting with "_") to `<outputDir>/plugins/<id>.yaml`. */
+abstract class BundlePluginsTask : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val pluginsDir: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun bundle() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        val target = File(out, "plugins").apply { mkdirs() }
+        val folders = pluginsDir.get().asFile.listFiles().orEmpty()
+            .filter { it.isDirectory && !it.name.startsWith("_") && !it.name.startsWith(".") }
+            .sortedBy { it.name }
+        for (folder in folders) {
+            val yaml = File(folder, "plugin.yaml")
+            if (yaml.isFile) yaml.copyTo(File(target, "${folder.name}.yaml"), overwrite = true)
+        }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val name = variant.name.replaceFirstChar { it.titlecase(Locale.ROOT) }
+        val bundle = tasks.register<BundlePluginsTask>("bundle${name}Plugins") {
+            group = "build"
+            description = "Copies the repository's app plugins into the ${variant.name} assets (docs/PLUGINS.md)."
+            pluginsDir.set(repoPluginsDir)
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(bundle, BundlePluginsTask::outputDir)
     }
 }
 
@@ -158,4 +207,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    // An XmlPullParser for JVM tests of the shortcuts.xml parser (on the phone, Android's compiled-XML parser feeds it).
+    testImplementation("net.sf.kxml:kxml2:2.3.0")
 }

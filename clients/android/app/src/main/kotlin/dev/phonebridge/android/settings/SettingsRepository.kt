@@ -35,6 +35,11 @@ data class BridgeSettings(
      */
     val securityDefaultsApplied: Boolean = false,
     /**
+     * Settings > Developer > Local plugins: use app plugins imported on the phone (unreviewed; every action
+     * of theirs asks for approval). Off by default (docs/PLUGINS.md §10).
+     */
+    val localPluginsEnabled: Boolean = false,
+    /**
      * True once the first-run default relay step ran ([dev.phonebridge.android.graph.DefaultRelay]):
      * it either connected to the build's default relay or found a connection already set up. Stored
      * settings from before this field existed count as decided, so an app update never adds a relay.
@@ -54,7 +59,7 @@ data class BridgeSettings(
             "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBindAll=$localServerBindAll, " +
             "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot, neverAllowApps=${neverAllowApps.size} apps, " +
             "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied, " +
-            "defaultRelayDecided=$defaultRelayDecided, relayFromDefault=$relayFromDefault, checkForUpdates=$checkForUpdates)"
+            "localPluginsEnabled=$localPluginsEnabled, defaultRelayDecided=$defaultRelayDecided, relayFromDefault=$relayFromDefault, checkForUpdates=$checkForUpdates)"
 }
 
 /**
