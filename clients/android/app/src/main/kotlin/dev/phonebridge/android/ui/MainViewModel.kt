@@ -9,7 +9,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.graph.BridgeGraph
+import dev.phonebridge.android.graph.DefaultRelay
 import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.settings.BridgeSettings
 import dev.phonebridge.android.ui.activity.ActivityQuery
@@ -29,9 +31,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -64,6 +69,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Activity tab filters; the agent detail page sets them for "See all activity". Main thread. */
     var activityQuery by mutableStateOf(ActivityQuery())
 
+    /** The build's default relay (normalized), or null when this build has none. */
+    val defaultRelayUrl: String? = DefaultRelay.url(BuildConfig.DEFAULT_RELAY_URL)
+
+    /** A newer release to offer on Home (e.g. "1.3.0"), while "Check for updates" is on. */
+    val availableUpdate: StateFlow<String?> = combine(graph.updates.available, settings) { version, current ->
+        version.takeIf { current.checkForUpdates }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), null)
+
+    /** Where the update card's Download button goes (the latest release's APK), or null. */
+    val updateDownloadUrl: String? = graph.updates.downloadUrl
+
     init {
         viewModelScope.launch {
             val completed = try {
@@ -77,10 +93,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _showOnboarding.value = OnboardingFlow.shouldShow(
                 completed = completed,
                 hasTokens = tokens.value.isNotEmpty(),
-                transportConfigured = StatusPresentation.transportConfigured(settings.value),
+                // Being online through the build's default relay doesn't mean the user set anything up.
+                transportConfigured = StatusPresentation.userTransportConfigured(settings.value),
             )
         }
+        if (settings.value.checkForUpdates) viewModelScope.launch(Dispatchers.IO) { graph.updates.refresh() }
     }
+
+    /**
+     * First run of a build with a default relay: go online through it unless something is set up
+     * already ([DefaultRelay]). The UI calls this once the app is visible, and skips it while a
+     * setup link waits for an answer (that link's relay would replace it right away).
+     */
+    fun applyDefaultRelayIfNeeded() = io("Couldn't connect to the relay") { graph.applyDefaultRelayIfNeeded() }
+
+    /** "Go online with <host>": use the build's default relay. */
+    fun useDefaultRelay() = io("Couldn't connect to the relay") {
+        graph.useDefaultRelay()
+        _messages.send("Connecting…")
+    }
+
+    /** Hides the update card for [version] (a later release shows it again). */
+    fun dismissUpdate(version: String) = io("Couldn't save that") { graph.updates.dismiss(version) }
 
     /** Finishes or skips the wizard for good. */
     @MainThread
@@ -138,14 +172,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Onboarding / connect page: saves a relay URL (and optional key), turns the relay on and connects. */
     fun connectRelay(url: String, accessKey: String) = io("Couldn't save the relay") {
         val normalized = RelayUrls.normalize(url)
-        graph.settings.update { it.copy(relayEnabled = true, relayUrl = normalized, relayAccessKey = accessKey.trim()) }
+        graph.settings.update {
+            it.copy(relayEnabled = true, relayUrl = normalized, relayAccessKey = accessKey.trim(), relayFromDefault = false)
+        }
         graph.applySettings()
         _messages.send("Connecting to the relay…")
     }
 
-    /** Onboarding "Local only": serves MCP on this phone (127.0.0.1, reached with adb forward). */
+    /**
+     * Onboarding "Local only": serves MCP on this phone (127.0.0.1, reached with adb forward). The
+     * build's default relay, if it is on, is turned off: local only means no relay. A relay the
+     * user set up stays as it is.
+     */
     fun enableLocalServer() = io("Couldn't start the local server") {
-        graph.settings.update { it.copy(localServerEnabled = true) }
+        graph.settings.update { it.copy(localServerEnabled = true, relayEnabled = it.relayEnabled && !it.relayFromDefault) }
         graph.applySettings()
         _messages.send("Local server starting on port ${settings.value.localServerPort}…")
     }
@@ -171,5 +211,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val TAG = "PhoneBridgeUi"
+        const val STOP_TIMEOUT_MS = 5_000L
     }
 }

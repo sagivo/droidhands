@@ -62,6 +62,13 @@ object StatusPresentation {
     fun transportConfigured(settings: BridgeSettings): Boolean =
         (settings.relayEnabled && RelayUrls.mcpUrl(settings.relayUrl) != null) || settings.localServerEnabled
 
+    /**
+     * Like [transportConfigured], but the build's default relay doesn't count: the user didn't set
+     * it up, so a fresh install that is online through it still gets the onboarding wizard.
+     */
+    fun userTransportConfigured(settings: BridgeSettings): Boolean =
+        transportConfigured(settings.copy(relayEnabled = settings.relayEnabled && !settings.relayFromDefault))
+
     /** Offer "Restart" when an enabled transport is down for a reason a restart can fix. */
     fun showRestart(relay: RelayStatus, relayEnabled: Boolean, local: LocalServerStatus, localEnabled: Boolean): Boolean {
         val relayDown = relay == RelayStatus.Stopped || (relay is RelayStatus.Error && relay.fatal)
