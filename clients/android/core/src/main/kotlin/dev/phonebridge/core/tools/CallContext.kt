@@ -23,10 +23,13 @@ class CallContext(
     val toolRules: Map<String, ToolRule> = emptyMap(),
     /** The calling token's daily active window (informational; enforced by the server), or null for always. */
     val activeHours: ActiveHours? = null,
+    /** The calling token's risk cap (informational; enforced by the server), or null for none. */
+    val maxRisk: Risk? = null,
     /**
-     * Throws [ToolException] if access was paused or this token was revoked/deleted since the call started.
-     * Tools MUST call [ensureStillAllowed] after any wait (unlock prompt, UI mutex, confirmation) and right
-     * before each side effect. Implemented by McpServer (wave 3).
+     * Throws [ToolException] if access was paused or this token was revoked/deleted (or expired, or lost
+     * access to this tool) since the call started. Tools MUST call [ensureStillAllowed] after any wait
+     * (unlock prompt, UI mutex, confirmation) and right before each side effect. [requireConfirmation]
+     * checks it too, before prompting and after the answer. Provided by McpServer.
      */
     private val stillAllowed: suspend () -> Unit = {},
     // Last so callers can pass it as a trailing lambda.

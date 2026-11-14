@@ -1,6 +1,7 @@
 package dev.phonebridge.core.mcp
 
 import dev.phonebridge.core.auth.ToolRule
+import dev.phonebridge.core.policy.PolicyEngine
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -24,12 +25,12 @@ const val CAPABILITIES_TOOL_NAME = "bridge_capabilities"
 /**
  * The `bridge_capabilities` meta tool (scope "", Risk.READ): returns the calling token's name, scopes
  * and advanced controls (app access summary, per-tool rules, active hours, whether one-time codes are
- * hidden; see [PolicySummary]), plus every tool visible to that token (in scope and not BLOCKed) with
- * `available` and `unavailable_reason`, and [extraStatus] (platform status such as
- * accessibility/notification access/locked) merged in.
+ * hidden, risk cap; see [PolicySummary]), plus every tool visible to that token (in scope, not BLOCKed
+ * and within its risk cap) with `available` and `unavailable_reason`, and [extraStatus] (platform status
+ * such as accessibility/notification access/locked) merged in.
  *
  * Output: `{"token":{"name","scopes","app_access":{…},"tool_rules":{name:rule},"active_hours":{…},
- * "one_time_codes_hidden"},"status":{…extraStatus},"tools":[{"name","title","risk","scope","rule"?,
+ * "one_time_codes_hidden","max_risk"},"status":{…extraStatus},"tools":[{"name","title","risk","scope","rule"?,
  * "available","unavailable_reason"?}]}`. [extraStatus] values may be strings, numbers, booleans,
  * null, lists/arrays, maps (nested) or [JsonElement]s; anything else is rendered with
  * `toString()`. An exception from [extraStatus] is reported as `status.error` instead of failing.
@@ -53,7 +54,8 @@ fun capabilitiesTool(
     } catch (e: Exception) {
         buildJsonObject { put("error", "Could not read phone status (${ToolText.describe(e)})") }
     }
-    val inScope = registry.all().filter { Scopes.allows(ctx.scopes, it.scope) }
+    // Tools above the token's risk cap are hidden like out-of-scope ones (PolicyEngine refuses them).
+    val inScope = registry.all().filter { Scopes.allows(ctx.scopes, it.scope) && !PolicyEngine.exceedsMaxRisk(ctx.maxRisk, it.risk) }
     ToolResult.json {
         putJsonObject("token") {
             put("name", ctx.tokenName)

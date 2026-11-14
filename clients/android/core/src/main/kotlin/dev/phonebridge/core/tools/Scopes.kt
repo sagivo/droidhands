@@ -52,6 +52,17 @@ object Scopes {
         "Full control" to PRESET_FULL,
     )
 
+    /**
+     * Preset name -> the [dev.phonebridge.core.auth.TokenRecord.maxRisk] to store with it (null = no cap).
+     * "Read-only" is capped at [Risk.READ]: its `device` and `apps` scopes also hold ACTION tools (volume,
+     * ringer, clipboard, alarms, opening apps and links), which the cap hides and refuses. Same keys as [PRESETS].
+     */
+    val PRESET_MAX_RISK: Map<String, Risk?> = linkedMapOf(
+        "Read-only" to Risk.READ,
+        "Assistant" to null,
+        "Full control" to null,
+    )
+
     /** True if a token holding [granted] may use a tool requiring [required] ("" = always allowed). */
     fun allows(granted: Set<String>, required: String): Boolean = required.isEmpty() || required in granted
 }

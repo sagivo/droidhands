@@ -87,6 +87,32 @@ class RelayPairingsTest {
     }
 
     @Test
+    fun handlerGetsExpiresAtConvertedToThePhonesClock() {
+        val requests = LinkedBlockingQueue<PairingRequest>()
+        val handler = object : PairingHandler {
+            override suspend fun onPairRequest(request: PairingRequest): PairingDecision {
+                requests += request
+                return PairingDecision.Denied("denied")
+            }
+            override fun onPairFinished(id: String, tokenId: String?, completed: Boolean) = Unit
+        }
+        val phoneNow = now + 200_000 // The phone's clock runs 200 s ahead of the relay's.
+        val p = RelayPairings(
+            handler = handler,
+            send = { true },
+            launch = { start, block -> scope.launch(start = start, block = block) },
+            relayNow = { now },
+            localNow = { phoneNow },
+        )
+        p.onRequest(frame("""{"type":"pair_request","id":"p_1","expiresAt":${now + 60_000}}"""))
+        assertEquals(phoneNow + 60_000, assertNotNull(requests.poll(10, TimeUnit.SECONDS)).expiresAt)
+
+        // A far-future expiresAt is capped like the prompt itself.
+        p.onRequest(frame("""{"type":"pair_request","id":"p_2","expiresAt":${now + 3_600_000}}"""))
+        assertEquals(phoneNow + RelayPairings.MAX_PROMPT_MS, assertNotNull(requests.poll(10, TimeUnit.SECONDS)).expiresAt)
+    }
+
+    @Test
     fun parsesAndSanitizesRequests() {
         val request = RelayProtocol.pairingRequest(
             frame(

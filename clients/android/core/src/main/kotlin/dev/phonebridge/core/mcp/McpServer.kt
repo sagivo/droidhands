@@ -15,6 +15,7 @@ import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
 import dev.phonebridge.core.tools.ToolRegistry
+import dev.phonebridge.core.tools.ToolResult
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -66,10 +67,18 @@ data class TransportResponse(
  * [handle] is safe to call concurrently. It may block briefly on persistence (token last-use
  * timestamps, audit appends), so call it from a background dispatcher. Every request is
  * authenticated first, including `initialize`. Only `tools/call` and authentication failures are
- * audited.
+ * audited; refused requests (failed authentication, unknown or out-of-scope tools, bad arguments,
+ * paused, policy and rate-limit refusals) are throttled per token or caller address so they cannot
+ * flood the audit log ([AuditThrottle]).
  *
- * `tools/list` hides tools outside the token's scopes and tools the token has a
- * [ToolRule.BLOCK] rule for (calling one anyway is refused by [PolicyEngine] and audited DENIED_POLICY).
+ * Each `tools/call` runs in a job of its own on the caller's dispatcher ([InFlightCalls]): if the
+ * caller is cancelled (the relay socket dropped or was restarted, the local server stopped), [handle]
+ * throws at once but the tool call goes on, is audited (noting that its result was not delivered),
+ * and its response is dropped. [cancelCalls] is how calls are stopped on purpose.
+ *
+ * `tools/list` hides tools outside the token's scopes, tools above its [TokenRecord.maxRisk] and tools
+ * the token has a [ToolRule.BLOCK] rule for (calling one anyway is refused by [PolicyEngine] and
+ * audited DENIED_POLICY).
  */
 class McpServer(
     private val registry: ToolRegistry,
@@ -89,14 +98,49 @@ class McpServer(
      */
     private val globalSecurity: () -> GlobalSecurity = { GlobalSecurity() },
 ) {
-    private val toolCalls = ToolCalls(registry, policy, confirmations, audit, isAccessEnabled, confirmationTimeoutMs, clock, globalSecurity)
+    private val auditThrottle = AuditThrottle(audit, clock)
+    private val inFlight = InFlightCalls()
+    private val toolCalls = ToolCalls(
+        registry = registry,
+        policy = policy,
+        confirmations = confirmations,
+        audit = auditThrottle,
+        isAccessEnabled = isAccessEnabled,
+        confirmationTimeoutMs = confirmationTimeoutMs,
+        clock = clock,
+        globalSecurity = globalSecurity,
+        currentToken = { id -> tokens.tokens.value.firstOrNull { it.id == id } },
+    )
 
     /**
      * Cancels in-flight tools/call executions — all of them ([tokenId] = null, e.g. on Pause) or one token's
-     * (on revoke/delete) — and denies their pending prompts. Cancelled calls are audited. Returns how many
-     * were cancelled. STUB — implemented by the core agent (wave 3).
+     * (on revoke/delete; all of them also after "revoke all"), including calls whose agent already
+     * disconnected. Their open confirmation prompts are withdrawn (the [ConfirmationProvider] call is
+     * cancelled). Each cancelled call answers its agent with an error saying why (its token removed or
+     * revoked, else access paused) and is audited CANCELLED, noting whether the tool had started. Call it
+     * after the change (pause, revoke, delete) is saved, so the reason is accurate. Returns how many calls
+     * were cancelled. Thread-safe and non-blocking.
      */
-    fun cancelCalls(tokenId: String? = null): Int = TODO()
+    fun cancelCalls(tokenId: String? = null): Int = inFlight.cancel(tokenId) { call -> stopReasonFor(call.tokenId) }
+
+    /** Calls in progress, including those whose agent disconnected (tests and diagnostics). */
+    internal val inFlightCalls: Int get() = inFlight.size
+
+    /** Why a call of [tokenId] is being cancelled, from the current state: token first, then the kill switch. */
+    private fun stopReasonFor(tokenId: String): StopReason {
+        val current = tokens.tokens.value.firstOrNull { it.id == tokenId }
+        val enabled = try {
+            isAccessEnabled()
+        } catch (e: Exception) {
+            false
+        }
+        return when {
+            current == null -> StopReason.DELETED
+            current.revoked -> StopReason.REVOKED
+            !enabled -> StopReason.PAUSED
+            else -> StopReason.STOPPED
+        }
+    }
 
     suspend fun handle(request: TransportRequest): TransportResponse {
         val auth = try {
@@ -161,12 +205,18 @@ class McpServer(
             "initialize" -> JsonRpc.result(id, initializeResult(params))
             "ping" -> JsonRpc.result(id, EMPTY_OBJECT)
             "tools/list" -> JsonRpc.result(id, toolsList(token))
-            "tools/call" -> toolCalls.call(id, params, token, request.transport)
+            "tools/call" -> callTool(id, params, token, request.transport)
             "resources/list" -> JsonRpc.result(id, buildJsonObject { putJsonArray("resources") {} })
             "resources/templates/list" -> JsonRpc.result(id, buildJsonObject { putJsonArray("resourceTemplates") {} })
             "prompts/list" -> JsonRpc.result(id, buildJsonObject { putJsonArray("prompts") {} })
             else -> JsonRpc.error(id, JsonRpc.METHOD_NOT_FOUND, "Method not found: ${ToolText.truncate(message.method, 100)}")
         }
+    }
+
+    private suspend fun callTool(id: JsonElement, params: JsonObject, token: TokenRecord, transport: String): JsonObject {
+        val call = InFlightCall(token.id)
+        val stopped = { reason: StopReason -> JsonRpc.result(id, ToolCalls.encodeResult(ToolResult.error(reason.message))) }
+        return inFlight.run(call, stopped) { toolCalls.call(id, params, token, transport, call) }
     }
 
     private fun initializeResult(params: JsonObject): JsonObject {
@@ -218,22 +268,19 @@ class McpServer(
             request.remoteAddress?.let { append("; from ").append(it) }
             request.userAgent?.let { append("; ua ").append(it) }
         }
-        try {
-            audit.record(
-                AuditEntry(
-                    timestamp = clock(),
-                    tokenId = known?.id,
-                    tokenName = known?.name,
-                    method = method,
-                    tool = tool,
-                    outcome = AuditOutcome.AUTH_FAILED,
-                    transport = request.transport,
-                    detail = ToolText.truncate(detail, ToolText.PREVIEW_CHARS),
-                ),
-            )
-        } catch (e: Exception) {
-            // Auditing must never break request handling.
-        }
+        val entry = AuditEntry(
+            timestamp = clock(),
+            tokenId = known?.id,
+            tokenName = known?.name,
+            method = method,
+            tool = tool,
+            outcome = AuditOutcome.AUTH_FAILED,
+            transport = request.transport,
+            detail = ToolText.truncate(detail, ToolText.PREVIEW_CHARS),
+        )
+        // Throttled per known token, else per caller address, so bad tokens cannot flood the log.
+        val source = known?.let { "token:${it.id}" } ?: "from:${request.transport}:${request.remoteAddress ?: "unknown"}"
+        auditThrottle.recordRefusal(entry, source)
     }
 
     companion object {
@@ -258,9 +305,13 @@ class McpServer(
 
         private fun json(status: Int, body: JsonElement) = TransportResponse(status, JsonRpc.encode(body), JSON_HEADERS)
 
-        /** `tools/list` shows tools within the token's scopes, except those it has a BLOCK rule for. */
+        /**
+         * `tools/list` shows tools within the token's scopes and risk cap, except those it has a BLOCK rule
+         * for. A running call re-checks this against the token's current record and stops once it is false.
+         */
         internal fun isVisible(token: TokenRecord, tool: Tool): Boolean =
-            Scopes.allows(token.scopes, tool.scope) && token.toolRules[tool.name] != ToolRule.BLOCK
+            Scopes.allows(token.scopes, tool.scope) && token.toolRules[tool.name] != ToolRule.BLOCK &&
+                !PolicyEngine.exceedsMaxRisk(token.maxRisk, tool.risk)
 
         /** Best-effort method (and tool name for tools/call) from an unauthenticated body. */
         internal fun peekMethod(body: String): Pair<String, String?> {

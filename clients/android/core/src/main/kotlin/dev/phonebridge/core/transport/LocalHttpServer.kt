@@ -86,7 +86,10 @@ class LocalHttpServer(
         }
     }
 
-    /** Stops accepting, closes open connections and cancels in-flight handlers. Idempotent. */
+    /**
+     * Stops accepting, closes open connections and cancels in-flight handlers (their responses are lost;
+     * [dev.phonebridge.core.mcp.McpServer] still lets tool calls that already began finish). Idempotent.
+     */
     fun stop() {
         val state = synchronized(lock) {
             val current = running ?: return

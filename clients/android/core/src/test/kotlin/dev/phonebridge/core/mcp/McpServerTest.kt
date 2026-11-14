@@ -796,17 +796,22 @@ class McpServerTest {
     }
 
     @Test
-    fun cancellingTheRequestCancelsTheToolAndPropagates() = runBlocking {
+    fun cancellingTheRequestPropagatesButTheToolCallFinishesAndIsAudited() = runBlocking {
+        // E.g. the relay socket was restarted on a Wi-Fi/cellular switch while sms_send was waiting for the radio.
         val toolCancelled = CompletableDeferred<Unit>()
         val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
         registry.register(
-            tool(name = "hang", title = "Hang", description = "d", scope = Scopes.DEVICE, risk = Risk.READ) { _, _ ->
+            tool(name = "hang", title = "Hang", description = "d", scope = Scopes.DEVICE, risk = Risk.ACTION) { _, _ ->
                 started.complete(Unit)
                 try {
-                    awaitCancellation()
-                } finally {
+                    release.await()
+                } catch (e: kotlinx.coroutines.CancellationException) {
                     toolCancelled.complete(Unit)
+                    throw e
                 }
+                sideEffects.incrementAndGet()
+                ToolResult.text("done")
             },
         )
         val s = server()
@@ -814,9 +819,19 @@ class McpServerTest {
         val job = launch { s.post(t, call("hang")) }
         started.await()
         job.cancel()
-        job.join()
+        assertNotNull(withTimeoutOrNull(2_000) { job.join() }, "the transport stops waiting at once")
         assertTrue(job.isCancelled)
-        assertNotNull(withTimeoutOrNull(2_000) { toolCancelled.await() }, "tool coroutine must be cancelled")
+        assertEquals(1, s.inFlightCalls, "the call goes on")
+        assertTrue(audit.entries.value.isEmpty())
+
+        release.complete(Unit)
+        withTimeout(2_000) { while (s.inFlightCalls > 0) delay(10) }
+        assertFalse(toolCancelled.isCompleted, "the tool must not be cancelled")
+        assertEquals(1, sideEffects.get())
+        val entry = lastAudit()
+        assertEquals(AuditOutcome.OK, entry.outcome)
+        assertEquals("hang", entry.tool)
+        assertEquals(ToolCalls.ABANDONED_NOTE, entry.detail)
     }
 
     @Test

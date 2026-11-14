@@ -2,6 +2,7 @@ package dev.phonebridge.core.policy
 
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.TokenRecord
+import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.ToolResult
 import dev.phonebridge.core.tools.tool
@@ -11,6 +12,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -44,6 +46,30 @@ class PolicyEngineTest {
                 assertEquals(confirm, PolicyEngine.requiresConfirmation(policy, t.risk))
             }
         }
+    }
+
+    @Test
+    fun maxRiskRefusesHigherRiskToolsWhateverTheRules() {
+        val engine = PolicyEngine(RateLimits(callsPerMinute = 3, sensitiveCallsPerMinute = 3), clock = { now })
+        val readOnly = token("readonlyxxxx").copy(maxRisk = Risk.READ, toolRules = mapOf(action.name to ToolRule.ALLOW))
+        assertIs<PolicyDecision.Allow>(engine.evaluate(readOnly, read))
+        for (t in listOf(action, sensitive)) {
+            val denied = assertIs<PolicyDecision.Deny>(engine.evaluate(readOnly, t), t.name)
+            assertFalse(denied.rateLimited)
+            assertTrue(denied.reason.contains("read-only tools"), denied.reason)
+            assertTrue(denied.reason.contains("'${t.name}'"), denied.reason)
+        }
+        // Refused calls do not use up the rate limit.
+        repeat(2) { assertIs<PolicyDecision.Allow>(engine.evaluate(readOnly, read)) }
+
+        val noSending = token("nosendingxxx", ConfirmPolicy.NEVER).copy(maxRisk = Risk.ACTION)
+        assertIs<PolicyDecision.Allow>(engine.evaluate(noSending, action))
+        assertTrue(assertIs<PolicyDecision.Deny>(engine.evaluate(noSending, sensitive)).reason.contains("do not act toward other people"))
+        assertIs<PolicyDecision.Allow>(engine.evaluate(token("uncappedxxxx", ConfirmPolicy.NEVER).copy(maxRisk = Risk.SENSITIVE), sensitive))
+
+        assertFalse(PolicyEngine.exceedsMaxRisk(null, Risk.SENSITIVE))
+        assertTrue(PolicyEngine.exceedsMaxRisk(Risk.READ, Risk.ACTION))
+        assertFalse(PolicyEngine.exceedsMaxRisk(Risk.ACTION, Risk.ACTION))
     }
 
     @Test

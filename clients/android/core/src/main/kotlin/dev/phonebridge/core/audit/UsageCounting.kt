@@ -21,7 +21,7 @@ internal object UsageCounting {
         AuditOutcome.OK -> Category.OK
         AuditOutcome.TOOL_ERROR, AuditOutcome.TIMEOUT, AuditOutcome.EXCEPTION, AuditOutcome.UNKNOWN_TOOL -> Category.ERROR
         AuditOutcome.DENIED_SCOPE, AuditOutcome.RATE_LIMITED, AuditOutcome.PAUSED, AuditOutcome.DENIED_BY_USER,
-        AuditOutcome.CONFIRM_TIMEOUT, AuditOutcome.DENIED_POLICY, AuditOutcome.DENIED_APP,
+        AuditOutcome.CONFIRM_TIMEOUT, AuditOutcome.DENIED_POLICY, AuditOutcome.DENIED_APP, AuditOutcome.CANCELLED,
         -> Category.DENIED
         AuditOutcome.AUTH_FAILED -> null
     }
