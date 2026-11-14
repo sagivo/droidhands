@@ -101,7 +101,7 @@ WebSocket close codes: `4000` bad request, `4001` unauthorized/access key, `4002
 protocol version, `4008` hello timeout, `4009` replaced by a newer connection of the same device,
 `4013` relay full (`relay_full`: the relay's `MAX_DEVICES` other devices are connected; checked
 after authentication, and never for a device that is already connected, whose new connection
-replaces the old one). Devices MUST NOT auto-reconnect after `4001` or `4002` until settings change.
+replaces the old one; a relay without such a cap, like the Cloudflare one, never sends it). Devices MUST NOT auto-reconnect after `4001` or `4002` until settings change.
 They MAY reconnect after other codes, with backoff; after `4013` they SHOULD show the error
 `message` to the user.
 
