@@ -22,7 +22,7 @@ rate-limited, optionally approved by you, and logged on the device itself.
 | scope | grants |
 |---|---|
 | `device` | device status, volume, ringer, flashlight, media keys, clipboard (write), TTS, alarms/timers |
-| `apps` | list/open apps, open URLs and deep links, open a WhatsApp chat without sending |
+| `apps` | list/open apps, open URLs and deep links, open a WhatsApp chat without sending, list and run app actions (each action may need another scope too, see "App plugins") |
 | `contacts.read` | search contacts |
 | `messages.read` | read SMS and call log |
 | `messages.send` | send SMS and WhatsApp messages |
@@ -70,6 +70,8 @@ These are set per agent (token) in **Agents > (agent) > Advanced**, except where
 * Notifications: notifications from blocked apps are filtered out of `notifications_list`, and `notification_reply` / `notification_action` / `notification_dismiss` refuse them.
 * Opening apps: `app_open`, `url_open`, `intent_start`, and `whatsapp_*` / `email_send`. Refused when the target or the resolved handling app is blocked.
 * `apps_list` hides blocked apps.
+* App actions: `app_actions_list` never lists blocked apps, and `app_action_run` refuses them (see "App
+  plugins" below).
 
 When Android would show its app chooser and some candidate apps are blocked, `url_open` and
 `intent_start` pin the intent to the single allowed app, or refuse and list the allowed apps. The
@@ -109,6 +111,27 @@ Data scopes such as `contacts.read`, `messages.send` (SMS through the system API
 * **Calls survive a network switch.** A dropped relay connection no longer cancels a running tool. It
   finishes and is audited, and only its response is lost. Agents are told the phone may already have done
   the action, and to check before resending.
+
+## App plugins
+
+Plugins ([PLUGINS.md](PLUGINS.md)) are data, not code: a YAML file of intents, links, screen recipes and
+aliases of built-in tools, loaded with a safe YAML parser and checked by a validator at build time and
+on import. They never widen what an agent may do:
+
+* Each app action is checked as a tool of its own, `<package>/<action id>`, against the agent's scopes,
+  risk cap, per-tool rules, active hours and rate limits, approved according to its risk and audited
+  under that name. `app_action_run` itself needs `apps` and must not be blocked or above the risk cap.
+  Actions that alias a built-in tool run exactly as that tool, with its scope, approval and audit entry.
+* App access applies first: blocked apps' actions are hidden and refused (`DENIED_APP`).
+* Intents and links are pinned to the app's package, call intents and dangerous URL schemes are refused
+  (again at run time), and screen recipes act only while that app is in the foreground.
+* The validator enforces risk floors: sending, paying, ordering, booking, calling, deleting and similar
+  actions must be `sensitive`, so the default policy asks before they run.
+* Local plugins, imported on the phone for testing, are off by default. Their actions always need
+  approval, even under ALLOW rules or the "never ask" policy, and the prompt says "unreviewed plugin" and
+  shows what the recipe will really do.
+
+The full rules are in [PLUGINS.md §9](PLUGINS.md#9-security-rules).
 
 ## Rate limits (per token, sliding 60 s window)
 

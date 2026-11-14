@@ -20,7 +20,7 @@ object Scopes {
     /** Scope -> human description (UI). Ordered. */
     val DESCRIPTIONS: Map<String, String> = linkedMapOf(
         DEVICE to "Device status & settings (volume, flashlight, media, alarms, clipboard, speech)",
-        APPS to "List and open apps, URLs and chats",
+        APPS to "List and open apps, URLs and chats; run app actions",
         CONTACTS_READ to "Search contacts",
         MESSAGES_READ to "Read SMS and call history",
         MESSAGES_SEND to "Send SMS and WhatsApp messages",

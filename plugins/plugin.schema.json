@@ -1,0 +1,323 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PhoneBridge app plugin",
+  "description": "One app's actions for AI agents. Format reference: docs/PLUGINS.md. This schema is for editor completion; the validator (./scripts/plugin-check.sh) is authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "description", "category", "actions"],
+  "properties": {
+    "id": {
+      "description": "Lowercase letters, digits and _, 2-40 characters. Must equal the folder name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,39}$"
+    },
+    "name": { "description": "The app's name as users know it.", "type": "string", "minLength": 1, "maxLength": 60 },
+    "description": { "description": "One sentence about the app.", "type": "string", "minLength": 1, "maxLength": 300 },
+    "category": {
+      "enum": [
+        "messaging", "email", "social", "music", "video", "maps", "travel", "rides", "food", "shopping",
+        "productivity", "browser", "news", "photos", "health", "system", "other"
+      ]
+    },
+    "homepage": { "type": "string", "pattern": "^https://\\S+$" },
+    "status": {
+      "description": "stable = every action verified on a real device (see tested); agents are told when a plugin is experimental.",
+      "enum": ["stable", "beta", "experimental"],
+      "default": "experimental"
+    },
+    "maintainers": {
+      "description": "GitHub handles.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^@?[A-Za-z0-9][A-Za-z0-9-]{0,38}$" }
+    },
+    "tested": {
+      "description": "People who ran every action on a device.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "app_version": { "type": ["string", "number"] },
+          "android": { "type": ["string", "number"] },
+          "date": { "type": "string" },
+          "by": { "type": "string" }
+        }
+      }
+    },
+    "android": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packages"],
+      "properties": {
+        "packages": {
+          "description": "Package names this plugin applies to; the first installed one is used. Never PhoneBridge itself.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$",
+            "not": { "pattern": "^dev\\.phonebridge(\\.|$)" }
+          }
+        }
+      }
+    },
+    "ios": { "description": "Reserved for the iOS client (kept, not checked yet).", "type": "object" },
+    "actions": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/definitions/action" } }
+  },
+  "definitions": {
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "description"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+        "title": { "description": "Short imperative title, e.g. \"Play music\".", "type": "string", "minLength": 1, "maxLength": 60 },
+        "description": {
+          "description": "For the agent: what it does, what it does not do, and caveats.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "keywords": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 40 } },
+        "risk": {
+          "description": "read, action (local and reversible) or sensitive (reaches other people, spends money, or is hard to undo). Omit for tool recipes.",
+          "enum": ["read", "action", "sensitive"]
+        },
+        "scope": {
+          "description": "Token scope required (default apps). Omit for tool recipes.",
+          "enum": [
+            "apps", "device", "contacts.read", "messages.read", "messages.send", "calls", "notifications.read",
+            "calendar.read", "calendar.write", "location", "screen.read"
+          ]
+        },
+        "params": {
+          "type": "object",
+          "maxProperties": 10,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,39}$" },
+          "additionalProperties": { "$ref": "#/definitions/param" }
+        },
+        "confirm": { "description": "Approval prompt template, e.g. Play \"{{query}}\" on Spotify.", "type": "string", "maxLength": 300 },
+        "completes": {
+          "description": "true if the action finishes the task itself; false if someone still has to act on the screen it opens.",
+          "type": "boolean"
+        },
+        "android": { "$ref": "#/definitions/recipe" },
+        "ios": { "description": "Reserved for the iOS client (kept, not checked yet).", "type": "object" },
+        "examples": { "type": "array", "maxItems": 20, "items": { "$ref": "#/definitions/example" } }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["android"], "properties": { "android": { "required": ["tool"] } } },
+          "then": { "not": { "anyOf": [{ "required": ["risk"] }, { "required": ["scope"] }] } },
+          "else": { "if": { "required": ["android"] }, "then": { "required": ["risk"] } }
+        }
+      ]
+    },
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "properties": {
+        "type": { "enum": ["string", "integer", "number", "boolean"], "default": "string" },
+        "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "required": { "type": "boolean", "default": false },
+        "enum": { "type": "array", "minItems": 1, "items": { "type": ["string", "number"] } },
+        "default": { "type": ["string", "number", "boolean"] },
+        "min_length": { "type": "integer", "minimum": 0 },
+        "max_length": { "type": "integer", "minimum": 1, "maximum": 10000, "default": 2000 },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "pattern": { "description": "A regular expression the whole string must match.", "type": "string", "maxLength": 300 }
+      }
+    },
+    "recipe": {
+      "description": "Exactly one recipe.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "intent": { "$ref": "#/definitions/intent" },
+        "url": {
+          "description": "Opened with ACTION_VIEW, pinned to the app. Literal scheme; {{params}} are percent-encoded.",
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:"
+        },
+        "steps": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/definitions/step" } },
+        "tool": { "$ref": "#/definitions/tool" }
+      }
+    },
+    "intent": {
+      "description": "Starts an activity, always pinned to the plugin's installed package.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "not": { "pattern": "(^|\\.)(CALL|CALL_PRIVILEGED|CALL_EMERGENCY)$" }
+        },
+        "type": { "type": "string" },
+        "data": { "description": "URL context: literal scheme, {{params}} percent-encoded.", "type": "string" },
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "class": { "description": ".Relative to the package, or a full class name in one of the plugin's packages.", "type": "string" },
+        "extras": { "type": "object", "additionalProperties": { "$ref": "#/definitions/extra" } }
+      }
+    },
+    "scalar": { "type": ["string", "number", "boolean"] },
+    "extra": {
+      "anyOf": [
+        { "$ref": "#/definitions/scalar" },
+        { "type": "array", "items": { "$ref": "#/definitions/scalar" } },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "value"],
+          "properties": {
+            "type": { "enum": ["string", "int", "long", "double", "boolean", "string_array"] },
+            "value": { "anyOf": [{ "$ref": "#/definitions/scalar" }, { "type": "array", "items": { "$ref": "#/definitions/scalar" } }] }
+          }
+        }
+      ]
+    },
+    "tool": {
+      "description": "Runs a built-in PhoneBridge tool exactly as if the agent had called it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "enum": [
+            "device_status", "flashlight_set", "volume_set", "ringer_mode_set", "media_control", "clipboard_set", "speak",
+            "alarm_set", "timer_set", "app_open", "url_open", "whatsapp_open_chat", "contacts_search", "sms_list",
+            "call_log_list", "sms_send", "whatsapp_send", "phone_call", "call_status", "call_answer", "call_end", "email_send",
+            "notifications_list", "notification_reply", "notification_action", "notification_dismiss", "calendar_list",
+            "calendar_events_list", "calendar_event_create", "location_get"
+          ]
+        },
+        "args": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "additionalProperties": {
+            "anyOf": [{ "$ref": "#/definitions/scalar" }, { "type": "array", "items": { "$ref": "#/definitions/scalar" } }]
+          }
+        }
+      }
+    },
+    "selector": {
+      "anyOf": [
+        { "description": "Matches an element whose text or description equals it.", "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "anyOf": [
+            { "required": ["id"] }, { "required": ["text"] }, { "required": ["text_contains"] }, { "required": ["desc"] },
+            { "required": ["desc_contains"] }, { "required": ["class"] }, { "required": ["clickable"] }
+          ],
+          "properties": {
+            "id": { "description": "Short (search_src_text) or full (com.example:id/search_src_text).", "type": "string" },
+            "text": { "type": "string" },
+            "text_contains": { "type": "string" },
+            "desc": { "type": "string" },
+            "desc_contains": { "type": "string" },
+            "class": { "description": "Simple class name, e.g. EditText.", "type": "string" },
+            "clickable": { "type": "boolean" },
+            "index": { "type": "integer", "minimum": 0, "maximum": 50, "default": 0 },
+            "optional": { "type": "boolean" },
+            "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 15000 }
+          }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        { "required": ["launch"] }, { "required": ["open_url"] }, { "required": ["intent"] }, { "required": ["wait_for"] },
+        { "required": ["tap"] }, { "required": ["long_press"] }, { "required": ["type"] }, { "required": ["scroll"] },
+        { "required": ["back"] }, { "required": ["sleep"] }, { "required": ["expect"] }, { "required": ["if_present"] }
+      ],
+      "properties": {
+        "launch": {
+          "anyOf": [
+            { "const": true },
+            { "type": "object", "additionalProperties": false, "properties": { "fresh": { "type": "boolean" } } }
+          ]
+        },
+        "open_url": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:" },
+        "intent": { "$ref": "#/definitions/intent" },
+        "wait_for": { "$ref": "#/definitions/selector" },
+        "tap": { "$ref": "#/definitions/selector" },
+        "long_press": { "$ref": "#/definitions/selector" },
+        "type": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "into": { "$ref": "#/definitions/selector" },
+            "text": { "type": "string" },
+            "clear": { "type": "boolean", "default": true },
+            "submit": { "type": "boolean", "default": false }
+          }
+        },
+        "scroll": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["direction"],
+          "properties": {
+            "direction": { "enum": ["up", "down", "left", "right"] },
+            "in": { "$ref": "#/definitions/selector" },
+            "until": { "$ref": "#/definitions/selector" },
+            "max": { "type": "integer", "minimum": 1, "maximum": 20, "default": 5 }
+          }
+        },
+        "back": { "const": true },
+        "sleep": { "type": "integer", "minimum": 0, "maximum": 3000 },
+        "expect": { "$ref": "#/definitions/selector" },
+        "fail": { "description": "Message for the agent when expect fails.", "type": "string", "maxLength": 300 },
+        "if_present": { "$ref": "#/definitions/selector" },
+        "then": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/step" } },
+        "optional": { "type": "boolean", "default": false },
+        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 15000, "default": 5000 }
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expect"],
+      "properties": {
+        "params": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean", "null"] } },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "intent": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "action": { "type": "string" },
+                "package": { "type": "string" },
+                "data": { "type": ["string", "null"] },
+                "type": { "type": ["string", "null"] },
+                "categories": { "type": "array", "items": { "type": "string" } },
+                "class": { "type": ["string", "null"] },
+                "extras": { "type": "object" }
+              }
+            },
+            "url": { "type": "string" },
+            "tool": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "name": { "type": "string" }, "args": { "type": "object" } }
+            },
+            "steps": { "type": "array", "items": { "$ref": "#/definitions/step" } },
+            "error": { "description": "A substring of the expected validation error.", "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
