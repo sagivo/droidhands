@@ -97,6 +97,8 @@ class McpServer(
      * (never-allow apps, one-time-code redaction). If it throws, the call is refused (fail closed).
      */
     private val globalSecurity: () -> GlobalSecurity = { GlobalSecurity() },
+    /** Told about each tool call while it runs (the live activity notification); see [CallActivity]. */
+    private val activity: CallActivity = CallActivity.NONE,
 ) {
     private val auditThrottle = AuditThrottle(audit, clock)
     private val inFlight = InFlightCalls()
@@ -110,6 +112,7 @@ class McpServer(
         clock = clock,
         globalSecurity = globalSecurity,
         currentToken = { id -> tokens.tokens.value.firstOrNull { it.id == id } },
+        activity = activity,
     )
 
     /**
@@ -122,6 +125,15 @@ class McpServer(
      * were cancelled. Thread-safe and non-blocking.
      */
     fun cancelCalls(tokenId: String? = null): Int = inFlight.cancel(tokenId) { call -> stopReasonFor(call.tokenId) }
+
+    /**
+     * The user stopped [tokenId]'s running calls on the phone (the activity notification's Stop): like
+     * [cancelCalls], but the agent is told the user stopped them (unless the token was revoked or removed
+     * meanwhile, or access paused). Audited CANCELLED. Returns how many calls were stopped.
+     */
+    fun stopCalls(tokenId: String): Int = inFlight.cancel(tokenId) { call ->
+        stopReasonFor(call.tokenId).takeUnless { it == StopReason.STOPPED } ?: StopReason.STOPPED_BY_USER
+    }
 
     /** Calls in progress, including those whose agent disconnected (tests and diagnostics). */
     internal val inFlightCalls: Int get() = inFlight.size

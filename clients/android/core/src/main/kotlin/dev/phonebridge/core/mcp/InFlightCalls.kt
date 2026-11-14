@@ -41,6 +41,11 @@ internal enum class StopReason(val message: String, val detail: String) {
         "This call was stopped on the phone before it finished. Check whether the action happened before retrying.",
         "stopped",
     ),
+    STOPPED_BY_USER(
+        "The user stopped this call on the phone before it finished. Check whether the action happened, and do not " +
+            "retry unless the user asks again.",
+        "stopped by the user",
+    ),
 }
 
 /** Thrown by [dev.phonebridge.core.tools.CallContext.ensureStillAllowed] (and the confirmer) once a call must stop. */
@@ -56,6 +61,9 @@ internal class InFlightCall(val tokenId: String) {
 
     /** The tool itself was started (policy and any up-front confirmation passed). */
     @Volatile var toolStarted = false
+
+    /** What [CallActivity] is told about this call; null before it passed the policy checks and once it ended. Guarded by this. */
+    var activity: ActiveCall? = null
 }
 
 /**

@@ -32,6 +32,8 @@ class CallContext(
      * checks it too, before prompting and after the answer. Provided by McpServer.
      */
     private val stillAllowed: suspend () -> Unit = {},
+    /** Receives [reportActivity] lines; provided by McpServer. */
+    private val activity: (String) -> Unit = {},
     // Last so callers can pass it as a trailing lambda.
     private val confirmer: suspend (summary: String) -> Unit,
 ) {
@@ -44,4 +46,12 @@ class CallContext(
 
     /** See the `stillAllowed` constructor parameter. */
     suspend fun ensureStillAllowed() = stillAllowed()
+
+    /**
+     * Optional: tells the user what this call is doing once its target is resolved, e.g. "Sending WhatsApp to
+     * Tania Cohen", shown in the phone's live activity notification instead of the tool's title. A short line
+     * about who or what the call acts on. It MUST NOT contain message text, codes or other content: it can
+     * appear in the status bar and the notification shade. Lines over 120 characters are cut.
+     */
+    fun reportActivity(label: String) = activity(label)
 }

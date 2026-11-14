@@ -22,6 +22,7 @@ import dev.phonebridge.core.tools.ToolException
 import dev.phonebridge.core.tools.ToolRegistry
 import dev.phonebridge.core.tools.ToolResult
 import dev.phonebridge.core.util.Encoding
+import dev.phonebridge.core.util.OneTimeCodes
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -44,6 +45,7 @@ import kotlinx.serialization.json.putJsonArray
 import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -78,6 +80,9 @@ import kotlin.coroutines.cancellation.CancellationException
  * tool's approval. Its audit entry carries the resolved tool's name and arguments and notes
  * "via <dispatching tool>".
  *
+ * Activity: a call that passed the policy checks is reported to [CallActivity] (who, which tool, its approval
+ * state and the tool's own [CallContext.reportActivity] line, never its arguments) until its audit entry.
+ *
  * Every call ends with exactly one audit entry, cancelled ones included. Requests refused before
  * anything ran (missing name, bad arguments, unknown tool, missing scope, paused, policy and rate-limit
  * refusals, unresolvable dispatches) go through [AuditThrottle.recordRefusal], so they cannot flood the log.
@@ -93,8 +98,10 @@ internal class ToolCalls(
     private val globalSecurity: () -> GlobalSecurity = { GlobalSecurity() },
     /** The token's current record by id (null once deleted), read fresh for every stop check. */
     private val currentToken: (String) -> TokenRecord?,
+    private val activity: CallActivity = CallActivity.NONE,
 ) {
     private val random = SecureRandom()
+    private val activityIds = AtomicLong()
 
     /**
      * Handles one `tools/call` request and returns the full JSON-RPC response. [handle] ties the call to
@@ -188,6 +195,7 @@ internal class ToolCalls(
             // Cancelled through InFlightCalls.cancel (pause, revoke, delete): still exactly one entry.
             val detail = stoppedDetail(handle.stopReason ?: StopReason.STOPPED, handle.toolStarted)
             record(AuditOutcome.CANCELLED, target.tool.name, target.args, joinDetails(detail, target.note))
+            finishActivity(handle, AuditOutcome.CANCELLED)
             throw e
         } catch (e: Exception) {
             // A bug in the pipeline itself (tool failures are handled inside run()).
@@ -199,6 +207,7 @@ internal class ToolCalls(
         } else {
             record(outcome.audit, target.tool.name, target.args, detail)
         }
+        finishActivity(handle, outcome.audit)
         return JsonRpc.result(id, encodeResult(outcome.result))
     }
 
@@ -306,6 +315,7 @@ internal class ToolCalls(
         transport: String,
         security: GlobalSecurity,
         stillAllowed: suspend () -> Unit,
+        activity: (String) -> Unit = {},
         confirmer: suspend (String) -> Unit,
     ) = CallContext(
         tokenId = token.id,
@@ -319,6 +329,7 @@ internal class ToolCalls(
         activeHours = token.activeHours,
         maxRisk = token.maxRisk,
         stillAllowed = stillAllowed,
+        activity = activity,
         confirmer = confirmer,
     )
 
@@ -350,13 +361,14 @@ internal class ToolCalls(
         val needsConfirmation = decision == PolicyDecision.RequireConfirmation || viaAsks
 
         val state = CallState()
+        startActivity(handle, token, tool)
 
         /** Null while the call may go on; otherwise why not (the first reason is kept for the audit entry). */
         fun checkStop(): StopReason? = stopReason(handle, token, target)?.also { state.stop.compareAndSet(null, it) }
 
         if (needsConfirmation && !tool.confirmsInternally) {
             checkStop()?.let { return stopped(it) }
-            val answer = ask(token, tool, ToolText.confirmationSummary(tool, args), transport)
+            val answer = ask(token, tool, ToolText.confirmationSummary(tool, args), transport, handle)
             if (answer !is Answer.Approved) {
                 // Pausing also denies open prompts: report the pause rather than a denial by the user.
                 checkStop()?.let { return stopped(it) }
@@ -379,7 +391,7 @@ internal class ToolCalls(
             val text = summary.takeIf { it.isNotBlank() } ?: ToolText.confirmationSummary(tool, args)
             deadline.pause()
             val answer = try {
-                ask(token, tool, text, transport)
+                ask(token, tool, text, transport, handle)
             } finally {
                 deadline.resume()
             }
@@ -392,7 +404,10 @@ internal class ToolCalls(
                 throw ToolException(answer.message)
             }
         }
-        val ctx = callContext(token, transport, security, stillAllowed, confirmer)
+        val report: (String) -> Unit = { line ->
+            activityLabel(line, security.redactOneTimeCodes)?.let { label -> updateActivity(handle) { it.copy(label = label) } }
+        }
+        val ctx = callContext(token, transport, security, stillAllowed, report, confirmer)
 
         handle.toolStarted = true
         val execution = execute(tool, args, ctx, deadline)
@@ -514,8 +529,52 @@ internal class ToolCalls(
         class Rejected(override val message: String, override val audit: AuditOutcome, override val detail: String? = null) : Answer
     }
 
+    /** [handle] is about to be run; from now on it is reported to [activity] until [finishActivity]. */
+    private fun startActivity(handle: InFlightCall, token: TokenRecord, tool: Tool) {
+        val call = ActiveCall(activityIds.incrementAndGet(), token.id, token.name, tool.name, tool.title, tool.risk, clock())
+        synchronized(handle) {
+            handle.activity = call
+            notifyActivity { activity.onStarted(call) }
+        }
+    }
+
+    /** Applies [change] to [handle]'s activity, if it is still reported. Listeners are told under the lock, in order. */
+    private fun updateActivity(handle: InFlightCall, change: (ActiveCall) -> ActiveCall) {
+        synchronized(handle) {
+            val current = handle.activity ?: return
+            val updated = change(current).takeIf { it != current } ?: return
+            handle.activity = updated
+            notifyActivity { activity.onUpdated(updated) }
+        }
+    }
+
+    private fun finishActivity(handle: InFlightCall, outcome: AuditOutcome) {
+        synchronized(handle) {
+            val call = handle.activity ?: return
+            handle.activity = null
+            notifyActivity { activity.onFinished(call, outcome) }
+        }
+    }
+
+    private inline fun notifyActivity(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            // Never let the activity display fail a call.
+        }
+    }
+
     /** Prompts the user, bounded by the confirmation timeout. Never throws except on cancellation. */
-    private suspend fun ask(token: TokenRecord, tool: Tool, summary: String, transport: String): Answer {
+    private suspend fun ask(token: TokenRecord, tool: Tool, summary: String, transport: String, handle: InFlightCall): Answer {
+        updateActivity(handle) { it.copy(awaitingApproval = true) }
+        try {
+            return askUser(token, tool, summary, transport)
+        } finally {
+            updateActivity(handle) { it.copy(awaitingApproval = false) }
+        }
+    }
+
+    private suspend fun askUser(token: TokenRecord, tool: Tool, summary: String, transport: String): Answer {
         val request = ConfirmationRequest(
             id = newId(16),
             tokenName = token.name,
@@ -567,6 +626,15 @@ internal class ToolCalls(
 
         /** Tool names are cut to this length in audit entries and errors (unknown names are agent input). */
         private const val MAX_TOOL_NAME_CHARS = 100
+
+        /** [CallContext.reportActivity] lines are cut to this length. */
+        internal const val MAX_ACTIVITY_LABEL_CHARS = 120
+
+        /** A reported activity line as shown: trimmed, cut, one-time codes masked when [redact]; null when blank. */
+        internal fun activityLabel(label: String, redact: Boolean): String? {
+            val trimmed = label.trim().takeIf { it.isNotEmpty() } ?: return null
+            return ToolText.truncate(if (redact) OneTimeCodes.redact(trimmed) else trimmed, MAX_ACTIVITY_LABEL_CHARS)
+        }
 
         /** Audit detail of a stopped call: why, and whether the tool had started (it may then have partly acted). */
         internal fun stoppedDetail(reason: StopReason, toolStarted: Boolean): String =
