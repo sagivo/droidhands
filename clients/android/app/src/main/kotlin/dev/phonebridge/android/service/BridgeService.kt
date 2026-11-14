@@ -96,6 +96,8 @@ class BridgeService : Service() {
         unregisterNetworkCallback()
         graph.transports.stopAll()
         graph.setServiceRunning(false)
+        // Agents can't reach the phone any more; persist usage counters now rather than on the debounce.
+        graph.flushUsage()
         scope.cancel()
         // The system removes the foreground notification; this also covers a stray update.
         NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)

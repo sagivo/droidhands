@@ -21,12 +21,26 @@ data class BridgeSettings(
     /** Global kill switch. */
     val accessEnabled: Boolean = true,
     val startOnBoot: Boolean = true,
+    /**
+     * Global never-allow list: packages no agent may see or operate, whatever its own app access
+     * (docs/SECURITY.md "Advanced controls"). PhoneBridge itself is added at runtime, not stored here.
+     */
+    val neverAllowApps: Set<String> = emptySet(),
+    /** Mask one-time / 2FA codes in SMS and notification text returned to agents. */
+    val redactOneTimeCodes: Boolean = true,
+    /**
+     * True once the first-run security defaults (installed banking, payment, password-manager and
+     * authenticator apps added to [neverAllowApps]) were applied, so they are applied only once and
+     * the user's later choices are kept.
+     */
+    val securityDefaultsApplied: Boolean = false,
 ) {
     /** Never print the access key (e.g. in crash logs or debug output). */
     override fun toString(): String =
         "BridgeSettings(relayEnabled=$relayEnabled, relayUrl=$relayUrl, relayAccessKey=${if (relayAccessKey.isEmpty()) "" else "***"}, " +
             "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBindAll=$localServerBindAll, " +
-            "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot)"
+            "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot, neverAllowApps=${neverAllowApps.size} apps, " +
+            "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied)"
 }
 
 /**
@@ -56,6 +70,8 @@ class SettingsRepository(context: Context) {
                         is Boolean -> putBoolean(key, value)
                         is Int -> putInt(key, value)
                         is String -> putString(key, value)
+                        // Always a fresh copy: SharedPreferences must not keep a reference to a set we own.
+                        is Set<*> -> putStringSet(key, value.filterIsInstance<String>().toHashSet())
                         else -> error("Unsupported settings value type for '$key'")
                     }
                 }

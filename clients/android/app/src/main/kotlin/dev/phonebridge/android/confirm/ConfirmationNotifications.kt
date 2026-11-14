@@ -1,17 +1,15 @@
 package dev.phonebridge.android.confirm
 
-import android.Manifest
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import dev.phonebridge.android.R
 import dev.phonebridge.android.graph.Channels
+import dev.phonebridge.android.graph.NotificationGroups
 
 /**
  * Builds and posts the Allow/Deny prompt for a [PendingConfirmation].
@@ -32,22 +30,7 @@ internal object ConfirmationNotifications {
     const val NOTIFICATION_GRACE_MS = 5_000L
 
     /** True if a prompt on [Channels.CONFIRM] would actually be shown to the user. */
-    fun canPost(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return false
-        }
-        val manager = NotificationManagerCompat.from(context)
-        if (!manager.areNotificationsEnabled()) return false
-        val channel = manager.getNotificationChannelCompat(Channels.CONFIRM)
-            ?: run {
-                Channels.createAll(context)
-                manager.getNotificationChannelCompat(Channels.CONFIRM)
-            }
-            ?: return false
-        return channel.importance != NotificationManagerCompat.IMPORTANCE_NONE
-    }
+    fun canPost(context: Context): Boolean = Channels.canPost(context, Channels.CONFIRM)
 
     /** Posts the prompt. Throws SecurityException if notifications are not allowed (check [canPost] first). */
     @SuppressLint("MissingPermission") // Checked by canPost(); a race only throws SecurityException, handled by the caller.
@@ -92,6 +75,10 @@ internal object ConfirmationNotifications {
             .setStyle(NotificationCompat.BigTextStyle().bigText(ConfirmationText.notificationBody(request)))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            // Its own group: never auto-grouped with other PhoneBridge notifications (which collapses it
+            // and hides Allow/Deny). As the only member, it alerts (heads-up) like an ungrouped one.
+            .setGroup(NotificationGroups.confirmation(entry.notificationId))
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setOngoing(true)
             .setAutoCancel(false)
             .setOnlyAlertOnce(true)

@@ -59,10 +59,46 @@ class SettingsCodecTest {
             localServerBindAll = true,
             accessEnabled = false,
             startOnBoot = false,
+            neverAllowApps = setOf("com.ideomobile.hapoalim", "com.x8bit.bitwarden"),
+            redactOneTimeCodes = false,
+            securityDefaultsApplied = true,
         )
         val encoded = SettingsCodec.encode(settings)
-        assertEquals(8, encoded.size)
+        assertEquals(11, encoded.size)
         assertEquals(settings, SettingsCodec.decode(encoded))
+    }
+
+    @Test
+    fun securityDefaultsAreSafe() {
+        val defaults = BridgeSettings()
+        assertTrue("one-time codes are hidden by default", defaults.redactOneTimeCodes)
+        assertTrue(defaults.neverAllowApps.isEmpty())
+        assertFalse("first run still has to pre-select sensitive apps", defaults.securityDefaultsApplied)
+    }
+
+    @Test
+    fun decodeReadsStoredStringSetAndIgnoresNonStrings() {
+        val decoded = SettingsCodec.decode(mapOf(SettingsCodec.KEY_NEVER_ALLOW_APPS to setOf("com.venmo", 42, " com.squareup.cash ")))
+        assertEquals(setOf("com.venmo", "com.squareup.cash"), decoded.neverAllowApps)
+        assertEquals(emptySet<String>(), SettingsCodec.decode(mapOf(SettingsCodec.KEY_NEVER_ALLOW_APPS to "com.venmo")).neverAllowApps)
+    }
+
+    @Test
+    fun sanitizeDropsMalformedPackageNames() {
+        val clean = SettingsCodec.sanitize(
+            BridgeSettings(neverAllowApps = setOf("com.paypal.android.p2pmobile", "", "  ", "nodots", "com..double", "1com.x", "com.ok_1.App")),
+        )
+        assertEquals(setOf("com.ok_1.App", "com.paypal.android.p2pmobile"), clean.neverAllowApps)
+    }
+
+    @Test
+    fun packageNameValidation() {
+        listOf("com.whatsapp", "keepass2android.keepass2android_nonet", "com.MizrahiTefahot.nh").forEach {
+            assertTrue(it, SettingsCodec.isPackageName(it))
+        }
+        listOf("", "whatsapp", ".com.x", "com.x.", "com.1x", "com x.y", "com/x.y").forEach {
+            assertFalse(it, SettingsCodec.isPackageName(it))
+        }
     }
 
     @Test
