@@ -1,12 +1,18 @@
 package dev.phonebridge.android.access
 
+import dev.phonebridge.android.tools.support.ApprovalGuard
+import dev.phonebridge.core.tools.ToolException
+
 /**
  * Keeps agents from approving their own actions or minting tokens through UI automation (pure).
  *
+ * * While a PhoneBridge approval is pending or shown ([ApprovalGuard]), no gesture or node action runs at all,
+ *   since Android may hide our approval screens from our own accessibility service.
  * * PhoneBridge's own windows (approval screen, tokens, settings) are never shown to or operated
- *   by agents.
- * * In System UI (notification shade, heads-up), elements labelled like an action button of one of
- *   PhoneBridge's own notifications (e.g. "Allow" on an approval prompt) cannot be tapped.
+ *   by agents, and neither is its notification content in System UI (shade, heads-up, lock screen).
+ * * A touch whose window Android withholds from us is refused: it may be one of our approval screens.
+ * * In System UI, elements labelled like an action button of one of PhoneBridge's own notifications
+ *   (e.g. "Allow" on an approval prompt), or containing PhoneBridge content (a notification row), cannot be tapped.
  */
 object SelfProtection {
     const val OWN_SCREEN =
@@ -17,8 +23,21 @@ object SelfProtection {
         "Refusing to tap this element: it looks like a button of a PhoneBridge notification (for example an approval " +
             "prompt). Agents cannot approve their own actions; the user must decide on the phone."
 
+    const val OWN_NOTIFICATION =
+        "Refusing to operate this element: it is (part of) a PhoneBridge notification, for example an approval or pairing " +
+            "prompt. Agents cannot open or answer PhoneBridge's own notifications; the user must decide on the phone."
+
+    const val UNREADABLE_WINDOW =
+        "Android hides the content of the window there from PhoneBridge (as it does for PhoneBridge's own approval " +
+            "screens and some apps' sensitive screens), so it can't check what the touch would hit. Ask the user to do this on the phone."
+
     /** Whether [pkg] is PhoneBridge itself. */
     fun isOwnPackage(pkg: String?, ownPackage: String): Boolean = pkg != null && pkg == ownPackage
+
+    /** Throws [ApprovalGuard.REFUSAL] while a PhoneBridge approval is pending or shown. Call right before acting. */
+    fun requireNoPendingApproval(active: Boolean = ApprovalGuard.isActive) {
+        if (active) throw ToolException(ApprovalGuard.REFUSAL)
+    }
 
     /**
      * True if [node] lives in System UI and it, or one of its close ancestors, shows one of
@@ -31,5 +50,66 @@ object SelfProtection {
         return (sequenceOf(node) + node.ancestors().take(3)).any { n ->
             TextNorm.key(n.text) in keys || TextNorm.key(n.description) in keys
         }
+    }
+
+    /** True if [node] or a descendant belongs to PhoneBridge (e.g. a System UI notification row showing our notification). */
+    fun containsOwnContent(node: UiNode, ownPackage: String): Boolean = node.walk().any { isOwnPackage(it.packageName, ownPackage) }
+
+    /**
+     * True if a touch on [hit] (the deepest node at the point, in an unfiltered capture) reaches PhoneBridge content: [hit]
+     * contains some, or the nearest clickable or long-clickable element that would handle the touch does (tapping a
+     * notification row's padding opens that notification).
+     */
+    fun touchReachesOwnContent(hit: UiNode, ownPackage: String): Boolean {
+        val chain = sequenceOf(hit) + hit.ancestors()
+        val handlers = listOfNotNull(hit, chain.firstOrNull { it.clickable }, chain.firstOrNull { it.longClickable })
+        return handlers.any { containsOwnContent(it, ownPackage) }
+    }
+
+    /**
+     * The window a touch at ([x], [y]) reaches among [windows] (top-most first): the top-most non-overlay window whose
+     * bounds contain the point, or null if none does. Fails closed: throws ([UNREADABLE_WINDOW]) when that window's
+     * content is withheld from PhoneBridge ([readable] false), because Android hides PhoneBridge's own approval and
+     * pairing screens from its accessibility service on Android 14+.
+     */
+    fun <W> touchedWindow(
+        windows: List<W>,
+        x: Int,
+        y: Int,
+        kind: (W) -> WindowKind,
+        bounds: (W) -> Bounds,
+        readable: (W) -> Boolean,
+    ): W? {
+        val target = windows.firstOrNull { kind(it) != WindowKind.OVERLAY && bounds(it).contains(x, y) } ?: return null
+        if (!readable(target)) throw ToolException("Refusing to touch ($x,$y): $UNREADABLE_WINDOW")
+        return target
+    }
+
+    /**
+     * [root] without PhoneBridge's own content, whatever window it is in: every subtree whose node belongs to
+     * [ownPackage], and the element hosting it (its nearest clickable or long-clickable ancestor within
+     * [NodeQueries.MAX_CLICK_ANCESTORS] levels, e.g. the System UI notification row), so agents can neither read our
+     * notifications nor get refs to open them. Null when nothing is left; [root] itself (same instance) when there is
+     * nothing to hide.
+     */
+    fun hideOwnContent(root: UiNode, ownPackage: String): UiNode? {
+        // The kept node (null if removed), and how many levels it is above own content whose host is still to be
+        // removed (-1: none).
+        fun visit(node: UiNode): Pair<UiNode?, Int> {
+            if (isOwnPackage(node.packageName, ownPackage)) return null to 0
+            var pending = -1
+            var changed = false
+            val kept = ArrayList<UiNode>(node.children.size)
+            for (child in node.children) {
+                val (result, below) = visit(child)
+                if (result !== child) changed = true
+                if (result != null) kept += result
+                if (below >= 0 && (pending < 0 || below + 1 < pending)) pending = below + 1
+            }
+            if (pending > NodeQueries.MAX_CLICK_ANCESTORS) pending = -1
+            if (pending > 0 && (node.clickable || node.longClickable)) return null to -1
+            return (if (changed) node.withChildren(kept) else node) to pending
+        }
+        return visit(root).first
     }
 }

@@ -25,7 +25,7 @@ internal fun uiSwipeTool(context: Context): Tool = tool(
     title = "Swipe",
     description = "Drags a finger from (x1,y1) to (x2,y2) in screen pixels over duration_ms (default 300). Use for " +
         "carousels, sliders, pull-to-refresh or dismissing items; for lists prefer ui_scroll. If the phone is locked, " +
-        "the user is asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent.",
+        "the user is asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent. ${UiAutomation.APPROVAL_PAUSE}",
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema {
@@ -46,8 +46,8 @@ internal fun uiSwipeTool(context: Context): Tool = tool(
     val duration = (args.optLong("duration_ms") ?: 300L).coerceIn(MIN_SWIPE_MS, MAX_SWIPE_MS)
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
-    UiAutomation.awaitUsable(context, ctx.tokenName, "swipe on the screen")
-    UiAutomation.exclusive {
+    UiAutomation.awaitUsable(context, ctx, "swipe on the screen")
+    UiAutomation.exclusive(access) {
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
         val screen = service.screenBounds()
@@ -56,6 +56,7 @@ internal fun uiSwipeTool(context: Context): Tool = tool(
         }
         // The whole gesture goes to the window under its starting point.
         withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, x1, y1, access) }
+        UiAutomation.beforeAction(access)
         if (!service.swipe(x1, y1, x2, y2, duration)) throw ToolException("Android cancelled the swipe gesture. Retry.")
         ToolResult.text(UiAutomation.report(service, access, "Swiped from ($x1,$y1) to ($x2,$y2) in ${duration}ms."))
     }
@@ -70,7 +71,7 @@ internal fun uiGlobalActionTool(context: Context): Tool = tool(
     title = "System navigation",
     description = "Performs a system navigation action: back, home, recents (app switcher), notifications (open " +
         "the shade), quick_settings, lock_screen, power_dialog. Works on the lock screen. Refused while an app the " +
-        "user blocked for this agent is in the foreground.",
+        "user blocked for this agent is in the foreground. ${UiAutomation.APPROVAL_PAUSE}",
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema { string("action", "The action", required = true, enum = GlobalActions.NAMES) },
@@ -83,8 +84,9 @@ internal fun uiGlobalActionTool(context: Context): Tool = tool(
         ?: throw ToolException("Unknown action '$raw'. Use one of: ${GlobalActions.NAMES.joinToString()}.")
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
-    UiAutomation.exclusive {
+    UiAutomation.exclusive(access) {
         UiAutomation.requireOperable(service, access)
+        UiAutomation.beforeAction(access)
         if (!service.performGlobal(action)) throw ToolException("Android refused the '$name' action right now. Retry.")
         ToolResult.text(UiAutomation.report(service, access, "Performed '$name'."))
     }

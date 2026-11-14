@@ -20,6 +20,7 @@ import dev.phonebridge.core.tools.optInt
 import dev.phonebridge.core.tools.optLong
 import dev.phonebridge.core.tools.optString
 import dev.phonebridge.core.tools.tool
+import dev.phonebridge.core.util.OneTimeCodes
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.put
 
@@ -34,11 +35,13 @@ internal fun screenReadTool(context: Context): Tool = tool(
     description = "Reads what is on the phone's screen in any app, as an indented tree. First line: " +
         "app=<package> activity=<class> locked=<bool>. Then one element per line: " +
         "`n12 Button \"Send\" desc=\"...\" id=send [clickable] (x,y,w,h)` (bounds in screen pixels). " +
-        "Use the refs (n12) with ui_tap/ui_type/ui_scroll; they stay valid until the next screen_read. " +
+        "Use the refs (n12) with ui_tap/ui_type/ui_scroll; they are yours alone and stay valid until your next " +
+        "screen_read (each read gives new numbers). " +
         "Other windows (dialogs, notification shade) follow under 'window:' headers. By default layout-only " +
         "containers are hidden; include_all shows everything. Use screen_screenshot when the tree is empty or unclear " +
         "(games, maps, some web content). Apps the user blocked for this agent are left out, and reading is refused " +
-        "while one of them is in the foreground.",
+        "while one of them is in the foreground. PhoneBridge's own screens and notifications are never shown, and when " +
+        "the user hides one-time codes they appear as \"${OneTimeCodes.MASK}\".",
     scope = Scopes.SCREEN_READ,
     risk = Risk.READ,
     schema = objectSchema {
@@ -52,16 +55,16 @@ internal fun screenReadTool(context: Context): Tool = tool(
     val includeAll = args.optBool("include_all") ?: false
     val maxNodes = (args.optInt("max_nodes") ?: DEFAULT_MAX_NODES).coerceIn(1, MAX_MAX_NODES)
     val access = ScreenAccess.of(context, ctx)
-    val state = ScreenCapture.capture(context, service, access.visibility, includeAll)
+    val state = ScreenCapture.capture(context, service, access, includeAll)
     state.blockedForeground?.let { access.refuse(it) }
-    val body = ScreenSession.refs.newSnapshot { register ->
+    val body = ScreenSession.refs(access).newSnapshot { register ->
         TreeSerializer.serialize(state.windows, SerializeOptions(includeAll = includeAll, maxNodes = maxNodes), register)
     }
     ToolResult.text(
         buildString {
             append(TreeSerializer.header(state.packageName, state.activity, state.locked))
             if (!state.screenOn) append("\n(the screen is off)")
-            if (state.omittedWindows > 0) append("\n(${state.omittedWindows} window(s) of apps blocked for this agent are not shown)")
+            state.notes.forEach { append('\n').append(it) }
             append('\n')
             append(
                 body.text.ifEmpty {
@@ -101,7 +104,7 @@ internal fun screenFindTool(context: Context): Tool = tool(
     if (criteria.isEmpty) throw ToolException("Pass at least one of text, view_id, description, or clickable_only=true.")
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
-    val state = ScreenCapture.capture(context, service, access.visibility)
+    val state = ScreenCapture.capture(context, service, access)
     state.blockedForeground?.let { access.refuse(it) }
     val matches = NodeQueries.find(state.roots, criteria)
     if (matches.isEmpty()) {
@@ -110,9 +113,11 @@ internal fun screenFindTool(context: Context): Tool = tool(
                 "Call screen_read to see what is there, or ui_scroll to reveal more content.",
         )
     }
-    val lines = matches.take(MAX_FIND_RESULTS).joinToString("\n") { TreeSerializer.formatNode(it, ScreenSession.refs.register(it)) }
+    val refs = ScreenSession.refs(access)
+    val lines = matches.take(MAX_FIND_RESULTS).joinToString("\n") { TreeSerializer.formatNode(it, refs.register(it)) }
     val more = if (matches.size > MAX_FIND_RESULTS) "\n... and ${matches.size - MAX_FIND_RESULTS} more; refine the criteria" else ""
-    ToolResult.text("Found ${matches.size} element(s) (app=${state.packageName ?: "unknown"}):\n$lines$more")
+    val codes = if (state.codesHidden) "\n${ScreenState.CODES_NOTE}" else ""
+    ToolResult.text("Found ${matches.size} element(s) (app=${state.packageName ?: "unknown"}):\n$lines$more$codes")
 }
 
 /** ui_wait: waits until text is visible and/or a package is in the foreground. */
@@ -122,7 +127,9 @@ internal fun uiWaitTool(context: Context): Tool = tool(
     description = "Waits until the given text is visible on screen (text or content description, case-insensitive " +
         "contains) and/or the given app package is in the foreground, up to timeout_ms. Returns " +
         "{found, package, waited_ms} and, for text, the matching element's ref. Use it after opening an app or " +
-        "tapping something that loads, instead of fixed sleeps. Text in apps the user blocked for this agent never matches.",
+        "tapping something that loads, instead of fixed sleeps. Text in apps the user blocked for this agent and in " +
+        "PhoneBridge's own notifications never matches; when the user hides one-time codes, matching sees them as " +
+        "\"${OneTimeCodes.MASK}\" (and the result has codes_hidden=true).",
     scope = Scopes.SCREEN_READ,
     risk = Risk.READ,
     schema = objectSchema {
@@ -161,6 +168,7 @@ private suspend fun waitFor(context: Context, access: ScreenAccess, key: String?
                 put("waited_ms", elapsed)
                 probe.ref?.let { put("ref", it) }
                 probe.line?.let { put("element", it) }
+                if (probe.codesHidden) put("codes_hidden", true)
             }
         }
         if (elapsed >= timeout) {
@@ -174,13 +182,21 @@ private suspend fun waitFor(context: Context, access: ScreenAccess, key: String?
         // Event-driven, but at most every POLL_MS and at least MIN_GAP_MS apart (busy screens fire constantly).
         BridgeAccessibilityService.awaitEvent(seen, minOf(POLL_MS, timeout - elapsed))
         delay(MIN_GAP_MS)
+        access.ensureStillAllowed()
     }
 }
 
 private const val POLL_MS = 250L
 private const val MIN_GAP_MS = 100L
 
-private class Probe(val packageName: String?, val ref: String?, val line: String?, val blocked: String? = null)
+private class Probe(
+    val packageName: String?,
+    val ref: String?,
+    val line: String?,
+    val blocked: String? = null,
+    /** The matching element shows a masked one-time code. */
+    val codesHidden: Boolean = false,
+)
 
 /** One ui_wait check. Package-only waits skip the (heavier) tree capture. */
 private suspend fun probe(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, key: String?): Probe {
@@ -188,10 +204,11 @@ private suspend fun probe(context: Context, service: BridgeAccessibilityService,
         val pkg = UiAutomation.foregroundPackage(service)
         return Probe(pkg, null, null, blocked = pkg?.takeUnless(access::allows))
     }
-    val state = ScreenCapture.capture(context, service, access.visibility)
+    val state = ScreenCapture.capture(context, service, access)
     if (state.blockedForeground != null) return Probe(state.packageName, null, null, blocked = state.blockedForeground)
     val node = NodeQueries.visibleNodes(state.roots).firstOrNull { NodeQueries.textLevel(it, key) != MatchLevel.NONE }
         ?: return Probe(state.packageName, null, null)
-    val ref = ScreenSession.refs.register(node)
-    return Probe(state.packageName, ref, TreeSerializer.formatNode(node, ref))
+    val ref = ScreenSession.refs(access).register(node)
+    val line = TreeSerializer.formatNode(node, ref)
+    return Probe(state.packageName, ref, line, codesHidden = state.codesHidden && line.contains(OneTimeCodes.MASK))
 }

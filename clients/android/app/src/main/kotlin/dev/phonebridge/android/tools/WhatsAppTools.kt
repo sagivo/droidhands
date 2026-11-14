@@ -79,6 +79,7 @@ private fun whatsAppSendTool(context: Context): Tool = tool(
     }
 
     ctx.requireConfirmation(WhatsAppLinks.confirmationSummary(target.displayName, target.digits, message, pkg == WhatsAppApps.BUSINESS))
+    ctx.ensureStillAllowed()
 
     val service = BridgeAccessibilityService.instance
     if (service == null) {
@@ -90,15 +91,15 @@ private fun whatsAppSendTool(context: Context): Tool = tool(
             put("note", manualSendNote(context))
         }
     }
-    UiAutomation.awaitUsable(context, ctx.tokenName, "send a WhatsApp message to ${target.displayName}", "Nothing was sent.")
+    UiAutomation.awaitUsable(context, ctx, "send a WhatsApp message to ${target.displayName}", "Nothing was sent.")
     val access = withContext(Dispatchers.IO) { ScreenAccess.of(context, ctx) }
     // Short lock wait: the whole send must finish well within timeoutMs, since a timeout after the
     // Send tap would leave the agent unsure whether to retry.
-    UiAutomation.exclusive(waitMs = SEND_LOCK_WAIT_MS) {
+    UiAutomation.exclusive(access, waitMs = SEND_LOCK_WAIT_MS) {
         if (!UiAutomation.isUsable(context)) {
             throw ToolException("The phone was locked again before sending. Nothing was sent. Ask the user to keep it unlocked, then retry.")
         }
-        WhatsAppAutomation.send(context, service, access.visibility, pkg, target, message)
+        WhatsAppAutomation.send(context, service, access, pkg, target, message)
     }
     ToolResult.json {
         put("sent", true)
@@ -128,6 +129,7 @@ private fun whatsAppOpenChatTool(context: Context): Tool = tool(
     val target = WhatsAppTargets.resolve(context, args.optString("to"), args.optString("contact"))
     val service = BridgeAccessibilityService.instance
     if (service == null || !UiAutomation.isUsable(context)) {
+        ctx.ensureStillAllowed()
         WhatsAppLauncher.openChat(context, pkg, target.digits, null, clearTask = false)
         val note = when {
             !UiAutomation.isUsable(context) -> "The phone is locked or its screen is off: the chat shows once the user unlocks it."
@@ -140,11 +142,11 @@ private fun whatsAppOpenChatTool(context: Context): Tool = tool(
         }
     }
     val access = withContext(Dispatchers.IO) { ScreenAccess.of(context, ctx) }
-    UiAutomation.exclusive {
+    UiAutomation.exclusive(access) {
         val launchedAt = SystemClock.uptimeMillis()
         BridgeAccessibilityService.expectUiChange()
         WhatsAppLauncher.openChat(context, pkg, target.digits, null, clearTask = false)
-        val seen = WhatsAppAutomation.observeOpenedChat(context, service, access.visibility, pkg, target, launchedAt, OPEN_CHAT_OBSERVE_MS)
+        val seen = WhatsAppAutomation.observeOpenedChat(context, service, access, pkg, target, launchedAt, OPEN_CHAT_OBSERVE_MS)
         ToolResult.json {
             put("opened", true)
             put("chat_open", seen.confirmed)

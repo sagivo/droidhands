@@ -78,6 +78,7 @@ private fun emailSendTool(context: Context): Tool = tool(
     }
 
     ctx.requireConfirmation(draft.confirmationSummary())
+    ctx.ensureStillAllowed()
 
     val service = BridgeAccessibilityService.instance
     if (service == null) {
@@ -89,15 +90,15 @@ private fun emailSendTool(context: Context): Tool = tool(
             put("note", manualSendNote(context, label))
         }
     }
-    UiAutomation.awaitUsable(context, ctx.tokenName, draft.unlockAction(), "Nothing was sent.")
+    UiAutomation.awaitUsable(context, ctx, draft.unlockAction(), "Nothing was sent.")
     val access = withContext(Dispatchers.IO) { ScreenAccess.of(context, ctx) }
     // Short lock wait: the whole send must finish well within timeoutMs, since a timeout after the Send tap
     // would leave the agent unsure whether to retry.
-    UiAutomation.exclusive(waitMs = SEND_LOCK_WAIT_MS) {
+    UiAutomation.exclusive(access, waitMs = SEND_LOCK_WAIT_MS) {
         if (!UiAutomation.isUsable(context)) {
             throw ToolException("The phone was locked again before sending. Nothing was sent. Ask the user to keep it unlocked, then retry.")
         }
-        EmailAutomation.send(context, service, access.visibility, pkg, label, draft)
+        EmailAutomation.send(context, service, access, pkg, label, draft)
     }
     ToolResult.json {
         put("sent", true)

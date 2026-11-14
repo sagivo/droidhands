@@ -25,7 +25,8 @@ internal fun uiScrollTool(context: Context): Tool = tool(
         "shows what is further down (like a mouse wheel), 'right' shows what is further right. Target: ref of a " +
         "[scrollable] element (or any element inside one), default the largest scrollable on screen. Says so " +
         "when the end is reached. Refs of the scrolled content may change: call screen_read afterwards. If the phone is " +
-        "locked, the user is asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent.",
+        "locked, the user is asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent. " +
+        UiAutomation.APPROVAL_PAUSE,
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema {
@@ -40,8 +41,8 @@ internal fun uiScrollTool(context: Context): Tool = tool(
         ?: throw ToolException("direction must be one of up, down, left, right.")
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
-    UiAutomation.awaitUsable(context, ctx.tokenName, "scroll on the screen")
-    UiAutomation.exclusive {
+    UiAutomation.awaitUsable(context, ctx, "scroll on the screen")
+    UiAutomation.exclusive(access) {
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
         val message = scroll(context, service, access, direction, args.optString("ref")?.trim())
@@ -66,14 +67,14 @@ private suspend fun scroll(
             } else {
                 // A ref inside a list scrolls that list; a ref with no scrollable ancestor is swiped directly.
                 live.node.ancestors().firstOrNull(NodeQueries::isScrollContainer)
-                    ?.let { anc -> NodeActions.refresh(anc)?.let { ScreenSession.Live(ScreenSession.refs.register(anc), anc, it) } }
+                    ?.let { anc -> ScreenSession.refresh(anc, access)?.let { ScreenSession.Live(ScreenSession.refs(access).register(anc), anc, it) } }
                     ?: live
             }
         } else {
-            val state = ScreenCapture.capture(context, service, access.visibility)
+            val state = ScreenCapture.capture(context, service, access)
             state.blockedForeground?.let { access.refuse(it) }
             val node = NodeQueries.largestScrollable(listOfNotNull(state.primaryRoot)) ?: NodeQueries.largestScrollable(state.roots)
-            node?.let { n -> NodeActions.refresh(n)?.let { ScreenSession.Live(ScreenSession.refs.register(n), n, it) } }
+            node?.let { n -> ScreenSession.refresh(n, access)?.let { ScreenSession.Live(ScreenSession.refs(access).register(n), n, it) } }
         }
     }
     if (container == null) {
@@ -86,6 +87,7 @@ private suspend fun scroll(
     val area = container.fresh.bounds.intersect(screen)
     return when (val plan = ScrollPlanner.plan(container.fresh.actions, container.fresh.className, direction, area)) {
         is ScrollPlan.Action -> {
+            UiAutomation.beforeAction(access)
             if (withContext(Dispatchers.IO) { NodeActions.scroll(container.fresh, plan.action) }) {
                 "Scrolled $dir in $label."
             } else {
@@ -112,6 +114,7 @@ private suspend fun swipeWithin(
 
 private suspend fun swipe(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, plan: ScrollPlan.Swipe) {
     withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, plan.x1, plan.y1, access) }
+    UiAutomation.beforeAction(access)
     if (!service.swipe(plan.x1, plan.y1, plan.x2, plan.y2, ScrollPlanner.SWIPE_MS)) {
         throw ToolException("Android cancelled the swipe gesture. Retry.")
     }

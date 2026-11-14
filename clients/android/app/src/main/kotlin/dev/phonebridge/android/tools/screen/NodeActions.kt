@@ -4,11 +4,15 @@ import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction
 import dev.phonebridge.android.access.NodeCapture
+import dev.phonebridge.android.access.SelfProtection
 import dev.phonebridge.android.access.UiAction
 import dev.phonebridge.android.access.UiNode
 import dev.phonebridge.android.access.info
 
-/** Accessibility actions on captured nodes. All functions do blocking IPC: call on Dispatchers.IO. */
+/**
+ * Accessibility actions on captured nodes. All functions do blocking IPC: call on Dispatchers.IO. Every action is
+ * refused (ToolException) while a PhoneBridge approval is pending or shown ([SelfProtection.requireNoPendingApproval]).
+ */
 object NodeActions {
     /** Re-fetches [node]'s state; null when the node no longer exists. */
     fun refresh(node: UiNode): UiNode? {
@@ -49,7 +53,10 @@ object NodeActions {
         return perform(node, id)
     }
 
+    /** Throws [dev.phonebridge.core.tools.ToolException] instead of acting while a PhoneBridge approval is pending or shown. */
     private fun perform(node: UiNode, action: Int, args: Bundle? = null): Boolean {
+        // Checked right before the action, so no approval can appear in between unnoticed.
+        SelfProtection.requireNoPendingApproval()
         val info = node.info ?: return false
         return try {
             if (args == null) info.performAction(action) else info.performAction(action, args)

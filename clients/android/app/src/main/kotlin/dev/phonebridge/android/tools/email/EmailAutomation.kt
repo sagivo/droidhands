@@ -2,13 +2,14 @@ package dev.phonebridge.android.tools.email
 
 import android.content.Context
 import android.os.SystemClock
-import dev.phonebridge.android.access.AppVisibility
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.access.NodeQueries
 import dev.phonebridge.android.access.UiNode
 import dev.phonebridge.android.tools.screen.NodeActions
+import dev.phonebridge.android.tools.screen.ScreenAccess
 import dev.phonebridge.android.tools.screen.ScreenCapture
 import dev.phonebridge.android.tools.screen.ScreenState
+import dev.phonebridge.android.tools.screen.UiAutomation
 import dev.phonebridge.android.tools.support.Accessibility
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.tools.ToolException
@@ -22,7 +23,9 @@ import kotlinx.coroutines.withContext
  *
  * Safety rules: only a compose screen that appeared after our own launch is used; fields are only filled when
  * empty, and Send is only tapped when To (and Cc), Subject and body show exactly the approved email
- * ([ComposeChecks]). Every failure before the Send tap says "Nothing was sent".
+ * ([ComposeChecks]). Every failure before the Send tap says "Nothing was sent". The launch re-checks that the agent
+ * is still allowed to act; every node action and tap also refuses while a PhoneBridge approval is pending
+ * ([UiAutomation.beforeAction]).
  */
 object EmailAutomation {
     private const val OPEN_TIMEOUT_MS = 10_000L
@@ -38,14 +41,15 @@ object EmailAutomation {
     suspend fun send(
         context: Context,
         service: BridgeAccessibilityService,
-        visibility: AppVisibility,
+        access: ScreenAccess,
         pkg: String,
         appLabel: String,
         draft: EmailDraft,
     ) {
-        val run = Run(context, service, visibility, pkg, appLabel, draft)
+        val run = Run(context, service, access, pkg, appLabel, draft)
         val ready = nothingSentOnFailure {
             val launchedAt = SystemClock.uptimeMillis()
+            access.ensureStillAllowed()
             BridgeAccessibilityService.expectUiChange()
             EmailLauncher.open(context, pkg, draft)
             run.awaitCompose(launchedAt)
@@ -70,7 +74,7 @@ object EmailAutomation {
     private class Run(
         val context: Context,
         val service: BridgeAccessibilityService,
-        val visibility: AppVisibility,
+        val access: ScreenAccess,
         val pkg: String,
         val label: String,
         val draft: EmailDraft,
@@ -109,6 +113,7 @@ object EmailAutomation {
                     if (count >= MAX_FILLS_PER_FIELD) continue
                     fills[fill.field] = count + 1
                     val node = compose.fields.getValue(fill.field)
+                    UiAutomation.beforeAction(access)
                     val typed = withContext(Dispatchers.IO) { NodeActions.refresh(node)?.let { NodeActions.setText(it, fill.text) } ?: false }
                     if (!typed) throw ToolException("Could not fill the ${fill.field.label} field of $label's compose screen. $NOTHING_SENT")
                 }
@@ -128,14 +133,26 @@ object EmailAutomation {
         /** Clicks Send (accessibility action, else a real tap if the compose screen is still open). */
         suspend fun tapSend(send: UiNode) {
             val target = NodeQueries.clickTarget(send) ?: send
-            val clicked = withContext(Dispatchers.IO) { NodeActions.refresh(target)?.let { NodeActions.click(it) } ?: false }
+            val clicked = unsentIfRefused {
+                UiAutomation.beforeAction(access)
+                withContext(Dispatchers.IO) { NodeActions.refresh(target)?.let { NodeActions.click(it) } ?: false }
+            }
             if (clicked) return
             // The click may still have gone through: never tap again once the compose screen is gone.
             if (EmailCompose.find(pkg, observe().windows) == null) return
             val area = send.bounds.intersect(service.screenBounds())
-            if (area.isEmpty || !service.tap(area.centerX, area.centerY)) {
-                throw ToolException("Could not tap Send in $label. The email is filled in but NOT sent; the user can tap Send.")
+            val tapped = !area.isEmpty && unsentIfRefused {
+                UiAutomation.beforeAction(access)
+                service.tap(area.centerX, area.centerY)
             }
+            if (!tapped) throw ToolException("Could not tap Send in $label. The email is filled in but NOT sent; the user can tap Send.")
+        }
+
+        /** Runs [block], whose refusals happen before anything is tapped, saying so when it refuses. */
+        private suspend fun <T> unsentIfRefused(block: suspend () -> T): T = try {
+            block()
+        } catch (e: ToolException) {
+            throw ToolException("${e.message} The email is filled in on the phone but NOT sent.")
         }
 
         /** Confirms the compose screen closed (stably) or a "Sending"/"Sent" message appeared. */
@@ -165,7 +182,15 @@ object EmailAutomation {
                         // The user approved this email without a subject: confirming the app's question is part of sending it.
                         confirmedNoSubject = true
                         val target = NodeQueries.clickTarget(outcome.confirm) ?: outcome.confirm
-                        withContext(Dispatchers.IO) { NodeActions.refresh(target)?.let { NodeActions.click(it) } }
+                        try {
+                            UiAutomation.beforeAction(access)
+                            withContext(Dispatchers.IO) { NodeActions.refresh(target)?.let { NodeActions.click(it) } }
+                        } catch (e: ToolException) {
+                            throw ToolException(
+                                "${e.message} $label is asking whether to send the email without a subject, so it was NOT sent yet; " +
+                                    "the user can confirm on the phone.",
+                            )
+                        }
                     }
                     is AfterSend.Problem -> throw ToolException(problemMessage(outcome.text))
                 }
@@ -185,7 +210,8 @@ object EmailAutomation {
 
         private suspend fun observe(): ScreenState {
             if (BridgeAccessibilityService.instance == null) throw ToolException(Accessibility.NOT_ENABLED)
-            return ScreenCapture.capture(context, service, visibility)
+            // Unmasked: the fields are compared with the approved email. Only screenTail reaches the agent.
+            return ScreenCapture.capture(context, service, access.visibility)
         }
 
         private suspend fun pause(sinceEvent: Long) {
@@ -205,7 +231,7 @@ object EmailAutomation {
         }
 
         private fun screenTail(state: ScreenState): String {
-            val texts = NodeQueries.topTexts(state.roots)
+            val texts = NodeQueries.topTexts(state.roots).let { t -> access.redactor?.let(t::map) ?: t }
             return if (texts.isEmpty()) "The screen shows no readable text." else "Screen shows: " + texts.joinToString(" | ")
         }
     }

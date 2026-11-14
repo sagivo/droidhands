@@ -8,8 +8,10 @@ import dev.phonebridge.android.access.NodeQueries
 import dev.phonebridge.android.access.TextNorm
 import dev.phonebridge.android.access.UiNode
 import dev.phonebridge.android.tools.screen.NodeActions
+import dev.phonebridge.android.tools.screen.ScreenAccess
 import dev.phonebridge.android.tools.screen.ScreenCapture
 import dev.phonebridge.android.tools.screen.ScreenState
+import dev.phonebridge.android.tools.screen.UiAutomation
 import dev.phonebridge.android.tools.support.Accessibility
 import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +26,9 @@ import kotlinx.coroutines.withContext
  * expected recipient's (title shows the name/number), or, when the title can't be read, a chat
  * that appeared after our own launch (WhatsApp's task is cleared first) and stayed stable.
  * Every failure before the Send tap says "Nothing was sent". Screens are captured through the
- * agent's [AppVisibility], so windows of apps blocked for it are never read.
+ * agent's [AppVisibility], so windows of apps blocked for it are never read. The launch re-checks
+ * that the agent is still allowed to act; every node action and tap also refuses while a
+ * PhoneBridge approval is pending ([UiAutomation.beforeAction]).
  */
 object WhatsAppAutomation {
     private const val OPEN_TIMEOUT_MS = 10_000L
@@ -45,14 +49,15 @@ object WhatsAppAutomation {
     suspend fun send(
         context: Context,
         service: BridgeAccessibilityService,
-        visibility: AppVisibility,
+        access: ScreenAccess,
         pkg: String,
         target: WhatsAppTarget,
         message: String,
     ) {
-        val run = Run(context, service, visibility, pkg, target)
+        val run = Run(context, service, access, pkg, target)
         val ready = nothingSentOnFailure {
             val launchedAt = SystemClock.uptimeMillis()
+            access.ensureStillAllowed()
             BridgeAccessibilityService.expectUiChange()
             WhatsAppLauncher.openChat(context, pkg, target.digits, message, clearTask = true)
             run.awaitChat(launchedAt, OPEN_TIMEOUT_MS, strict = true)
@@ -70,13 +75,13 @@ object WhatsAppAutomation {
     suspend fun observeOpenedChat(
         context: Context,
         service: BridgeAccessibilityService,
-        visibility: AppVisibility,
+        access: ScreenAccess,
         pkg: String,
         target: WhatsAppTarget,
         launchedAt: Long,
         timeoutMs: Long,
     ): OpenedChat {
-        val conversation = Run(context, service, visibility, pkg, target).awaitChat(launchedAt, timeoutMs, strict = false)
+        val conversation = Run(context, service, access, pkg, target).awaitChat(launchedAt, timeoutMs, strict = false)
         return if (conversation != null) {
             OpenedChat(true, conversation.title, null)
         } else {
@@ -96,7 +101,7 @@ object WhatsAppAutomation {
     private class Run(
         val context: Context,
         val service: BridgeAccessibilityService,
-        val visibility: AppVisibility,
+        val access: ScreenAccess,
         val pkg: String,
         val target: WhatsAppTarget,
     ) {
@@ -173,6 +178,7 @@ object WhatsAppAutomation {
                         if (sets < MAX_TEXT_SETS) {
                             sets++
                             // The link's text was dropped or a draft replaced it: type the approved message.
+                            UiAutomation.beforeAction(access)
                             val typed = withContext(Dispatchers.IO) { NodeActions.refresh(s.entry)?.let { NodeActions.setText(it, message) } ?: false }
                             if (!typed) throw ToolException("Could not put the message into WhatsApp's text box. Nothing was sent.")
                         }
@@ -197,16 +203,30 @@ object WhatsAppAutomation {
         /** Clicks Send (accessibility action, else a real tap if the text is still unsent). */
         suspend fun tapSend(send: UiNode) {
             val clickTarget = NodeQueries.clickTarget(send) ?: send
-            val clicked = withContext(Dispatchers.IO) { NodeActions.refresh(clickTarget)?.let { NodeActions.click(it) } ?: false }
+            val clicked = unsentIfRefused {
+                UiAutomation.beforeAction(access)
+                withContext(Dispatchers.IO) { NodeActions.refresh(clickTarget)?.let { NodeActions.click(it) } ?: false }
+            }
             if (clicked) return
             // The click may still have gone through; never tap again if the text box already emptied.
             val obs = observe()
             val s = obs.screen
             if (s is WaScreen.Conversation && s.entryText.isEmpty()) return
             val area = send.bounds.intersect(service.screenBounds())
-            if (area.isEmpty || !service.tap(area.centerX, area.centerY)) {
+            val tapped = !area.isEmpty && unsentIfRefused {
+                UiAutomation.beforeAction(access)
+                service.tap(area.centerX, area.centerY)
+            }
+            if (!tapped) {
                 throw ToolException("Could not tap WhatsApp's Send button. The message is typed in the chat but NOT sent; the user can tap Send.")
             }
+        }
+
+        /** Runs [block], whose refusals happen before anything is tapped, saying so when it refuses. */
+        private suspend fun <T> unsentIfRefused(block: suspend () -> T): T = try {
+            block()
+        } catch (e: ToolException) {
+            throw ToolException("${e.message} The message is typed in the chat but NOT sent.")
         }
 
         /** Confirms the compose field emptied or a new bubble with the text appeared. */
@@ -233,7 +253,8 @@ object WhatsAppAutomation {
 
         private suspend fun observe(): Observation {
             if (BridgeAccessibilityService.instance == null) throw ToolException(Accessibility.NOT_ENABLED)
-            val state = ScreenCapture.capture(context, service, visibility)
+            // Unmasked: the compose field is compared with the approved message. Only screenTail reaches the agent.
+            val state = ScreenCapture.capture(context, service, access.visibility)
             return Observation(state, WhatsAppScreens.classify(pkg, state.windows, target.digits))
         }
 
@@ -264,7 +285,7 @@ object WhatsAppAutomation {
                 "Ask the user whether to unblock them in WhatsApp."
 
         private fun screenTail(obs: Observation): String {
-            val texts = NodeQueries.topTexts(obs.state.roots)
+            val texts = NodeQueries.topTexts(obs.state.roots).let { t -> access.redactor?.let(t::map) ?: t }
             return if (texts.isEmpty()) "The screen shows no readable text." else "Screen shows: " + texts.joinToString(" | ")
         }
     }
