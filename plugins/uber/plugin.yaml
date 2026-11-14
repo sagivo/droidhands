@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: uber
+name: Uber
+description: Ride-hailing app for taxi-style car rides.
+category: rides
+homepage: https://www.uber.com
+status: experimental
+android:
+  packages: [com.ubercab]
+
+actions:
+  - id: ride_to
+    title: Set up a ride to a place
+    description: >-
+      Opens Uber's ride screen with pickup at the phone's current location and the destination filled in. It does
+      NOT request a ride: the user still picks the ride type, sees the price and confirms in Uber. The coordinates
+      decide where the car goes and the address is only the label Uber shows, so use the place's real coordinates
+      (look them up, don't guess). On Android, Uber may show the destination only after someone taps the pickup field.
+    keywords: [taxi, cab, ride, car, trip, airport, driver, lift, pickup, get a ride, go to, transport]
+    risk: action
+    params:
+      latitude:
+        type: number
+        description: Destination latitude in decimal degrees, e.g. 37.802374
+        required: true
+        minimum: -90
+        maximum: 90
+      longitude:
+        type: number
+        description: Destination longitude in decimal degrees, e.g. -122.405818
+        required: true
+        minimum: -180
+        maximum: 180
+      address:
+        description: The destination's name or address as Uber should show it, e.g. "Coit Tower, San Francisco".
+        required: true
+        max_length: 200
+    confirm: Open Uber with a ride to {{address}} (nothing is requested yet)
+    android:
+      intent:
+        action: android.intent.action.VIEW
+        data: "uber://?action=setPickup&pickup=my_location&dropoff%5Blatitude%5D={{latitude}}&dropoff%5Blongitude%5D={{longitude}}&dropoff%5Bformatted_address%5D={{address}}"
+    examples:
+      - params: {latitude: 37.802374, longitude: -122.405818, address: "Coit Tower, San Francisco"}
+        expect:
+          intent:
+            action: android.intent.action.VIEW
+            package: com.ubercab
+            data: "uber://?action=setPickup&pickup=my_location&dropoff%5Blatitude%5D=37.802374&dropoff%5Blongitude%5D=-122.405818&dropoff%5Bformatted_address%5D=Coit%20Tower%2C%20San%20Francisco"
+      - params: {address: Coit Tower}
+        expect: {error: latitude}
+      - params: {latitude: 37.8, longitude: -122.4}
+        expect: {error: address}

@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: waze
+name: Waze
+description: Community-based driving navigation with live traffic.
+category: maps
+homepage: https://www.waze.com
+status: experimental
+android:
+  packages: [com.waze]
+
+actions:
+  - id: search
+    title: Search in Waze
+    description: >-
+      Opens Waze with search results for an address or place. Nothing starts until someone picks a result; use
+      navigate to drive there directly.
+    keywords: [find, place, address, map, location, where]
+    risk: action
+    params:
+      query:
+        description: Address or place, e.g. "66 Acacia Avenue" or "Golden Gate Park".
+        required: true
+        max_length: 300
+    confirm: Search Waze for "{{query}}"
+    android:
+      url: "https://waze.com/ul?q={{query}}"
+    examples:
+      - params: {query: 66 Acacia Avenue}
+        expect: {url: "https://waze.com/ul?q=66%20Acacia%20Avenue"}
+      - params: {}
+        expect: {error: query}
+
+  - id: navigate
+    title: Drive to a place
+    description: >-
+      Opens Waze to drive from the current location to an address or place. Waze looks the destination up and
+      usually starts navigating to the best match, but if it is unsure (or the lookup fails) it shows search results
+      instead and someone has to pick one, so check with screen_read. Give a full address for the best match; use
+      navigate_to_coordinates when you have exact coordinates.
+    keywords: [navigation, navigate, drive, driving, directions, route, take me, go to, gps, traffic]
+    risk: action
+    params:
+      destination:
+        description: Where to go, e.g. "1 Market Street, San Francisco".
+        required: true
+        max_length: 300
+    confirm: Drive to "{{destination}}" with Waze
+    android:
+      url: "https://waze.com/ul?q={{destination}}&navigate=yes"
+    examples:
+      - params: {destination: "1 Market Street, San Francisco"}
+        expect: {url: "https://waze.com/ul?q=1%20Market%20Street%2C%20San%20Francisco&navigate=yes"}
+      - params: {}
+        expect: {error: destination}
+
+  - id: navigate_to_coordinates
+    title: Drive to coordinates
+    description: >-
+      Starts Waze navigation from the current location to an exact point given as latitude and longitude. Use this
+      when you know the coordinates (for example from location_get or a map link); it avoids Waze's address lookup.
+    keywords: [navigation, navigate, drive, coordinates, latitude, longitude, gps, point, pin]
+    risk: action
+    params:
+      latitude:
+        type: number
+        description: Latitude in decimal degrees, e.g. 45.6906304
+        required: true
+        minimum: -90
+        maximum: 90
+      longitude:
+        type: number
+        description: Longitude in decimal degrees, e.g. -120.810983
+        required: true
+        minimum: -180
+        maximum: 180
+    confirm: Drive to {{latitude}},{{longitude}} with Waze
+    completes: true
+    android:
+      url: "https://waze.com/ul?ll={{latitude}},{{longitude}}&navigate=yes"
+    examples:
+      - params: {latitude: 45.6906304, longitude: -120.810983}
+        expect: {url: "https://waze.com/ul?ll=45.6906304,-120.810983&navigate=yes"}
+      - params: {latitude: 91, longitude: 0}
+        expect: {error: latitude}
+      - params: {latitude: 45.69}
+        expect: {error: longitude}
+
+  - id: navigate_favorite
+    title: Drive home or to work
+    description: >-
+      Starts Waze navigation to the Home or Work address saved in Waze. If the user has not saved that address yet,
+      Waze asks for it instead and nothing starts.
+    keywords: [home, work, office, commute, navigation, navigate, drive, go home]
+    risk: action
+    params:
+      place:
+        description: Which saved place to drive to.
+        required: true
+        enum: [home, work]
+    confirm: Drive {{place}} with Waze
+    completes: true
+    android:
+      url: "https://waze.com/ul?favorite={{place}}&navigate=yes"
+    examples:
+      - params: {place: work}
+        expect: {url: "https://waze.com/ul?favorite=work&navigate=yes"}
+      - params: {place: gym}
+        expect: {error: place}

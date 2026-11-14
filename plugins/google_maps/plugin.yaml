@@ -1,0 +1,140 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_maps
+name: Google Maps
+description: Maps, place search, directions and turn-by-turn navigation.
+category: maps
+homepage: https://www.google.com/maps
+status: experimental
+android:
+  packages: [com.google.android.apps.maps]
+
+actions:
+  # Replaces the discovered show_on_map action (same geo: intent) with a better description.
+  - id: show_on_map
+    title: Search the map
+    description: >-
+      Searches Google Maps for a place, address or kind of place and shows the results on the map. A general term
+      ("coffee", "pharmacy") finds places near the phone's location; coordinates such as "48.8584,2.2945" show that
+      point. Nothing else happens: no directions or navigation start.
+    keywords: [map, place, address, find, nearby, near, location, where, restaurant, shop]
+    risk: action
+    params:
+      query:
+        description: >-
+          A place name, address, business or kind of place, e.g. "Eiffel Tower", "1600 Amphitheatre Parkway, Mountain
+          View" or "coffee". Coordinates as "latitude,longitude" also work.
+        required: true
+        max_length: 300
+    confirm: Show "{{query}}" in Google Maps
+    android:
+      intent:
+        action: android.intent.action.VIEW
+        data: "geo:0,0?q={{query}}"
+    examples:
+      - params: {query: "1st & Pike, Seattle"}
+        expect:
+          intent:
+            action: android.intent.action.VIEW
+            package: com.google.android.apps.maps
+            data: "geo:0,0?q=1st%20%26%20Pike%2C%20Seattle"
+      - params: {query: "48.8584,2.2945"}
+        expect:
+          intent: {data: "geo:0,0?q=48.8584%2C2.2945"}
+      - params: {}
+        expect: {error: query}
+
+  - id: navigate
+    title: Start navigation
+    description: >-
+      Starts turn-by-turn navigation in Google Maps from the phone's current location to a destination, by car (the
+      default), on foot, by bicycle or by two-wheeler. If the destination matches several places, Maps takes the first
+      result, so give a full address or a well-known name. Guidance starts right away; use directions to only preview
+      routes, or for public transit.
+    keywords: [navigation, drive, driving, directions, route, take me, go to, gps, turn by turn, walk, bike, motorbike]
+    risk: action
+    params:
+      destination:
+        description: Where to go, e.g. "Taronga Zoo, Sydney" or a full street address. Coordinates as "latitude,longitude" also work.
+        required: true
+        max_length: 300
+      mode:
+        description: "How to travel: d = driving (default), w = walking, b = bicycling, l = two-wheeler (motorbike or scooter)."
+        enum: [d, w, b, l]
+        default: d
+    confirm: Start Google Maps navigation to "{{destination}}"
+    completes: true
+    android:
+      intent:
+        action: android.intent.action.VIEW
+        data: "google.navigation:q={{destination}}&mode={{mode}}"
+    examples:
+      - params: {destination: "Taronga Zoo, Sydney Australia"}
+        expect:
+          intent:
+            action: android.intent.action.VIEW
+            package: com.google.android.apps.maps
+            data: "google.navigation:q=Taronga%20Zoo%2C%20Sydney%20Australia&mode=d"
+      - params: {destination: "Connaught Place, New Delhi", mode: l}
+        expect:
+          intent: {data: "google.navigation:q=Connaught%20Place%2C%20New%20Delhi&mode=l"}
+      - params: {destination: Louvre, mode: transit}
+        expect: {error: mode}
+      - params: {}
+        expect: {error: destination}
+
+  - id: directions
+    title: Show directions
+    description: >-
+      Opens Google Maps with routes from the phone's current location to a destination: route options, travel times
+      and, for transit, departures. Navigation does not start until someone taps Start (use navigate to start it
+      directly). Use directions_between for a different starting point.
+    keywords: [directions, route, how long, travel time, commute, transit, bus, train, subway, walk, bike, eta]
+    risk: action
+    params:
+      destination:
+        description: Where to go, e.g. "Central Station, Amsterdam" or a full street address.
+        required: true
+        max_length: 300
+      mode:
+        description: How to travel.
+        enum: [driving, walking, bicycling, two-wheeler, transit]
+        default: driving
+    confirm: Show {{mode}} directions to "{{destination}}" in Google Maps
+    android:
+      url: "https://www.google.com/maps/dir/?api=1&destination={{destination}}&travelmode={{mode}}"
+    examples:
+      - params: {destination: Eiffel Tower}
+        expect: {url: "https://www.google.com/maps/dir/?api=1&destination=Eiffel%20Tower&travelmode=driving"}
+      - params: {destination: "Central Station, Amsterdam", mode: transit}
+        expect: {url: "https://www.google.com/maps/dir/?api=1&destination=Central%20Station%2C%20Amsterdam&travelmode=transit"}
+      - params: {}
+        expect: {error: destination}
+
+  - id: directions_between
+    title: Show directions between two places
+    description: >-
+      Opens Google Maps with routes from a starting point to a destination (for example from home to work), with
+      route options and travel times. Navigation does not start until someone taps Start.
+    keywords: [directions, route, from, how long, travel time, commute, transit, bus, train, distance]
+    risk: action
+    params:
+      origin:
+        description: Where the trip starts, e.g. "Brandenburg Gate, Berlin" or a full street address.
+        required: true
+        max_length: 300
+      destination:
+        description: Where to go.
+        required: true
+        max_length: 300
+      mode:
+        description: How to travel.
+        enum: [driving, walking, bicycling, two-wheeler, transit]
+        default: driving
+    confirm: Show {{mode}} directions from "{{origin}}" to "{{destination}}" in Google Maps
+    android:
+      url: "https://www.google.com/maps/dir/?api=1&origin={{origin}}&destination={{destination}}&travelmode={{mode}}"
+    examples:
+      - params: {origin: Brandenburg Gate, destination: Alexanderplatz, mode: walking}
+        expect: {url: "https://www.google.com/maps/dir/?api=1&origin=Brandenburg%20Gate&destination=Alexanderplatz&travelmode=walking"}
+      - params: {destination: Alexanderplatz}
+        expect: {error: origin}
