@@ -141,7 +141,7 @@ export class FakeDevice {
 /**
  * Opens a device socket (`/v1/device?deviceId=<id>`) and sends a hello; does not wait for the
  * answer. Options: identity, urlDeviceId (null: omit the parameter), hello (fields merged into the
- * default hello), rawHello (string sent instead; null sends nothing).
+ * default hello), rawHello (string sent instead; null sends nothing), headers (on the upgrade).
  */
 export async function connectDevice(options = {}) {
   const identity = options.identity ?? newIdentity();
@@ -150,7 +150,11 @@ export async function connectDevice(options = {}) {
   // Like the Android client (OkHttp's onClosing), act on the relay's close frame without waiting
   // long for the TCP connection to end: workerd keeps it open after closing a socket that never
   // sent a frame (the hello timeout), which would otherwise delay `close` by ws's default 30 s.
-  const ws = new WebSocket(`${config.base.replace(/^http/, 'ws')}/v1/device${query}`, { perMessageDeflate: false, closeTimeout: 1_000 });
+  const ws = new WebSocket(`${config.base.replace(/^http/, 'ws')}/v1/device${query}`, {
+    perMessageDeflate: false,
+    closeTimeout: 1_000,
+    headers: options.headers ?? {},
+  });
   const device = new FakeDevice(identity, ws);
   await new Promise((resolve, reject) => {
     ws.once('open', resolve);

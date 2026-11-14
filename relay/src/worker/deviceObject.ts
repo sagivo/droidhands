@@ -18,6 +18,7 @@ import {
   CloseCode,
   HEARTBEAT_ACK_FRAME,
   HEARTBEAT_FRAME,
+  MAX_FRAME_BYTES,
   MAX_PRE_HELLO_BYTES,
   parseFrame,
   parseResponseFrame,
@@ -81,6 +82,12 @@ export type AuthorizeResult =
   | { readonly kind: 'failure'; readonly reason: CreateFailure }
   | { readonly kind: 'waiting'; readonly pairing: PairingView; readonly deviceName: string | null };
 
+/** A pairing found by its id and page token, with the phone's name for the waiting page. */
+export interface PollResult {
+  readonly pairing: PairingView;
+  readonly deviceName: string | null;
+}
+
 export interface ExchangeInput {
   readonly code: string;
   readonly clientId: string;
@@ -98,6 +105,12 @@ export const INTERNAL = Object.freeze({ deviceId: 'x-pb-device-id', ip: 'x-pb-ip
 
 const PAIRINGS_KEY = 'pairings';
 const RATE_WINDOW_MS = 60_000;
+/**
+ * How long the pairing state can still hold something once no pairing or code is left: the hourly
+ * pairing counters and undelivered notices (PairingStore keeps both for an hour), plus a margin.
+ * An alarm then sweeps it, so nothing (client addresses included) stays in storage indefinitely.
+ */
+const LEFTOVER_SWEEP_MS = 3_601_000;
 
 interface Pending {
   readonly conn: string;
@@ -157,8 +170,11 @@ export class DeviceObject extends DurableObject<Env> {
       return new Response('Bad Request\n', { status: 400 });
     }
     if (!this.authFailures.check(ipKey).allowed) return new Response(null, { status: 429 });
-    // §3.1 pre-hello limits, per device here (the Node relay counts relay-wide and per IP).
-    const waiting = this.sockets().filter(([, s]) => s.state === 'hello');
+    // §3.1 pre-hello limits, per device here (the Node relay counts relay-wide and per IP). A socket
+    // that was never welcomed counts until the runtime has let go of it, refused ones included: a
+    // client that never answers our close frame keeps it around, and there is no way to cut it off
+    // (the Node relay likewise counts a socket until its TCP connection ends).
+    const waiting = this.sockets().filter(([, s]) => s.connectedAt === 0);
     if (waiting.length >= this.cfg.relay.maxPendingHandshakes) return new Response(null, { status: 503 });
     if (waiting.filter(([, s]) => s.ipKey === ipKey).length >= this.cfg.relay.maxPendingHandshakesPerIp) {
       this.logger.warn('device handshake refused', { ip, reason: 'key_limit', pending: waiting.length });
@@ -203,6 +219,14 @@ export class DeviceObject extends DurableObject<Env> {
     if (state === null) return closeQuietly(ws, CloseCode.BAD_REQUEST, 'unknown socket');
     if (state.state === 'hello') return this.onHello(ws, state, message);
     if (state.state !== 'open') return;
+    if (frameBytes(message) > MAX_FRAME_BYTES) {
+      // §3: frames are capped at 16 MiB. The runtime accepts up to 32 MiB, so enforce it here like
+      // the Node relay (ws maxPayload): close with 1009 and fail what was pending on the connection.
+      this.logger.warn('device frame too large', { device: deviceTag(state.deviceId) });
+      this.dropConnection(ws, state, 1009, 'frame too large', 'disconnected');
+      this.pairings.connectionClosed(this.channel(state.conn));
+      return this.pairingsChanged();
+    }
     this.lastFrameAt.set(state.conn, Date.now());
     const frame = typeof message === 'string' ? parseFrame(message) : null;
     if (frame === null) {
@@ -246,8 +270,7 @@ export class DeviceObject extends DurableObject<Env> {
   }
 
   private async onHello(ws: WebSocket, state: SocketState, message: string | ArrayBuffer): Promise<void> {
-    const size = typeof message === 'string' ? Buffer.byteLength(message, 'utf8') : message.byteLength;
-    if (size > MAX_PRE_HELLO_BYTES) {
+    if (frameBytes(message) > MAX_PRE_HELLO_BYTES) {
       this.logger.info('device sent too much before its hello', { ip: state.ip });
       this.markClosed(ws, state);
       closeQuietly(ws, 1009, 'too much data before hello');
@@ -347,6 +370,8 @@ export class DeviceObject extends DurableObject<Env> {
    */
   private async scheduleAlarm(fromAlarm = false): Promise<void> {
     let next = this.pairings.nextDeadline();
+    // Only counters and queued notices left in storage: sweep them once they have all expired.
+    if (next === null && this.persisted !== '') next = Date.now() + LEFTOVER_SWEEP_MS;
     for (const [, state] of this.sockets()) {
       if (state.state === 'hello' && (next === null || state.helloDeadline < next)) next = state.helloDeadline;
     }
@@ -427,7 +452,7 @@ export class DeviceObject extends DurableObject<Env> {
     return { kind: 'waiting', pairing: result.pairing, deviceName: live[1].info?.deviceName ?? null };
   }
 
-  async poll(id: string, pageToken: string): Promise<{ pairing: PairingView; deviceName: string | null } | null> {
+  async poll(id: string, pageToken: string): Promise<PollResult | null> {
     const pairing = this.pairings.poll(id, pageToken);
     await this.pairingsChanged();
     if (pairing === null) return null;
@@ -525,19 +550,27 @@ export class DeviceObject extends DurableObject<Env> {
     await this.scheduleAlarm();
   }
 
-  /** Applies due expirations, then writes the pairing state if it changed. */
+  /**
+   * Applies due expirations, then writes the pairing state if it changed. Empty state is never
+   * written, and deleted once everything in it expired: requests that reach an unpaired device's
+   * object (any client can name any device id) must not leave rows behind.
+   */
   private persistPairings(): void {
     this.pairings.sweep();
-    const plain = JSON.stringify(this.pairings.snapshot((channel) => (channel as { conn: string }).conn));
+    const snapshot = this.pairings.snapshot((channel) => (channel as { conn: string }).conn);
+    const empty =
+      snapshot.records.length === 0 && snapshot.codes.length === 0 && snapshot.history.length === 0 && snapshot.notices.length === 0;
+    const plain = empty ? '' : JSON.stringify(snapshot);
     if (plain === this.persisted) return;
     this.persisted = plain;
-    this.ctx.storage.kv.put(PAIRINGS_KEY, this.seal(plain));
+    if (empty) this.ctx.storage.kv.delete(PAIRINGS_KEY);
+    else this.ctx.storage.kv.put(PAIRINGS_KEY, this.seal(plain));
   }
 
   private loadPairings(): void {
     const sealed = this.ctx.storage.kv.get<string>(PAIRINGS_KEY);
-    if (typeof sealed !== 'string') return;
-    const plain = this.open(sealed);
+    if (sealed === undefined) return;
+    const plain = typeof sealed === 'string' ? this.open(sealed) : null;
     if (plain === null) {
       this.logger.warn('discarded unreadable pairing state (was RELAY_SECRET changed?)');
       this.ctx.storage.kv.delete(PAIRINGS_KEY);
@@ -548,6 +581,7 @@ export class DeviceObject extends DurableObject<Env> {
       this.persisted = plain;
     } catch (err) {
       this.logger.warn('discarded malformed pairing state', { error: errorMessage(err) });
+      this.ctx.storage.kv.delete(PAIRINGS_KEY);
     }
   }
 
@@ -580,6 +614,11 @@ function socketState(ws: WebSocket): SocketState | null {
   } catch {
     return null;
   }
+}
+
+/** Size of a received frame in bytes (UTF-8 for text). */
+function frameBytes(message: string | ArrayBuffer): number {
+  return typeof message === 'string' ? Buffer.byteLength(message, 'utf8') : message.byteLength;
 }
 
 function sendQuietly(ws: WebSocket, text: string): void {

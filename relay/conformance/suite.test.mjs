@@ -124,6 +124,11 @@ test('handshake: a newer connection replaces the old one (4009); its pending req
   assert.equal((await postMcp(connectorUrl(identity.deviceId), { token: tokenFor(identity.deviceId) })).status, 200);
 });
 
+test('handshake: the device socket ignores Origin (the hello authenticates it)', async (t) => {
+  const d = await device(t, { headers: { origin: 'https://evil.example' } });
+  assert.equal(d.welcome.deviceId, d.deviceId);
+});
+
 test('handshake: a disconnect with a request in flight fails it with 502', async (t) => {
   const d = await device(t);
   const pending = postMcp(connectorUrl(d.deviceId), { token: tokenFor(d.deviceId) });
@@ -214,6 +219,18 @@ test('tunnel: a malformed response frame fails the request with 502', async (t) 
   const pending = postMcp(connectorUrl(d.deviceId), { token: tokenFor(d.deviceId) });
   const request = await d.nextRequest();
   d.send({ type: 'response', id: request.id, status: 99, headers: {}, body: '' });
+  const res = await pending;
+  assert.equal(res.status, 502);
+  assert.match(rpcMessage(res), MAY_HAVE_RUN);
+});
+
+test('tunnel: a frame over 16 MiB closes the connection (1009) and fails its request with 502', async (t) => {
+  const d = await device(t);
+  const pending = postMcp(connectorUrl(d.deviceId), { token: tokenFor(d.deviceId) });
+  const request = await d.nextRequest();
+  d.respond(request.id, 200, 'x'.repeat(16 * 1024 * 1024));
+  const closed = await withTimeout(d.closed, 'close after an oversized frame', 15_000);
+  assert.equal(closed.code, 1009);
   const res = await pending;
   assert.equal(res.status, 502);
   assert.match(rpcMessage(res), MAY_HAVE_RUN);
@@ -441,11 +458,13 @@ test('pairing: approve, exchange with PKCE, pair_complete; the code is single-us
   const html = await http(page.pageUrl);
   assert.equal(html.status, 303);
   assert.equal(html.headers.location, status.redirect);
+  assert.equal(html.headers['referrer-policy'], 'no-referrer');
 
   const res = await exchange({ code, client_id: clientId, code_verifier: pkce.verifier, resource: connectorUrl(d.deviceId) });
   assert.equal(res.status, 200, res.body);
   assert.deepEqual(JSON.parse(res.body), { access_token: approval.accessToken, token_type: 'Bearer', scope: 'phone' });
   assert.equal(res.headers['cache-control'], 'no-store');
+  assert.equal(res.headers.pragma, 'no-cache');
   const complete = await d.nextFrame('pair_complete');
   assert.deepEqual(complete, { type: 'pair_complete', id: request.id, tokenId: approval.tokenId });
 
@@ -611,6 +630,46 @@ test('pairing: a code never exchanged expires and the token is abandoned', { ski
   assert.equal(JSON.parse(res.body).error, 'invalid_grant');
 });
 
+test('pairing: a repeated approval is ignored; another token for the same pairing is abandoned', async (t) => {
+  const d = await device(t);
+  const flow = await approvedCode(d);
+  const { request, accessToken, tokenId } = flow.approval;
+  d.send({ type: 'pair_response', id: request.id, approved: true, accessToken, tokenId });
+  const other = tokenFor(d.deviceId);
+  d.send({ type: 'pair_response', id: request.id, approved: true, accessToken: other, tokenId: other.split('.')[2] });
+  assert.deepEqual(await d.nextFrame('pair_abandoned'), { type: 'pair_abandoned', id: request.id, tokenId: other.split('.')[2] });
+  await d.sync();
+  assert.equal(d.buffered.some((f) => f.type === 'pair_abandoned'), false, 'the token handed to the relay is kept');
+  const res = await exchange({ code: flow.code, client_id: flow.clientId, code_verifier: flow.pkce.verifier });
+  assert.equal(JSON.parse(res.body).access_token, accessToken);
+});
+
+test('pairing: notices for an offline phone are delivered when it reconnects', async (t) => {
+  const identity = newIdentity();
+  const d = await device(t, { identity });
+  const flow = await approvedCode(d);
+  d.ws.terminate();
+  await d.closed;
+  await sleep(300); // let the relay notice the disconnect
+  // The relay holds the token: the exchange works while the phone is offline.
+  const res = await exchange({ code: flow.code, client_id: flow.clientId, code_verifier: flow.pkce.verifier });
+  assert.equal(res.status, 200, res.body);
+  const back = await device(t, { identity });
+  assert.deepEqual(await back.nextFrame('pair_complete'), { type: 'pair_complete', id: flow.pairingId, tokenId: flow.approval.tokenId });
+});
+
+test('pairing: at most 3 pending pairings per phone; the next one gets an error page (429)', async (t) => {
+  const d = await device(t);
+  const clientId = await registerClient();
+  for (let i = 0; i < 3; i++) await openAuthorize({ clientId, pkce: newPkce(), deviceId: d.deviceId, state: `busy-${i}` });
+  const res = await http(authorizeUrl({ clientId, pkce: newPkce(), deviceId: d.deviceId, state: 'busy-3' }));
+  assert.equal(res.status, 429);
+  assert.match(res.headers['content-type'], /text\/html/);
+  assert.match(res.body, /several connection requests waiting/);
+  for (let i = 0; i < 3; i++) await d.nextFrame('pair_request');
+  assert.equal(await d.noFrame('pair_request'), true);
+});
+
 test('pairing: a pair_response for an unknown pairing with a token is abandoned', async (t) => {
   const d = await device(t);
   const accessToken = tokenFor(d.deviceId);
@@ -655,6 +714,32 @@ test('misc: health, banner, unknown paths, device endpoint without upgrade', asy
   // Every response carries these.
   assert.equal(health.headers['cache-control'], 'no-store');
   assert.equal(health.headers['x-content-type-options'], 'nosniff');
+  // Origin: checked on misc endpoints, not on the relay's own pages.
+  assert.equal((await http(`${base}/healthz`, { headers: { origin: 'https://evil.example' } })).status, 403);
+  assert.equal((await http(`${base}/oauth/authorize`, { headers: { origin: 'https://evil.example' } })).status, 400);
+});
+
+test('misc: wrong methods and oversized bodies on the OAuth endpoints', async () => {
+  const discovery = await http(`${base}/.well-known/oauth-authorization-server`, { method: 'POST' });
+  assert.equal(discovery.status, 405);
+  assert.equal(discovery.headers.allow, 'GET, HEAD, OPTIONS');
+  assert.equal(JSON.parse(discovery.body).error, 'invalid_request');
+  const token = await http(`${base}/oauth/token`);
+  assert.equal(token.status, 405);
+  assert.equal(token.headers.allow, 'POST, OPTIONS');
+  assert.equal(token.headers.pragma, 'no-cache');
+  const authorize = await http(`${base}/oauth/authorize`, { method: 'POST' });
+  assert.equal(authorize.status, 405);
+  assert.equal(authorize.headers.allow, 'GET');
+  const poll = await http(`${base}/oauth/pair/p_AAAAAAAAAAAAAAAAAAAAAA?t=x`, { method: 'POST' });
+  assert.equal(poll.status, 405);
+  assert.equal(poll.headers.allow, 'GET, HEAD');
+  const unknown = await http(`${base}/oauth/pair/p_AAAAAAAAAAAAAAAAAAAAAA?t=x`);
+  assert.equal(unknown.status, 404);
+  assert.deepEqual(JSON.parse(unknown.body), { error: 'not_found' });
+  const big = await postJson(`${base}/oauth/register`, { client_name: 'x'.repeat(17 * 1024), redirect_uris: [REDIRECT_URI] });
+  assert.equal(big.status, 413);
+  assert.equal(JSON.parse(big.body).error, 'invalid_client_metadata');
 });
 
 // Leaves time for close frames to settle before the runner stops the relay.

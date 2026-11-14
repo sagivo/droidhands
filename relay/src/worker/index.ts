@@ -51,7 +51,7 @@ import { qrPath, qrSvg } from '../setup/qr.js';
 import { SETUP_PATH, setupUrl } from '../setup/setupUrl.js';
 import { bearerCredential, parseToken } from '../token.js';
 import { unsupportedSettings, workerConfig, type Env, type WorkerConfig } from './config.js';
-import { INTERNAL, type DeviceObject } from './deviceObject.js';
+import { INTERNAL, type AuthorizeResult, type DeviceObject, type ExchangeResult, type PollResult } from './deviceObject.js';
 import { declaredLength, json, methodNotAllowed, page, readBody, respond, rpcError, text } from './http.js';
 
 export { DeviceObject } from './deviceObject.js';
@@ -220,7 +220,9 @@ function match(ctx: Ctx, pathname: string): { policy: OriginPolicy; rpc: boolean
     case '/':
       return checked(() => methodNotAllowed(ctx.method, 'GET, HEAD') ?? bannerText(ctx));
     case DEVICE_WS_PATH:
-      return checked(() => handleDeviceSocket(ctx));
+      // The Node relay's upgrade handler never looks at Origin (the hello authenticates the socket);
+      // only plain requests to this path go through the allowlist, as there.
+      return isWebSocketUpgrade(ctx.request) ? open(() => handleDeviceSocket(ctx)) : checked(() => handleDeviceSocket(ctx));
     default:
       return checked(() => notFound());
   }
@@ -250,8 +252,12 @@ function stub(ctx: Ctx, deviceId: string): DurableObjectStub<DeviceObject> {
 
 // ---- device WebSocket (§3.1) -------------------------------------------------------------------
 
+function isWebSocketUpgrade(request: Request): boolean {
+  return request.headers.get('upgrade')?.toLowerCase() === 'websocket';
+}
+
 async function handleDeviceSocket(ctx: Ctx): Promise<Response> {
-  if (ctx.request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
+  if (!isWebSocketUpgrade(ctx.request)) {
     return text(426, 'Upgrade Required\n', { Upgrade: 'websocket' });
   }
   // Upgrades share the per-IP request budget, which also bounds handshake spam.
@@ -432,6 +438,20 @@ function errorPage(error: PairingPageError, headers: Record<string, string> = {}
   return page(error.status, pairingErrorPage(error.problem, error.hint), headers);
 }
 
+/**
+ * The device's object was reset (a deploy, an overload) while answering. The Node relay has no
+ * equivalent; answer like its other transient failures instead of a bare 500.
+ */
+const OBJECT_RESET_PAGE: PairingPageError = {
+  status: 503,
+  problem: 'The relay restarted while handling this request.',
+  hint: 'Reload this page in a moment.',
+};
+
+function objectFailed(ctx: Ctx, deviceId: string, err: unknown): void {
+  ctx.logger.warn('device object failed', { device: deviceTag(deviceId), error: errorMessage(err) });
+}
+
 async function handleAuthorize(ctx: Ctx): Promise<Response> {
   const notAllowed = methodNotAllowed(ctx.method, 'GET');
   if (notAllowed !== null) return notAllowed;
@@ -449,11 +469,17 @@ async function handleAuthorize(ctx: Ctx): Promise<Response> {
   const deviceId = deviceIdFromResource(checked.resource, ctx.base);
   if (deviceId === null) return errorPage(foreignResourceError(ctx.base));
 
-  const result = await stub(ctx, deviceId).authorize(authorizationRequest(checked, deviceId, ctx.base), {
-    ipKey: ctx.ipKey,
-    remoteAddress: ctx.ip,
-    userAgent: cleanUserAgent(ctx.request.headers.get('user-agent') ?? undefined),
-  });
+  let result: AuthorizeResult;
+  try {
+    result = await stub(ctx, deviceId).authorize(authorizationRequest(checked, deviceId, ctx.base), {
+      ipKey: ctx.ipKey,
+      remoteAddress: ctx.ip,
+      userAgent: cleanUserAgent(ctx.request.headers.get('user-agent') ?? undefined),
+    });
+  } catch (err) {
+    objectFailed(ctx, deviceId, err);
+    return errorPage(OBJECT_RESET_PAGE);
+  }
   if (result.kind === 'offline') return page(OFFLINE_PAGE_STATUS, offlinePage());
   if (result.kind === 'failure') {
     const error = createFailureError(result.reason);
@@ -474,8 +500,16 @@ async function handlePairStatus(ctx: Ctx, id: string): Promise<Response> {
   const pageToken = ctx.url.searchParams.get('t') ?? '';
   // Page tokens issued by this relay start with the device id (see DeviceObject).
   const deviceId = pageToken.slice(0, 26);
-  const found =
-    PAIRING_ID_REGEX.test(id) && DEVICE_ID_REGEX.test(deviceId) ? await stub(ctx, deviceId).poll(id, pageToken) : null;
+  let found: PollResult | null = null;
+  if (PAIRING_ID_REGEX.test(id) && DEVICE_ID_REGEX.test(deviceId)) {
+    try {
+      found = await stub(ctx, deviceId).poll(id, pageToken);
+    } catch (err) {
+      // The waiting page keeps polling after an error; its state is in storage.
+      objectFailed(ctx, deviceId, err);
+      return wantsHtml ? errorPage(OBJECT_RESET_PAGE) : json(503, { error: 'unavailable' }, { 'Retry-After': '1' });
+    }
+  }
   if (found === null) return wantsHtml ? errorPage(PAIRING_GONE_ERROR) : json(404, { error: 'not_found' });
   const { pairing, deviceName } = found;
   if (!wantsHtml) return json(200, pairStatusBody(pairing));
@@ -522,12 +556,19 @@ async function handleToken(ctx: Ctx): Promise<Response> {
   if (!DEVICE_ID_REGEX.test(deviceId)) {
     return rejectAuth('invalid_grant', 'the authorization code is invalid, expired or already used');
   }
-  const result = await stub(ctx, deviceId).exchange({
-    code: checked.code,
-    clientId: checked.clientId,
-    verifier: checked.verifier,
-    form: body.body,
-  });
+  let result: ExchangeResult;
+  try {
+    result = await stub(ctx, deviceId).exchange({
+      code: checked.code,
+      clientId: checked.clientId,
+      verifier: checked.verifier,
+      form: body.body,
+    });
+  } catch (err) {
+    // The code may be spent; the phone deletes a token nobody fetched after 15 minutes.
+    objectFailed(ctx, deviceId, err);
+    return json(503, { error: 'temporarily_unavailable', error_description: 'the relay restarted; authorize again' }, headers);
+  }
   if (!result.ok) return rejectAuth(result.error, result.description, result.deviceId);
   ctx.logger.info('token issued', { device: deviceTag(result.deviceId), ip: ctx.ip });
   return respond(200, result.body, { ...headers, 'Content-Type': 'application/json' });
