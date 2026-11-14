@@ -176,7 +176,11 @@ test('no response within REQUEST_TIMEOUT_MS -> 504; a late response is ignored',
   const request = await device.nextRequest();
   const res = await pending;
   assert.equal(res.status, 504);
-  assert.deepEqual(rpcError(res), { code: -32000, message: 'Device did not respond in time' });
+  const error = rpcError(res);
+  assert.equal(error.code, -32000);
+  assert.match(error.message, /^The phone did not answer in time\. The phone may already have performed the action: check whether it happened/);
+  assert.doesNotMatch(error.message, /retry/i, 'the phone may still perform it: no blind retry');
+  assert.equal(res.headers['retry-after'], undefined);
 
   device.respond(request.id, 200, '{}', { 'content-type': 'application/json' });
   // The relay is still healthy and the device still routable.
@@ -290,6 +294,56 @@ test('requests with a non-allowlisted Origin -> 403; allowlisted origins are for
   assert.equal(request.headers.origin, 'https://good.example');
   device.respond(request.id, 200, '{}', { 'content-type': 'application/json' });
   assert.equal((await pending).status, 200);
+});
+
+test('allowlisted origins get CORS on the MCP endpoints: preflight, readable 401 challenge and responses', async (t) => {
+  const origin = 'https://inspector.example.com';
+  const relay = await startRelay(t, { allowedOrigins: ['https://Inspector.example.com/'] });
+  const device = await connectReady(relay);
+  const { deviceId } = device.identity;
+  const token = tokenFor(deviceId);
+
+  for (const path of [`/d/${deviceId}/mcp`, '/mcp']) {
+    const preflight = await httpRequest(`${relay.url}${path}`, {
+      method: 'OPTIONS',
+      headers: {
+        origin,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'authorization, content-type, mcp-protocol-version, mcp-session-id',
+      },
+    });
+    assert.equal(preflight.status, 204, path);
+    assert.equal(preflight.headers['access-control-allow-origin'], origin, path);
+    assert.equal(preflight.headers.vary, 'Origin');
+    assert.match(preflight.headers['access-control-allow-methods'] ?? '', /\bPOST\b/);
+    const allowed = (preflight.headers['access-control-allow-headers'] ?? '').toLowerCase().split(/,\s*/);
+    for (const header of ['authorization', 'content-type', 'accept', 'mcp-protocol-version', 'mcp-session-id']) {
+      assert.ok(allowed.includes(header), `${path}: ${header}`);
+    }
+    assert.equal(preflight.headers['access-control-allow-credentials'], undefined, 'never with credentials');
+  }
+  assert.equal(device.bufferedRequests(), 0, 'preflights are not tunneled');
+
+  const challenge = await postMcp(relay, { path: `/d/${deviceId}/mcp`, headers: { origin } });
+  assert.equal(challenge.status, 401);
+  assert.equal(challenge.headers['access-control-allow-origin'], origin);
+  assert.match(challenge.headers['access-control-expose-headers'] ?? '', /WWW-Authenticate/);
+
+  const pending = postMcp(relay, { path: `/d/${deviceId}/mcp`, token, headers: { origin } });
+  const request = await device.nextRequest();
+  device.respond(request.id, 200, '{}', { 'content-type': 'application/json', 'mcp-session-id': 's-1' });
+  const ok = await pending;
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers['access-control-allow-origin'], origin);
+  assert.match(ok.headers['access-control-expose-headers'] ?? '', /Mcp-Session-Id/);
+
+  // Other origins and no origin: no CORS at all.
+  const evil = await httpRequest(`${relay.url}/mcp`, { method: 'OPTIONS', headers: { origin: 'https://evil.example' } });
+  assert.equal(evil.status, 403);
+  assert.equal(evil.headers['access-control-allow-origin'], undefined);
+  const noOrigin = await httpRequest(`${relay.url}/mcp`, { method: 'OPTIONS' });
+  assert.equal(noOrigin.status, 405);
+  assert.equal(noOrigin.headers['access-control-allow-origin'], undefined);
 });
 
 test('any Origin is rejected when no origins are allowlisted', async (t) => {

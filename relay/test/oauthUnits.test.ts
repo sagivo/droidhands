@@ -11,7 +11,7 @@ import {
 import { connectorChallenge, deviceIdFromMetadataPath, deviceIdFromResource } from '../src/oauth/metadata.js';
 import { parsePairResponse } from '../src/oauth/pairingFrames.js';
 import { s256Challenge, verifyPkce } from '../src/oauth/pkce.js';
-import { buildRedirect, classifyRedirectUri, redirectHost } from '../src/oauth/redirectUris.js';
+import { buildRedirect, classifyRedirectUri, matchRedirectUri, redirectHost } from '../src/oauth/redirectUris.js';
 import { newIdentity, tokenFor } from './helpers.js';
 
 const KEY = randomBytes(32);
@@ -35,6 +35,36 @@ test('redirect URI classification and display host', () => {
   assert.equal(redirectHost('http://localhost:33418/callback'), 'localhost:33418');
   assert.equal(redirectHost('http://[::1]:8080/cb'), '[::1]:8080');
   assert.equal(redirectHost('com.example.app:/cb'), 'com.example.app');
+  assert.equal(classifyRedirectUri('http://127.0.0.1/').kind, 'loopback', 'port-less loopback (RFC 8252 §7.3)');
+  assert.equal(redirectHost('http://127.0.0.1/'), '127.0.0.1');
+});
+
+test('redirect URI matching: exact, except that loopback URIs may use any port (RFC 8252 §7.3)', () => {
+  const registered = ['https://claude.ai/cb', 'http://127.0.0.1/', 'http://localhost:3334/oauth/callback', 'com.example.app:/cb'];
+  for (const uri of [
+    'https://claude.ai/cb',
+    'com.example.app:/cb',
+    'http://127.0.0.1/',
+    'http://127.0.0.1:51234/',
+    'http://localhost:3334/oauth/callback',
+    'http://localhost:3335/oauth/callback',
+    'http://localhost/oauth/callback',
+  ]) {
+    assert.ok(matchRedirectUri(registered, uri), uri);
+  }
+  for (const uri of [
+    'https://claude.ai:8443/cb', // ports matter for https
+    'https://claude.ai/cb/',
+    'com.example.app:/cb2',
+    'http://localhost:51234/', // host must match: localhost is not 127.0.0.1
+    'http://127.0.0.1:51234/other',
+    'http://127.0.0.1:51234/?x=1',
+    'http://localhost:3335/oauth/callback#f',
+    'http://[::1]:3334/oauth/callback',
+    'http://evil.example:3334/oauth/callback',
+  ]) {
+    assert.equal(matchRedirectUri(registered, uri), false, uri);
+  }
 });
 
 test('buildRedirect keeps the existing query and encodes values', () => {

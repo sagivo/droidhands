@@ -8,8 +8,15 @@ export const PROTOCOL_VERSION = 1;
 /** Path of the device WebSocket endpoint. */
 export const DEVICE_WS_PATH = '/v1/device';
 
-/** Maximum WebSocket frame size, both directions. */
+/** Maximum WebSocket frame size, both directions, once the hello is accepted. */
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Most bytes a device socket may send before its hello is accepted (a hello is well under 1 KiB).
+ * Beyond it the socket is dropped, so unauthenticated clients cannot make the relay buffer large
+ * frames.
+ */
+export const MAX_PRE_HELLO_BYTES = 16 * 1024;
 
 export const CloseCode = Object.freeze({
   GOING_AWAY: 1001,

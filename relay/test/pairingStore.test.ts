@@ -7,15 +7,18 @@ import { newIdentity, tokenFor } from './helpers.js';
 
 interface Harness {
   readonly store: PairingStore;
-  readonly sent: Array<{ deviceId: string; frame: RelayPairFrame }>;
+  readonly sent: Array<{ deviceId: string; frame: RelayPairFrame; channel: object }>;
   readonly online: Set<string>;
   advance(ms: number): void;
+  /** Devices' frames go out on a new connection from now on; returns it. */
+  reconnect(): object;
 }
 
 const CHANNEL = {};
 
 function harness(limits: Partial<PairingLimits> = {}): Harness {
   let now = 1_000_000;
+  let channel: object = CHANNEL;
   const sent: Harness['sent'] = [];
   const online = new Set<string>();
   const store = new PairingStore({
@@ -27,11 +30,11 @@ function harness(limits: Partial<PairingLimits> = {}): Harness {
     logger: createLogger('silent'),
     deliver: (deviceId, frame) => {
       if (!online.has(deviceId)) return null;
-      sent.push({ deviceId, frame });
-      return CHANNEL;
+      sent.push({ deviceId, frame, channel });
+      return channel;
     },
   });
-  return { store, sent, online, advance: (ms) => (now += ms) };
+  return { store, sent, online, advance: (ms) => (now += ms), reconnect: () => (channel = {}) };
 }
 
 function request(deviceId: string, overrides: Partial<AuthorizationRequest> = {}): AuthorizationRequest {
@@ -215,7 +218,7 @@ test('notices for offline devices are queued and delivered on reconnect (bounded
   for (const grant of grants) h.store.finishExchange(grant!, true);
   const before = h.sent.length;
   h.online.add(deviceId);
-  h.store.deviceConnected(deviceId);
+  h.store.deviceConnected(deviceId, CHANNEL);
   const delivered = h.sent.slice(before).map((s) => s.frame.type);
   assert.deepEqual(delivered, ['pair_complete', 'pair_complete'], 'oldest notice dropped beyond the cap');
 
@@ -225,7 +228,7 @@ test('notices for offline devices are queued and delivered on reconnect (bounded
   h.store.sweep();
   h.online.add(deviceId);
   const count = h.sent.length;
-  h.store.deviceConnected(deviceId);
+  h.store.deviceConnected(deviceId, CHANNEL);
   assert.equal(h.sent.length, count, 'stale notices are dropped');
 });
 
@@ -240,9 +243,62 @@ test('a closed connection ends its pending pairings; responses for other devices
   // Device b cannot answer device a's pairing, and its token is abandoned.
   const foreign = approve(h, b, created.pairing.id);
   assert.equal(h.store.poll(created.pairing.id, created.pairing.pageToken)?.status, 'pending');
-  assert.deepEqual(h.sent.at(-1), { deviceId: b, frame: { type: 'pair_abandoned', id: created.pairing.id, tokenId: foreign.tokenId } });
+  assert.deepEqual(h.sent.at(-1), {
+    deviceId: b,
+    frame: { type: 'pair_abandoned', id: created.pairing.id, tokenId: foreign.tokenId },
+    channel: CHANNEL,
+  });
 
   h.store.connectionClosed(CHANNEL);
+  assert.equal(h.store.poll(created.pairing.id, created.pairing.pageToken)?.status, 'expired');
+});
+
+test('a reconnect re-sends pending pair_requests from an older connection, which then no longer expires them', () => {
+  const h = harness();
+  const { deviceId } = newIdentity();
+  const other = newIdentity().deviceId;
+  h.online.add(deviceId).add(other);
+  const pending = h.store.create(request(deviceId), { ipKey: 'k', remoteAddress: '203.0.113.9', userAgent: 'Browser/1' });
+  const denied = h.store.create(request(deviceId), origin());
+  const foreign = h.store.create(request(other), origin('198.51.100.1'));
+  assert.ok(pending.ok && denied.ok && foreign.ok);
+  const original = h.sent.find((s) => s.frame.type === 'pair_request' && s.frame.id === pending.pairing.id)?.frame;
+  h.store.handleResponse(deviceId, { type: 'pair_response', id: denied.pairing.id, approved: false, reason: 'denied' });
+
+  // The phone reconnects while the relay still holds the old (possibly dead) connection.
+  h.advance(60_000);
+  const fresh = h.reconnect();
+  const before = h.sent.length;
+  h.store.deviceConnected(deviceId, fresh);
+  assert.deepEqual(
+    h.sent.slice(before),
+    [{ deviceId, frame: original, channel: fresh }],
+    'only the pending pairing of this device, unchanged (same id, code, origin and expiry)',
+  );
+
+  h.store.connectionClosed(CHANNEL);
+  assert.equal(h.store.poll(pending.pairing.id, pending.pairing.pageToken)?.status, 'pending', 'the old close no longer ends it');
+  assert.equal(h.store.poll(foreign.pairing.id, foreign.pairing.pageToken)?.status, 'expired', "another device's pairing still ends");
+
+  const count = h.sent.length;
+  h.store.deviceConnected(deviceId, fresh);
+  assert.equal(h.sent.length, count, 'nothing is re-sent on the connection that already has it');
+
+  h.store.connectionClosed(fresh);
+  assert.equal(h.store.poll(pending.pairing.id, pending.pairing.pageToken)?.status, 'expired');
+});
+
+test('a reconnect does not re-send pairings that are past their expiry; they are cancelled', () => {
+  const h = harness();
+  const { deviceId } = newIdentity();
+  h.online.add(deviceId);
+  const created = h.store.create(request(deviceId), origin());
+  assert.ok(created.ok);
+  h.advance(180_000);
+  const fresh = h.reconnect();
+  const before = h.sent.length;
+  h.store.deviceConnected(deviceId, fresh);
+  assert.deepEqual(h.sent.slice(before).map((s) => s.frame), [{ type: 'pair_cancel', id: created.pairing.id }]);
   assert.equal(h.store.poll(created.pairing.id, created.pairing.pageToken)?.status, 'expired');
 });
 

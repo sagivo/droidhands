@@ -36,8 +36,9 @@ it offers to connect again.
   The app discovers the relay's authorization server metadata from there and registers itself
   (dynamic client registration, no secret; the registration is signed into the `client_id`, so the
   relay stores nothing).
-* `/oauth/authorize` checks the client, its redirect URI and PKCE (S256), sends a `pair_request` to
-  the phone and shows the waiting page, which polls until the phone answers.
+* `/oauth/authorize` checks the client, its redirect URI and PKCE (S256), takes the phone from the
+  `resource` parameter (the connection URL), sends a `pair_request` to the phone and shows the
+  waiting page, which polls until the phone answers.
 * On **Allow** the phone mints a normal `pb1.…` token (named after the app) and hands it to the
   relay, which keeps it **in memory only**, behind a single-use authorization code valid for 120 s.
   The app exchanges the code (with its PKCE verifier) at `/oauth/token`, and the relay forgets the
@@ -66,10 +67,18 @@ when ChatGPT opens the browser.
 
 ### Other MCP clients
 
-Any client that implements the MCP authorization spec (OAuth with dynamic client registration and
-PKCE) works the same way: give it the connection URL. Accepted redirect URIs are `https://…`,
-loopback `http://localhost|127.0.0.1|[::1]:<port>/…`, and private-use schemes with a dot
-(`com.example.app:/callback`).
+Any client that implements the MCP authorization spec (OAuth with dynamic client registration,
+PKCE, and the connection URL sent as `resource`) works the same way: give it the connection URL.
+Accepted redirect URIs are `https://…`, loopback `http://localhost|127.0.0.1|[::1][:<port>]/…`, and
+private-use schemes with a dot (`com.example.app:/callback`). For loopback URIs any port is accepted
+at authorization time (RFC 8252 §7.3), so native apps may register `http://127.0.0.1/callback` or
+reuse a registration after their port changed; the token request must then use the exact URI of
+the authorization request.
+
+If the browser says *"Your AI app didn't say which phone to connect to"*, the app was given the
+relay address instead of the connection URL, or it predates the MCP authorization spec 2025-06-18
+and omits `resource`: use the connection URL, or update the app. (`ALLOW_IMPLICIT_DEVICE=true`
+restores the old behaviour of pairing with the only connected phone; see Configuration.)
 
 Clients without OAuth support can still use a token created by hand in the PhoneBridge app (shown
 once), sent as a header:
@@ -125,9 +134,13 @@ want the key.
   120 s), then drops it.
 * **Pairing needs your thumb.** Every connection requires **Allow** on the unlocked phone, which
   shows the app's name, where it returns to and a code that must match the browser. Codes are
-  single-use, bound to the client, redirect URI, PKCE challenge and phone. Client errors (unknown
-  client, unregistered redirect URI, no PKCE) are shown as a page and never redirected. Limits: 3
-  pending requests per phone, 20 per phone per hour, 5 pending and 30 per hour per client IP.
+  single-use, bound to the client, redirect URI, PKCE challenge and phone. The authorization request
+  must name the phone by its connection URL, which only you know (the unguessable device id is in
+  it), so knowing the relay's address is not enough to send your phone a prompt. Request errors
+  (unknown client, unregistered redirect URI, unsupported response type, no PKCE, no phone) are
+  shown as a page and never redirected, so the relay cannot be used to bounce browsers to other
+  sites. Limits: 3 pending requests per phone, 20 per phone per hour, 5 pending and 30 per hour per
+  client IP.
 * **Device identity is self-certifying.** A device proves it owns its id by sending the 32-byte
   secret from which the id is derived (`deviceId = base32(SHA-256(secret))[:26]`). Nobody else can
   register that id. Set `RELAY_ACCESS_KEY` so that strangers cannot use your relay at all.
@@ -138,13 +151,21 @@ want the key.
   counters live in memory; restarting the relay just makes phones reconnect. The only thing on disk
   is `DATA_DIR/relay-secret` (or `RELAY_SECRET`), the key that signs OAuth client ids so connected
   apps survive restarts. Run exactly **one** instance per public URL.
-* **Defensive defaults.** MCP endpoints have no CORS and reject requests carrying a non-allowlisted
-  `Origin`. OAuth discovery, registration and token endpoints allow any origin without credentials
-  (browser-based MCP clients need that). Pages use a strict CSP (no external assets, nonce-only
-  scripts, no framing), `Referrer-Policy: no-referrer`, and escape everything. Per-IP limits on
-  requests and authentication failures; bodies are capped; at most 32 requests in flight per
-  device. Secrets are compared in constant time. Logs never contain tokens, codes, PKCE verifiers,
-  device secrets, access keys, the relay secret or bodies; device ids are shortened to 6 characters.
+* **Defensive defaults.** MCP endpoints reject requests carrying a non-allowlisted `Origin` and send
+  CORS headers (without credentials) only to origins listed in `ALLOWED_ORIGINS`. OAuth discovery,
+  registration and token endpoints allow any origin without credentials (browser-based MCP clients
+  need that). Pages use a strict CSP (no external assets, nonce-only scripts, no framing),
+  `Referrer-Policy: no-referrer`, and escape everything. Per-IP limits on requests and
+  authentication failures; bodies are capped; at most 32 requests in flight per device. Device
+  sockets that have not completed their `hello` are capped (16 per IP, 512 in total), may send at
+  most 16 KiB before it (the 16 MiB frame limit applies only afterwards), and are dropped 2 s after
+  a failed handshake's close frame. Secrets are compared in constant time. Logs never contain
+  tokens, codes, PKCE verifiers, device secrets, access keys, the relay secret or bodies; device ids
+  are shortened to 6 characters.
+* **No blind retries.** If the phone's connection drops, it reconnects or the relay restarts while a
+  request is in flight, the phone may still perform the action. The agent's error says so and asks
+  it to check (for example with `sms_list` or `screen_read`) before sending the request again, and
+  carries no `Retry-After`.
 
 ## Run locally
 
@@ -264,11 +285,14 @@ All settings are environment variables. Empty values mean "use the default".
 | `PUBLIC_DIR` | `relay/public` | Directory served for `/download/phonebridge.apk`. |
 | `SETUP_BANNER` | `true` | Print the setup link and QR code to stderr at startup. |
 | `ALLOW_TOKEN_IN_URL` | `false` | Also accept `POST /mcp/<token>` for MCP clients that cannot set headers. The relay moves the token into an `authorization` header before tunneling. URLs end up in client configs, proxy logs and browser history, so prefer OAuth or the header. |
-| `ALLOWED_ORIGINS` | *(empty)* | Comma-separated list of allowed `Origin` values (e.g. `https://inspector.example.com`), or `*`, for the MCP endpoints. Requests that carry any other `Origin` get `403`. Native and server-side MCP clients send no `Origin` and are unaffected. OAuth and setup endpoints are not subject to this check. |
+| `ALLOWED_ORIGINS` | *(empty)* | Comma-separated list of allowed `Origin` values (e.g. `https://inspector.example.com`), or `*`, for the MCP endpoints. Requests that carry any other `Origin` get `403`. Requests from an allowed origin get CORS headers for it (`Access-Control-Allow-Origin: <origin>`; `WWW-Authenticate`, `Mcp-Session-Id` and `Retry-After` exposed; no credentials) and `OPTIONS` preflights are answered with `204`, so browser-based MCP clients on that origin work. Native and server-side MCP clients send no `Origin` and are unaffected. OAuth and setup endpoints are not subject to this check. |
+| `ALLOW_IMPLICIT_DEVICE` | `false` | Legacy: when an authorization request has no `resource`, pair with the only connected phone instead of showing an error. Leave it off on a relay reachable from the internet: otherwise anyone who knows the relay's address can send your phone pairing prompts. |
 | `REQUEST_TIMEOUT_MS` | `150000` | How long to wait for the device's answer before replying `504`. |
 | `MAX_BODY_BYTES` | `1048576` | Largest accepted request body (at most 8 MiB, so that a tunneled request fits in a 16 MiB frame); larger requests get `413` and the connection is closed. |
 | `MAX_INFLIGHT_PER_DEVICE` | `32` | Requests a device may have in flight; more get `429`. A request stays in flight until the device answers or it times out, even if the agent disconnects. |
 | `HELLO_TIMEOUT_MS` | `10000` | Time a new device socket has to send its `hello` (close code `4008`). |
+| `MAX_PENDING_HANDSHAKES` | `512` | Device sockets that may wait for their `hello` at the same time; more get `503`. |
+| `MAX_PENDING_HANDSHAKES_PER_IP` | `16` | The same per client IP (IPv6: per `/64`); more get `429`. Behind a proxy without `TRUST_PROXY=true`, every phone counts against the proxy's address. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. Logs are JSON lines on stdout. |
 | `RATE_LIMIT_REQUESTS_PER_MIN` | `600` | Requests per client IP per minute across the MCP, OAuth and setup endpoints (device WebSocket upgrades count too); more get `429`. |
 | `RATE_LIMIT_AUTH_FAILURES_PER_MIN` | `30` | Authentication failures per client IP per minute (malformed or wrong-device tokens, `401`s returned by devices, failed device hellos, rejected token requests, wrong setup access keys). Exceeding it blocks that IP for 60 s (`429`). A connector request with no token at all (the first step of OAuth discovery) does not count. |
@@ -294,10 +318,11 @@ PHONEBRIDGE_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 | `POST /mcp` with `Authorization: Bearer <token>` | Tunneled to the device named in the token. |
 | `POST /mcp/<token>` | Same, if `ALLOW_TOKEN_IN_URL=true`; otherwise `404`. |
 | `GET` / `DELETE` on either MCP endpoint | `405`, `Allow: POST` (stateless server, no SSE stream). |
+| `OPTIONS` on either MCP endpoint | From an origin in `ALLOWED_ORIGINS`: `204` CORS preflight answer (`POST`; `Authorization`, `Content-Type`, `Accept`, `Mcp-Protocol-Version`, `Mcp-Session-Id`). Otherwise `403` (other origins) or `405`. |
 | `GET /.well-known/oauth-protected-resource/d/<deviceId>/mcp` | RFC 9728 protected resource metadata. |
 | `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414 authorization server metadata. |
 | `POST /oauth/register` | RFC 7591 dynamic registration of public clients → `201` with a stateless `client_id`. |
-| `GET /oauth/authorize?…` | Validates the request, prompts the phone and shows the "Approve on your phone" page. |
+| `GET /oauth/authorize?…` | Validates the request (`resource` must be the phone's connection URL), prompts the phone and shows the "Approve on your phone" page. Every error is an HTML page, never a redirect. |
 | `GET /oauth/pair/<id>?t=<pageToken>` | Pairing status for the page: `{"status":"pending"\|"approved"\|"denied"\|"expired","redirect"?}`. With `&view=html`, the reloadable page (redirects once decided). |
 | `POST /oauth/token` | Authorization code + PKCE verifier → `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. Errors per RFC 6749 §5.2. |
 | `GET /setup` | Phone setup page. |
@@ -305,7 +330,7 @@ PHONEBRIDGE_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 | `POST /setup/qr` | Used by the setup page: `{"key"}` → QR code (SVG path) of the setup link, if the key is the access key. |
 | `GET /healthz` | `200 {"ok":true}` |
 | `GET /` | Short text banner with the setup link. |
-| `GET /v1/device` (WebSocket upgrade) | Device tunnel ([PROTOCOL.md](../docs/PROTOCOL.md) §3). |
+| `GET /v1/device` (WebSocket upgrade) | Device tunnel ([PROTOCOL.md](../docs/PROTOCOL.md) §3). `429`/`503` when too many sockets from that IP / in total are waiting for their `hello`. |
 | anything else | `404` |
 
 Errors produced by the relay itself on the MCP endpoints (bodies are JSON-RPC errors with `id: null`):
@@ -317,8 +342,14 @@ Errors produced by the relay itself on the MCP endpoints (bodies are JSON-RPC er
 | `413` | Body larger than `MAX_BODY_BYTES`. |
 | `429` | Per-IP rate limit, auth-failure block, or the device's in-flight cap (`Retry-After` set). |
 | `502` | The device disconnected or reconnected before answering, or sent an invalid response. |
-| `503` | The device is offline (`-32000 Device offline`, `Retry-After: 30`), or the relay is shutting down. |
-| `504` | No answer within `REQUEST_TIMEOUT_MS` (`-32000 Device did not respond in time`). |
+| `503` | The device is offline (`-32000 Device offline`, `Retry-After: 30`), or the relay is shutting down (`Retry-After: 30` only if the request had not been forwarded yet). |
+| `504` | No answer within `REQUEST_TIMEOUT_MS` (`-32000 The phone did not answer in time. …`). |
+
+When a forwarded request fails (`502`, `504`, or `503` during shutdown), the phone may still have
+performed the action (tool calls such as sending a message are not idempotent). The message says
+so, e.g. `The phone's connection dropped before it answered. The phone may already have performed
+the action: check whether it happened (for example with sms_list or screen_read) before sending the
+request again.`
 
 Every response carries `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
 
@@ -330,8 +361,11 @@ Every response carries `Cache-Control: no-store` and `X-Content-Type-Options: no
   `expired`, `token issued`, `pairing completed` / `abandoned`.
 * **Shutdown**: on `SIGINT`/`SIGTERM` the relay stops accepting connections, cancels pending
   pairing prompts, tells phones to delete tokens no app collected, answers pending requests with
-  `503`, closes device sockets with code `1001` (phones reconnect with backoff) and exits; a second
-  signal exits immediately.
+  `503` (saying the phone may already have performed the action), closes device sockets with code
+  `1001` (phones reconnect with backoff) and exits; a second signal exits immediately.
+* **Pairing across reconnects**: if a phone reconnects while the relay still holds its previous
+  (possibly dead) socket, pending pairing requests are sent again on the new connection with the
+  same id, code and expiry, so the prompt still appears.
 * **Heartbeats**: WebSocket pings every 25 s; a device that misses two pongs is dropped.
 
 ## Development
@@ -349,7 +383,7 @@ Source layout (`src/`):
 | `relay.ts` | `createRelay(config)` → `{ server, address, url, close }` |
 | `server.ts` | CLI entry, startup banner |
 | `httpHandler.ts` | Router; `mcpHandler.ts` tunnels MCP requests; `httpDeps.ts`, `httpUtil.ts` shared helpers |
-| `deviceSocket.ts`, `deviceConnection.ts`, `deviceRegistry.ts` | Device handshake, frames, request multiplexing |
+| `deviceSocket.ts`, `deviceConnection.ts`, `deviceRegistry.ts`, `handshakeGuard.ts` | Device handshake (and its limits), frames, request multiplexing |
 | `oauth/` | `metadata.ts` (discovery documents), `clientRegistration.ts` (stateless client ids), `redirectUris.ts`, `pkce.ts`, `pairingStore.ts` (pairings, codes, limits), `pairingFrames.ts`, and the routes (`discoveryRoutes.ts`, `authorizeRoutes.ts`, `tokenRoute.ts`) |
 | `pages/` | Safe HTML templating with CSP (`html.ts`), pairing pages, setup page |
 | `setup/` | `/setup` routes, setup URL, QR rendering, startup banner |

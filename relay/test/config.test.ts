@@ -12,10 +12,13 @@ test('defaults match the documented values', () => {
   assert.equal(config.accessKey, null);
   assert.equal(config.allowTokenInUrl, false);
   assert.deepEqual(config.allowedOrigins, []);
+  assert.equal(config.allowImplicitDevice, false, 'authorize requires `resource` by default');
   assert.equal(config.requestTimeoutMs, 150_000);
   assert.equal(config.maxBodyBytes, 1_048_576);
   assert.equal(config.maxInflightPerDevice, 32);
   assert.equal(config.helloTimeoutMs, 10_000);
+  assert.equal(config.maxPendingHandshakes, 512);
+  assert.equal(config.maxPendingHandshakesPerIp, 16);
   assert.equal(config.logLevel, 'info');
   assert.equal(config.rateLimitRequestsPerMin, 600);
   assert.equal(config.rateLimitAuthFailuresPerMin, 30);
@@ -37,10 +40,13 @@ test('reads every variable', () => {
     RELAY_ACCESS_KEY: ' s3cret ',
     ALLOW_TOKEN_IN_URL: '1',
     ALLOWED_ORIGINS: 'https://A.example, https://b.example/ ,',
+    ALLOW_IMPLICIT_DEVICE: 'true',
     REQUEST_TIMEOUT_MS: '1000',
     MAX_BODY_BYTES: '2048',
     MAX_INFLIGHT_PER_DEVICE: '4',
     HELLO_TIMEOUT_MS: '500',
+    MAX_PENDING_HANDSHAKES: '64',
+    MAX_PENDING_HANDSHAKES_PER_IP: '4',
     LOG_LEVEL: 'DEBUG',
     RATE_LIMIT_REQUESTS_PER_MIN: '100',
     RATE_LIMIT_AUTH_FAILURES_PER_MIN: '5',
@@ -56,10 +62,13 @@ test('reads every variable', () => {
   assert.equal(config.accessKey, ' s3cret ', 'access key is used verbatim');
   assert.equal(config.allowTokenInUrl, true);
   assert.deepEqual(config.allowedOrigins, ['https://a.example', 'https://b.example']);
+  assert.equal(config.allowImplicitDevice, true);
   assert.equal(config.requestTimeoutMs, 1000);
   assert.equal(config.maxBodyBytes, 2048);
   assert.equal(config.maxInflightPerDevice, 4);
   assert.equal(config.helloTimeoutMs, 500);
+  assert.equal(config.maxPendingHandshakes, 64);
+  assert.equal(config.maxPendingHandshakesPerIp, 4);
   assert.equal(config.logLevel, 'debug');
   assert.equal(config.rateLimitRequestsPerMin, 100);
   assert.equal(config.rateLimitAuthFailuresPerMin, 5);
@@ -102,6 +111,9 @@ test('invalid values are rejected with the variable name', () => {
     [{ PUBLIC_URL: 'https://relay.example.com/?x=1' }, /PUBLIC_URL/],
     [{ RELAY_SECRET: 'too-short' }, /RELAY_SECRET/],
     [{ SETUP_BANNER: 'sometimes' }, /SETUP_BANNER/],
+    [{ ALLOW_IMPLICIT_DEVICE: 'maybe' }, /ALLOW_IMPLICIT_DEVICE/],
+    [{ MAX_PENDING_HANDSHAKES: '0' }, /MAX_PENDING_HANDSHAKES/],
+    [{ MAX_PENDING_HANDSHAKES_PER_IP: '0' }, /MAX_PENDING_HANDSHAKES_PER_IP/],
   ];
   for (const [env, pattern] of cases) {
     assert.throws(() => loadConfigFromEnv(env), (err: unknown) => err instanceof ConfigError && pattern.test(err.message));

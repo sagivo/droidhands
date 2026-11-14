@@ -16,7 +16,12 @@ test('a newer connection replaces the old one: old closed 4009, its pending requ
   assert.equal((await oldDevice.closed).code, 4009);
   const res = await pending;
   assert.equal(res.status, 502);
-  assert.equal((JSON.parse(res.body) as { error: { code: number } }).error.code, -32000);
+  const error = (JSON.parse(res.body) as { error: { code: number; message: string } }).error;
+  assert.equal(error.code, -32000);
+  // The phone keeps running the original call, so the agent must check rather than resend it.
+  assert.match(error.message, /^The phone reconnected before it answered\. The phone may already have performed the action/);
+  assert.match(error.message, /check whether it happened/);
+  assert.doesNotMatch(error.message, /retry/i);
   assert.equal(relay.deviceCount(), 1);
 
   // New requests go to the new connection, and the old socket's close did not unregister it.
@@ -36,7 +41,9 @@ test('device disconnect mid-request -> 502, then 503 while offline', async (t) =
   device.ws.terminate();
   const res = await pending;
   assert.equal(res.status, 502);
-  assert.equal((JSON.parse(res.body) as { error: { message: string } }).error.message, 'Device disconnected before responding');
+  const { message } = (JSON.parse(res.body) as { error: { message: string } }).error;
+  assert.match(message, /^The phone's connection dropped before it answered\. The phone may already have performed the action/);
+  assert.doesNotMatch(message, /retry/i);
 
   await waitFor(() => relay.deviceCount() === 0, 'device removal');
   assert.equal((await postMcp(relay, { token })).status, 503);
@@ -83,7 +90,9 @@ test('graceful shutdown: devices closed with 1001, pending requests -> 503', asy
   const closing = relay.close();
   const res = await pending;
   assert.equal(res.status, 503);
-  assert.ok(Number(res.headers['retry-after']) > 0);
+  const { message } = (JSON.parse(res.body) as { error: { message: string } }).error;
+  assert.match(message, /^The relay shut down before the phone answered\. The phone may already have performed the action/);
+  assert.equal(res.headers['retry-after'], undefined, 'a request the phone may have run is not to be retried blindly');
   assert.equal((await device.closed).code, 1001);
   assert.equal((await idle.closed).code, 1001, 'sockets still in the handshake are closed too');
   await closing;

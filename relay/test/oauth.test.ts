@@ -311,20 +311,30 @@ test('authorize: invalid client_id, unregistered redirect_uri and missing PKCE s
   assert.equal(device.bufferedFrames('pair_request'), 0, 'the phone was never prompted');
 });
 
-test('authorize: wrong response_type redirects back with unsupported_response_type', async (t) => {
+test('authorize: an unsupported response_type shows an error page and never redirects (no open redirect)', async (t) => {
   const relay = await startRelay(t);
   const device = await connectReady(relay);
-  const url = authorizeUrl(relay, {
+  const ownClient = authorizeUrl(relay, {
     clientId: await registerClient(relay),
     pkce: newPkce(),
     deviceId: device.identity.deviceId,
     extra: { response_type: 'token' },
   });
-  const res = await httpRequest(url);
-  assert.equal(res.status, 303);
-  const params = redirectParams(res.headers.location as string);
-  assert.equal(params.get('error'), 'unsupported_response_type');
-  assert.equal(params.get('state'), 'state-123');
+  // Anyone can register any https redirect URI, then send the victim a link on the relay's domain.
+  const landing = 'https://evil.example/landing';
+  const evilClient = await registerClient(relay, { client_name: 'PhoneBridge setup', redirect_uris: [landing] });
+  const bare = `${relay.url}/oauth/authorize?client_id=${encodeURIComponent(evilClient)}&response_type=x`;
+
+  for (const url of [ownClient, bare]) {
+    const res = await httpRequest(url);
+    assert.equal(res.status, 400, url);
+    assert.equal(res.headers.location, undefined, 'no redirect');
+    assert.match(res.headers['content-type'] ?? '', /^text\/html/);
+    assert.match(res.body, /only response_type=code is supported/);
+    assert.doesNotMatch(res.body, /evil\.example/);
+  }
+  await device.sync();
+  assert.equal(device.bufferedFrames('pair_request'), 0, 'the phone was never prompted');
 });
 
 test('authorize: redirect_uri may be omitted when exactly one is registered', async (t) => {
@@ -344,8 +354,33 @@ test('authorize: redirect_uri may be omitted when exactly one is registered', as
   assert.equal(res.status, 200, res.body);
 });
 
-test('device selection: resource of another relay, no resource with one, zero or two devices', async (t) => {
+test('device selection: without resource the request is refused, whether or not a phone is online', async (t) => {
   const relay = await startRelay(t);
+  const clientId = await registerClient(relay);
+  const assertRefused = async (what: string): Promise<void> => {
+    const res = await httpRequest(authorizeUrl(relay, { clientId, pkce: newPkce(), deviceId: null }));
+    assert.equal(res.status, 400, what);
+    assert.equal(res.headers.location, undefined, what);
+    assert.match(res.body, /didn&#39;t say which phone to connect to/, what);
+    assert.match(res.body, /update your AI app/, what);
+    assert.doesNotMatch(res.body, /Pixel 8|offline/, `${what}: says nothing about the phone`);
+  };
+
+  await assertRefused('no phone online');
+  const only = await connectReady(relay, { hello: { deviceName: 'Pixel 8' } });
+  await assertRefused('the only phone online');
+  await only.sync();
+  assert.equal(only.bufferedFrames('pair_request'), 0, 'the phone was never prompted');
+
+  const foreign = await httpRequest(
+    authorizeUrl(relay, { clientId, pkce: newPkce(), deviceId: null, extra: { resource: `https://other.example/d/${only.identity.deviceId}/mcp` } }),
+  );
+  assert.equal(foreign.status, 400);
+  assert.match(foreign.body, /does not belong to this relay/);
+});
+
+test('device selection with ALLOW_IMPLICIT_DEVICE: the only online phone, unnamed on the page; zero or two devices', async (t) => {
+  const relay = await startRelay(t, { allowImplicitDevice: true });
   const clientId = await registerClient(relay);
   const pkce = newPkce();
 
@@ -353,20 +388,62 @@ test('device selection: resource of another relay, no resource with one, zero or
   assert.equal(none.status, 503);
   assert.match(none.body, /Your phone is offline/);
 
-  const first = await connectReady(relay);
-  const foreign = await httpRequest(
-    authorizeUrl(relay, { clientId, pkce, deviceId: null, extra: { resource: `https://other.example/d/${first.identity.deviceId}/mcp` } }),
-  );
-  assert.equal(foreign.status, 400);
-  assert.match(foreign.body, /does not belong to this relay/);
-
+  const first = await connectReady(relay, { hello: { deviceName: 'Pixel 8' } });
   const single = await openAuthorize(relay, { clientId, pkce, deviceId: null });
   assert.equal((await first.nextFrame<PairRequestFrame>('pair_request')).displayCode, single.displayCode);
+  assert.doesNotMatch(single.res.body, /Pixel 8/, 'the phone is not named to someone who did not name it');
+  assert.match(single.res.body, /Open PhoneBridge on <strong>your phone<\/strong>/);
+  assert.doesNotMatch((await httpRequest(single.pageUrl)).body, /Pixel 8/, 'nor on the reloadable page');
+
+  const named = await openAuthorize(relay, { clientId, pkce: newPkce(), deviceId: first.identity.deviceId });
+  assert.match(named.res.body, /Pixel 8/, 'named by its connection URL');
 
   await connectReady(relay);
   const several = await httpRequest(authorizeUrl(relay, { clientId, pkce: newPkce(), deviceId: null }));
   assert.equal(several.status, 400);
   assert.match(several.body, /Several phones/);
+});
+
+test('loopback redirect URIs: any port at authorization time, the exact one at the token endpoint (RFC 8252 §7.3)', async (t) => {
+  const relay = await startRelay(t);
+  const device = await connectReady(relay);
+  const { deviceId } = device.identity;
+  // A port-less registration (VS Code) and a cached one whose port is now busy (mcp-remote).
+  const clientId = await registerClient(relay, {
+    client_name: 'Native',
+    redirect_uris: ['http://127.0.0.1/', 'http://localhost:3334/oauth/callback'],
+  });
+
+  for (const redirectUri of ['http://127.0.0.1:51234/', 'http://localhost:3335/oauth/callback']) {
+    const pkce = newPkce();
+    const page = await openAuthorize(relay, { clientId, pkce, deviceId, redirectUri });
+    const { request } = await approveNext(device);
+    assert.equal(request.redirectHost, new URL(redirectUri).host, 'the phone shows the port actually used');
+    const redirect = new URL((await pollUntilDecided(page.pollUrl)).redirect as string);
+    assert.equal(`${redirect.origin}${redirect.pathname}`, redirectUri, 'the code goes to the requested port');
+    const code = redirect.searchParams.get('code') as string;
+
+    const registeredPort = await exchange(relay, {
+      code,
+      client_id: clientId,
+      code_verifier: pkce.verifier,
+      redirect_uri: redirectUri.replace(/:\d+\//, '/'),
+    });
+    assert.equal((JSON.parse(registeredPort.body) as { error: string }).error, 'invalid_grant', 'token: exact redirect_uri');
+  }
+
+  const pkce = newPkce();
+  const page = await openAuthorize(relay, { clientId, pkce, deviceId, redirectUri: 'http://127.0.0.1:40000/' });
+  await approveNext(device);
+  const code = new URL((await pollUntilDecided(page.pollUrl)).redirect as string).searchParams.get('code') as string;
+  const ok = await exchange(relay, { code, client_id: clientId, code_verifier: pkce.verifier, redirect_uri: 'http://127.0.0.1:40000/' });
+  assert.equal(ok.status, 200, ok.body);
+
+  for (const redirectUri of ['http://127.0.0.1:51234/other', 'http://localhost:51234/', 'http://[::1]:3334/oauth/callback']) {
+    const res = await httpRequest(authorizeUrl(relay, { clientId, pkce: newPkce(), deviceId, redirectUri }));
+    assert.equal(res.status, 400, redirectUri);
+    assert.match(res.body, /did not register/, redirectUri);
+  }
 });
 
 test('device offline: the authorize page says so and nothing is created', async (t) => {
@@ -390,6 +467,24 @@ test('a device that disconnects while a pairing is pending ends it as expired', 
   const status = await pollStatus(page.pollUrl);
   assert.equal(status.status, 'expired');
   assert.equal(redirectParams(status.redirect as string).get('error'), 'access_denied');
+});
+
+test('a pending pairing is re-sent when the phone reconnects before its old socket closed', async (t) => {
+  const relay = await startRelay(t);
+  const stale = await connectReady(relay);
+  const page = await openAuthorize(relay, { clientId: await registerClient(relay), pkce: newPkce(), deviceId: stale.identity.deviceId });
+  // The relay wrote the prompt into a socket the phone no longer reads.
+  const lost = await stale.nextFrame<PairRequestFrame>('pair_request');
+
+  const fresh = await connectReady(relay, { identity: stale.identity });
+  assert.deepEqual(await fresh.nextFrame<PairRequestFrame>('pair_request'), lost, 'same id, code and expiry');
+  assert.equal((await stale.closed).code, 4009);
+  await fresh.sync();
+  assert.equal((await pollStatus(page.pollUrl)).status, 'pending', "the old socket's close did not expire it");
+
+  const token = tokenFor(stale.identity.deviceId);
+  fresh.send({ type: 'pair_response', id: lost.id, approved: true, accessToken: token, tokenId: token.split('.')[2] });
+  assert.equal((await pollUntilDecided(page.pollUrl)).status, 'approved');
 });
 
 test('pair_complete is delivered when the phone reconnects after an exchange while offline', async (t) => {

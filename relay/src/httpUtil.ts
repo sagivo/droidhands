@@ -53,6 +53,36 @@ export function applyOpenCors(req: IncomingMessage, res: ServerResponse, methods
   return true;
 }
 
+/** CORS settings for [applyOriginCors]. */
+export interface OriginCors {
+  /** Methods allowed in preflights (`OPTIONS` is added). */
+  readonly methods: string;
+  /** Request headers allowed in preflights. */
+  readonly allowHeaders: string;
+  /** Response headers scripts may read besides the CORS-safelisted ones. */
+  readonly exposeHeaders: string;
+}
+
+/**
+ * CORS for an `Origin` the operator allowlisted (ALLOWED_ORIGINS), without credentials: echoes
+ * [origin] on the response. Answers an `OPTIONS` preflight itself and returns true when it did.
+ * The caller must have checked [origin] against the allowlist.
+ */
+export function applyOriginCors(req: IncomingMessage, res: ServerResponse, origin: string, cors: OriginCors): boolean {
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  if (req.method !== 'OPTIONS') {
+    res.setHeader('Access-Control-Expose-Headers', cors.exposeHeaders);
+    return false;
+  }
+  res.setHeader('Access-Control-Allow-Methods', `${cors.methods}, OPTIONS`);
+  res.setHeader('Access-Control-Allow-Headers', cors.allowHeaders);
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.statusCode = 204;
+  res.end();
+  return true;
+}
+
 /** The request's path, or null when the target cannot be parsed. Query strings are ignored. */
 export function requestPath(url: string | undefined): string | null {
   return requestUrl(url)?.pathname ?? null;
