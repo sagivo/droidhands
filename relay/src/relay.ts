@@ -8,12 +8,16 @@ import { acceptDeviceSocket } from './deviceSocket.js';
 import { createHttpHandler, requestPath } from './httpHandler.js';
 import { createLogger, type Logger } from './logger.js';
 import { clientAddress, rateLimitKey } from './net.js';
+import { PairingStore, type Channel } from './oauth/pairingStore.js';
 import { CloseCode, DEVICE_WS_PATH, MAX_FRAME_BYTES } from './protocol.js';
 import { RateLimiter } from './rateLimit.js';
+import { loadRelaySecret, type RelaySecretSource } from './relaySecret.js';
 
 export { ConfigError, DEFAULT_CONFIG, loadConfigFromEnv, resolveConfig, type RelayConfig } from './config.js';
 export { createLogger, type Logger, type LogLevel } from './logger.js';
 export { deriveDeviceId } from './encoding.js';
+export { guessBaseUrl, setupUrl } from './setup/setupUrl.js';
+export { qrTerminal } from './setup/qr.js';
 
 /** A running relay. */
 export interface Relay {
@@ -25,8 +29,11 @@ export interface Relay {
   readonly config: RelayConfig;
   /** Number of currently connected (authenticated) devices. */
   deviceCount(): number;
+  /** Where the OAuth client-id secret came from (`env`, `file`, `generated` or `temporary`). */
+  readonly relaySecretSource: RelaySecretSource;
   /**
-   * Graceful shutdown: stops accepting connections, fails pending tunneled requests with 503,
+   * Graceful shutdown: stops accepting connections, cancels pending pairings (`pair_cancel`, and
+   * `pair_abandoned` for tokens no agent collected), fails pending tunneled requests with 503,
    * closes device sockets with 1001 and resolves once the server is closed. Idempotent.
    */
   close(): Promise<void>;
@@ -39,6 +46,8 @@ export interface RelayOptions {
 
 const RATE_WINDOW_MS = 60_000;
 const SWEEP_INTERVAL_MS = 60_000;
+/** Pairing expirations (pair_cancel, pair_abandoned) are applied at least this often. */
+const PAIRING_SWEEP_MAX_MS = 1_000;
 /** After this long, shutdown stops waiting for sockets to close politely. */
 const SHUTDOWN_GRACE_MS = 3_000;
 
@@ -58,9 +67,27 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
   });
   const sockets = new Set<WebSocket>();
   let shuttingDown = false;
+  const secret = await loadRelaySecret(cfg, logger);
+  const pairings = new PairingStore({
+    ttlMs: cfg.pairingTtlMs,
+    codeTtlMs: cfg.authCodeTtlMs,
+    logger,
+    deliver: (deviceId, frame): Channel | null => {
+      const connection = registry.get(deviceId);
+      return connection !== undefined && connection.sendFrame(frame) ? connection : null;
+    },
+  });
 
   const server = createServer(
-    createHttpHandler({ config: cfg, logger, registry, limiter, isShuttingDown: () => shuttingDown }),
+    createHttpHandler({
+      config: cfg,
+      logger,
+      registry,
+      limiter,
+      pairings,
+      relaySecret: secret.key,
+      isShuttingDown: () => shuttingDown,
+    }),
   );
   // Behind a reverse proxy, idle upstream connections must outlive the proxy's own keep-alive.
   server.keepAliveTimeout = 65_000;
@@ -74,7 +101,7 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
     clientTracking: false,
     perMessageDeflate: false,
   });
-  const socketDeps = { config: cfg, logger, registry, limiter, sockets };
+  const socketDeps = { config: cfg, logger, registry, limiter, sockets, pairings };
 
   server.on('upgrade', (req, socket: Duplex, head: Buffer) => {
     socket.on('error', () => socket.destroy());
@@ -91,12 +118,21 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
   heartbeat.unref();
   const sweeper = setInterval(() => limiter.sweep(), SWEEP_INTERVAL_MS);
   sweeper.unref();
+  const pairingSweeper = setInterval(
+    () => pairings.sweep(),
+    Math.max(10, Math.min(PAIRING_SWEEP_MAX_MS, Math.floor(Math.min(cfg.pairingTtlMs, cfg.authCodeTtlMs) / 4))),
+  );
+  pairingSweeper.unref();
+  const stopTimers = (): void => {
+    clearInterval(heartbeat);
+    clearInterval(sweeper);
+    clearInterval(pairingSweeper);
+  };
 
   try {
     await listen(server, cfg.port, cfg.host);
   } catch (err) {
-    clearInterval(heartbeat);
-    clearInterval(sweeper);
+    stopTimers();
     throw err;
   }
   const address = server.address() as AddressInfo;
@@ -105,8 +141,9 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
   const close = (): Promise<void> => {
     closing ??= (async () => {
       shuttingDown = true;
-      clearInterval(heartbeat);
-      clearInterval(sweeper);
+      stopTimers();
+      // Before the sockets close: phones drop prompts and delete tokens no agent received.
+      pairings.shutdown();
       const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()));
       for (const connection of [...registry.values()]) {
         connection.close(CloseCode.GOING_AWAY, 'relay shutting down', 'shutdown');
@@ -131,6 +168,7 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
     url: `http://${formatHost(address)}:${address.port}`,
     config: cfg,
     deviceCount: () => registry.size,
+    relaySecretSource: secret.source,
     close,
   };
 }

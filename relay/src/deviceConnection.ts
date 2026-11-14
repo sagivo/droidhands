@@ -21,10 +21,14 @@ export type TunnelOutcome =
   | { readonly ok: true; readonly response: DeviceResponse }
   | { readonly ok: false; readonly failure: TunnelFailure };
 
-/** Descriptive, non-secret data from the device's hello (for logs only). */
+/** Descriptive, non-secret data from the device's hello. */
 export interface DeviceInfo {
+  /** For logs. */
   readonly platform: string | undefined;
+  /** For logs. */
   readonly appVersion: string | undefined;
+  /** Shown on the pairing page ("Open PhoneBridge on <deviceName>"); never logged. */
+  readonly deviceName: string | null;
 }
 
 interface Pending {
@@ -80,6 +84,20 @@ export class DeviceConnection {
         if (err) this.settle(id, { ok: false, failure: 'send_failed' });
       });
     });
+  }
+
+  /**
+   * Sends a relay-initiated frame (e.g. `pair_request`). Returns false when the socket is not open;
+   * a write error later closes the socket, which callers observe through its 'close' event.
+   */
+  sendFrame(frame: { readonly type: string }): boolean {
+    if (!this.isOpen) return false;
+    try {
+      this.ws.send(JSON.stringify(frame));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**

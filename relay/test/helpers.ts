@@ -34,9 +34,20 @@ export function tokenFor(deviceId: string): string {
   return `pb1.${deviceId}.${tokenId}.${randomBytes(32).toString('base64url')}`;
 }
 
+/** A random RELAY_SECRET, so tests never touch DATA_DIR. */
+export function testRelaySecret(): string {
+  return randomBytes(32).toString('base64url');
+}
+
 /** Starts a quiet relay on 127.0.0.1:0 and closes it when the test ends. */
 export async function startRelay(t: TestContext, overrides: Partial<RelayConfig> = {}): Promise<Relay> {
-  const relay = await createRelay({ port: 0, host: '127.0.0.1', logLevel: 'silent', ...overrides });
+  const relay = await createRelay({
+    port: 0,
+    host: '127.0.0.1',
+    logLevel: 'silent',
+    relaySecret: testRelaySecret(),
+    ...overrides,
+  });
   t.after(() => relay.close());
   return relay;
 }
@@ -138,7 +149,18 @@ export class FakeDevice {
 
   /** Requests received so far that no test has consumed yet. */
   bufferedRequests(): number {
-    return this.buffered.filter((f) => f.type === 'request').length;
+    return this.bufferedFrames('request');
+  }
+
+  /** Frames of [type] received so far that no test has consumed yet. */
+  bufferedFrames(type: string): number {
+    return this.buffered.filter((f) => f.type === type).length;
+  }
+
+  /** JSON ping round trip: afterwards, every frame the relay sent before it has arrived. */
+  async sync(): Promise<void> {
+    this.send({ type: 'ping', t: Date.now() });
+    await this.nextFrame('pong');
   }
 
   send(frame: Record<string, unknown>): void {

@@ -6,6 +6,8 @@ import type { DeviceRegistry } from './deviceRegistry.js';
 import { constantTimeEqual, verifyDeviceIdentity } from './encoding.js';
 import { deviceTag, errorMessage, type Logger } from './logger.js';
 import { clientAddress, publicBaseUrl, rateLimitKey } from './net.js';
+import { connectorUrl } from './oauth/metadata.js';
+import type { PairingStore } from './oauth/pairingStore.js';
 import {
   CloseCode,
   PROTOCOL_VERSION,
@@ -15,6 +17,7 @@ import {
   type WelcomeFrame,
 } from './protocol.js';
 import type { RateLimiter } from './rateLimit.js';
+import { sanitizeDisplayText } from './text.js';
 
 export interface DeviceSocketDeps {
   readonly config: RelayConfig;
@@ -23,19 +26,24 @@ export interface DeviceSocketDeps {
   readonly limiter: RateLimiter;
   /** Every open device socket, authenticated or not (used for shutdown). */
   readonly sockets: Set<WebSocket>;
+  readonly pairings: PairingStore;
 }
 
 /** Optional descriptive hello fields; if present they must be strings. */
 const OPTIONAL_STRING_FIELDS = ['platform', 'appVersion', 'deviceName', 'accessKey'] as const;
 
+/** Longest device name kept for the pairing page. */
+const MAX_DEVICE_NAME_LENGTH = 60;
+
 /**
  * Drives one device WebSocket from the hello handshake (§3.1) to close: authenticates the device,
- * registers it (replacing an older connection), then dispatches `response` and `ping` frames.
+ * registers it (replacing an older connection), then dispatches `response`, `pair_response` and
+ * `ping` frames.
  */
 export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: DeviceSocketDeps): void {
-  const { config, logger, registry, limiter, sockets } = deps;
+  const { config, logger, registry, limiter, sockets, pairings } = deps;
   const ip = clientAddress(req, config.trustProxy);
-  const mcpUrl = `${publicBaseUrl(req, config.publicUrl, config.trustProxy)}/mcp`;
+  const base = publicBaseUrl(req, config.publicUrl, config.trustProxy);
   let state: 'hello' | 'open' | 'closed' = 'hello';
   let connection: DeviceConnection | null = null;
   sockets.add(ws);
@@ -99,16 +107,25 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
 
     state = 'open';
     clearTimeout(helloTimer);
-    const info = { platform: shortString(hello.platform), appVersion: shortString(hello.appVersion) };
+    const platform = shortString(hello.platform);
+    const appVersion = shortString(hello.appVersion);
+    const info = { platform, appVersion, deviceName: displayName(hello.deviceName) };
     connection = new DeviceConnection(deviceId, ws, config.requestTimeoutMs, info);
     const replaced = registry.register(connection);
     if (replaced !== undefined) {
       replaced.close(CloseCode.REPLACED, 'replaced by a newer connection', 'replaced');
       logger.info('device connection replaced', { device: deviceTag(deviceId) });
     }
-    const welcome: WelcomeFrame = { type: 'welcome', deviceId, mcpUrl, serverTime: Date.now() };
+    const welcome: WelcomeFrame = {
+      type: 'welcome',
+      deviceId,
+      mcpUrl: `${base}/mcp`,
+      connectUrl: connectorUrl(base, deviceId),
+      serverTime: Date.now(),
+    };
     ws.send(JSON.stringify(welcome));
-    logger.info('device connected', { device: deviceTag(deviceId), ip, ...info, devices: registry.size });
+    logger.info('device connected', { device: deviceTag(deviceId), ip, platform, appVersion, devices: registry.size });
+    pairings.deviceConnected(deviceId);
   };
 
   const onFrame = (conn: DeviceConnection, text: string | null): void => {
@@ -122,6 +139,9 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
         if (!conn.handleResponse(frame)) {
           logger.debug('ignored response for unknown request', { device: deviceTag(conn.deviceId) });
         }
+        return;
+      case 'pair_response':
+        pairings.handleResponse(conn.deviceId, frame);
         return;
       case 'ping':
         ws.send(JSON.stringify({ type: 'pong', t: frame.t }));
@@ -148,6 +168,7 @@ export function acceptDeviceSocket(ws: WebSocket, req: IncomingMessage, deps: De
     if (connection === null) return;
     registry.unregister(connection);
     connection.onSocketClosed();
+    pairings.connectionClosed(connection);
     logger.info('device disconnected', {
       device: deviceTag(connection.deviceId),
       code,
@@ -168,6 +189,16 @@ function rawToString(data: WebSocket.RawData): string {
   if (Buffer.isBuffer(data)) return data.toString('utf8');
   if (Array.isArray(data)) return Buffer.concat(data).toString('utf8');
   return Buffer.from(data).toString('utf8');
+}
+
+/**
+ * The hello's device name for display: control, bidi and line-separator characters removed,
+ * whitespace collapsed, at most [MAX_DEVICE_NAME_LENGTH] code points. null when empty.
+ */
+function displayName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const name = sanitizeDisplayText(value, MAX_DEVICE_NAME_LENGTH);
+  return name === '' ? null : name;
 }
 
 /** Bounded, printable form of an informational hello field for logs. */
