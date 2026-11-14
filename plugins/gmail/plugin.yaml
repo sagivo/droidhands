@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: gmail
+name: Gmail
+description: Google's email app.
+category: email
+homepage: https://mail.google.com
+status: experimental
+android:
+  packages: [com.google.android.gm]
+
+actions:
+  - id: send_email
+    title: Send an email
+    description: >-
+      Sends an email from Gmail to email addresses (to) or a contact saved on the phone (contact), using the
+      built-in email_send tool with Gmail. The user may have to approve it on the phone; the prompt shows the
+      resolved recipients. With PhoneBridge accessibility on, it fills in Gmail's compose screen, checks it and
+      taps Send (sent=true). Without it, the compose screen is left open and the result has sent=false: the
+      user must tap Send. To reply to an email, prefer notification_reply on its notification.
+    keywords: [email, mail, gmail, message, write]
+    params:
+      to:
+        description: Recipient email address(es), comma-separated. Pass either to or contact.
+        max_length: 2000
+      contact:
+        description: Name of a contact saved on the phone, resolved to their email address (instead of to)
+        max_length: 100
+      cc:
+        description: Cc email address(es), comma-separated
+        max_length: 2000
+      subject:
+        description: Subject line
+        max_length: 500
+      body:
+        description: The email text
+        required: true
+        max_length: 10000
+    android:
+      tool:
+        name: email_send
+        args: {to: "{{to}}", contact: "{{contact}}", cc: "{{cc}}", subject: "{{subject}}", body: "{{body}}", app: com.google.android.gm}
+    examples:
+      - params: {to: dana@example.com, subject: Lunch, body: "Free on Thursday?"}
+        expect:
+          tool:
+            name: email_send
+            args: {to: dana@example.com, subject: Lunch, body: "Free on Thursday?", app: com.google.android.gm}
+      - params: {contact: Dana Levi, cc: "lee@example.com", body: Notes attached below.}
+        expect:
+          tool:
+            name: email_send
+            args: {contact: Dana Levi, cc: lee@example.com, body: Notes attached below., app: com.google.android.gm}
+      - params: {to: dana@example.com, subject: Lunch}
+        expect: {error: body}
+
+  - id: compose
+    title: Write an email
+    description: >-
+      Opens Gmail's compose screen with the recipients, subject and text filled in. Nothing is sent: the user (or
+      you, with screen_read and ui_tap) must tap Send. Use send_email to send it with the user's approval.
+    keywords: [email, mail, draft, compose, prefill, write, new]
+    risk: action
+    params:
+      to:
+        description: Recipient email address(es), comma-separated, e.g. dana@example.com
+        max_length: 2000
+      subject:
+        description: Subject line
+        max_length: 500
+      body:
+        description: The email text
+        max_length: 10000
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.SENDTO
+        data: "mailto:{{to}}?subject={{subject}}&body={{body}}"
+    examples:
+      - params: {to: dana@example.com, subject: Hello there, body: "Line one\nLine two"}
+        expect:
+          intent:
+            action: android.intent.action.SENDTO
+            package: com.google.android.gm
+            data: "mailto:dana%40example.com?subject=Hello%20there&body=Line%20one%0ALine%20two"
+      - params: {}
+        expect:
+          intent: {data: "mailto:?subject=&body="}

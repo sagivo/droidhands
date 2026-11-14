@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: phone
+name: Phone
+description: The phone's dialer app for calls, call history and voicemail (Google Phone, AOSP or Samsung Phone).
+category: system
+status: experimental
+android:
+  # Every default dialer must handle ACTION_DIAL (RoleManager.ROLE_DIALER), so the standard intents work in all three.
+  packages: [com.google.android.dialer, com.android.dialer, com.samsung.android.dialer]
+
+actions:
+  - id: call
+    title: Call a number or contact
+    description: >-
+      Places a phone call to a phone number (to) or a contact saved on the phone (contact), using the built-in
+      phone_call tool. The user may have to approve it on the phone; the prompt shows the resolved name and
+      number. PhoneBridge can't speak on the call or tell whether it was answered (call_log_list shows it
+      afterwards). If several contacts match the name, nothing happens and the candidates are returned. Codes
+      with * or # are refused.
+    keywords: [phone, ring, dial, call, voice, telephone]
+    params:
+      to:
+        description: Phone number, e.g. +15551234567. Pass either to or contact.
+        max_length: 40
+      contact:
+        description: Name of a contact saved on the phone, e.g. Dana Levi (instead of to)
+        max_length: 100
+    android:
+      tool:
+        name: phone_call
+        args: {to: "{{to}}", contact: "{{contact}}"}
+    examples:
+      - params: {to: "+15551234567"}
+        expect: {tool: {name: phone_call, args: {to: "+15551234567"}}}
+      - params: {contact: Mom}
+        expect: {tool: {name: phone_call, args: {contact: Mom}}}
+
+  - id: open_dialer
+    title: Show a number in the dialer
+    description: >-
+      Opens the dialer with a phone number typed in, ready to call. It does NOT place the call: the user must tap
+      the call button. Use call to place the call (with the user's approval). Codes with * or # are refused.
+    keywords: [dialpad, keypad, number, phone, prefill, dial]
+    risk: action
+    params:
+      number:
+        description: Phone number, e.g. +15551234567 or (555) 123-4567
+        required: true
+        pattern: "^\\+?\\(?[0-9][0-9 ().-]{1,23}[0-9]$"
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.DIAL
+        data: "tel:{{number}}"
+    examples:
+      - params: {number: "+1 555 123 4567"}
+        expect:
+          intent:
+            action: android.intent.action.DIAL
+            package: com.google.android.dialer
+            data: "tel:%2B1%20555%20123%204567"
+      - params: {number: "*#06#"}
+        expect: {error: number}
+      - params: {}
+        expect: {error: number}
+
+  - id: recent_calls
+    title: Show recent calls
+    description: >-
+      Opens the dialer's call history (recent, missed and outgoing calls) for the user to look at. To read the call
+      history yourself, use the call_log_list tool instead.
+    keywords: [history, log, missed, recent, recents, calls]
+    risk: action
+    completes: true
+    android:
+      intent:
+        action: android.intent.action.VIEW
+        type: vnd.android.cursor.dir/calls
+    examples:
+      - params: {}
+        expect:
+          intent:
+            action: android.intent.action.VIEW
+            package: com.google.android.dialer
+            type: vnd.android.cursor.dir/calls
+            data: null
