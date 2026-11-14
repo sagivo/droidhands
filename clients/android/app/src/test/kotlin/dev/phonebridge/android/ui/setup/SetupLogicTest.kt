@@ -63,6 +63,9 @@ class SetupLogicTest {
         assertFalse(SetupLogic.showsRestrictedSettingsHelp(SetupLogic.ACCESSIBILITY, SetupStatus.MISSING, 32))
         assertFalse(SetupLogic.showsRestrictedSettingsHelp(SetupLogic.ACCESSIBILITY, SetupStatus.DONE, 34))
         assertFalse(SetupLogic.showsRestrictedSettingsHelp(SetupLogic.BATTERY, SetupStatus.MISSING, 34))
+        // Store installs are never restricted; unknown or file installs may be.
+        assertFalse(SetupLogic.showsRestrictedSettingsHelp(SetupLogic.ACCESSIBILITY, SetupStatus.MISSING, 34, SetupLogic.PACKAGE_SOURCE_STORE))
+        assertTrue(SetupLogic.showsRestrictedSettingsHelp(SetupLogic.ACCESSIBILITY, SetupStatus.MISSING, 34, 4))
     }
 
     @Test

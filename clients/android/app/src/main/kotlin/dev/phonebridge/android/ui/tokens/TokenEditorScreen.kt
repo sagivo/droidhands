@@ -52,7 +52,7 @@ import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.tools.Scopes
 
 /** Policies in the order offered: recommended first, the dangerous one last. */
-private val POLICY_ORDER = listOf(ConfirmPolicy.SENSITIVE, ConfirmPolicy.ALL_ACTIONS, ConfirmPolicy.NEVER)
+internal val POLICY_ORDER = listOf(ConfirmPolicy.SENSITIVE, ConfirmPolicy.ALL_ACTIONS, ConfirmPolicy.NEVER)
 
 /** "New token" form: name, scopes (presets + per-scope), approval policy and expiry. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -166,8 +166,9 @@ internal fun TokenEditorScreen(
     }
 }
 
+/** A scope checkbox row: short label, scope id, description, and a warning icon for [highRisk]. */
 @Composable
-private fun ScopeRow(scope: String, description: String, checked: Boolean, highRisk: Boolean, onToggle: () -> Unit) {
+internal fun ScopeRow(scope: String, description: String, checked: Boolean, highRisk: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,8 +202,9 @@ private fun ScopeRow(scope: String, description: String, checked: Boolean, highR
     }
 }
 
+/** A confirmation-policy radio row with its explanation. */
 @Composable
-private fun PolicyRow(policy: ConfirmPolicy, selected: Boolean, onSelect: () -> Unit) {
+internal fun PolicyRow(policy: ConfirmPolicy, selected: Boolean, onSelect: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

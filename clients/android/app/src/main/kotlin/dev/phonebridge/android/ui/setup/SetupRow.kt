@@ -1,6 +1,5 @@
 package dev.phonebridge.android.ui.setup
 
-import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -89,17 +88,24 @@ private fun RowNotes(item: SetupItem, onOpenAppInfo: () -> Unit) {
             kind = NoticeKind.WARNING,
         )
     }
-    if (SetupLogic.showsRestrictedSettingsHelp(item.id, item.status, Build.VERSION.SDK_INT)) {
-        Column {
-            Notice(
-                title = "Switch greyed out (\"Restricted setting\")?",
-                text = "Android 13+ restricts this for apps installed outside an app store. Try turning it on once, " +
-                    "then open App info, tap ⋮ (top corner) > Allow restricted settings and confirm. Come back here " +
-                    "and turn PhoneBridge on again.",
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onOpenAppInfo) { Text("Open App info") }
-            }
+    if (item.restrictedSettingsHelp) RestrictedSettingsHelp(onOpenAppInfo)
+}
+
+/**
+ * Android 13+ greys out accessibility and notification access for apps installed from a file
+ * ("Restricted setting"); explains the App info > ⋮ > "Allow restricted settings" workaround.
+ */
+@Composable
+internal fun RestrictedSettingsHelp(onOpenAppInfo: () -> Unit) {
+    Column {
+        Notice(
+            title = "Switch greyed out (\"Restricted setting\")?",
+            text = "Android 13+ restricts this for apps installed outside an app store. Try turning it on once, " +
+                "then open App info, tap ⋮ (top corner) > Allow restricted settings and confirm. Come back here " +
+                "and turn PhoneBridge on again.",
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onOpenAppInfo) { Text("Open App info") }
         }
     }
 }

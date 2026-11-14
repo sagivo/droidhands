@@ -33,6 +33,8 @@ data class SetupItem(
     val permissions: List<String> = emptyList(),
     /** Android won't show the permission dialog again; the user must use App info. */
     val blocked: Boolean = false,
+    /** Show the Android 13+ "Restricted setting" help (sideloaded app, access not granted yet). */
+    val restrictedSettingsHelp: Boolean = false,
 )
 
 data class SetupProgress(val done: Int, val total: Int, val essentialMissing: List<SetupItem>) {
@@ -100,9 +102,16 @@ object SetupLogic {
         essentialMissing = items.filter { it.essential && it.status != SetupStatus.DONE },
     )
 
-    /** Android 13+ may grey out the toggle of a sideloaded app ("Restricted setting"). */
-    fun showsRestrictedSettingsHelp(id: String, status: SetupStatus, sdkInt: Int): Boolean =
-        sdkInt >= RESTRICTED_SETTINGS_SDK && status != SetupStatus.DONE && (id == ACCESSIBILITY || id == NOTIFICATION_ACCESS)
+    /** `InstallSourceInfo.PACKAGE_SOURCE_STORE` (API 33): installed by an app store, never restricted. */
+    const val PACKAGE_SOURCE_STORE = 2
+
+    /**
+     * Android 13+ may grey out the toggle of a sideloaded app ("Restricted setting"). [packageSource]
+     * is `InstallSourceInfo.packageSource` when known; store installs are never restricted.
+     */
+    fun showsRestrictedSettingsHelp(id: String, status: SetupStatus, sdkInt: Int, packageSource: Int? = null): Boolean =
+        sdkInt >= RESTRICTED_SETTINGS_SDK && status != SetupStatus.DONE && (id == ACCESSIBILITY || id == NOTIFICATION_ACCESS) &&
+            packageSource != PACKAGE_SOURCE_STORE
 
     /** Label of the row's action button, or null when there is nothing to do. */
     fun actionLabel(item: SetupItem): String? = when {
