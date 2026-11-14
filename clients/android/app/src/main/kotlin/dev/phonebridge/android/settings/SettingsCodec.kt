@@ -20,6 +20,9 @@ object SettingsCodec {
     internal const val KEY_REDACT_ONE_TIME_CODES = "redact_one_time_codes"
     internal const val KEY_SECURITY_DEFAULTS_APPLIED = "security_defaults_applied"
     internal const val KEY_LOCAL_PLUGINS_ENABLED = "local_plugins_enabled"
+    internal const val KEY_DEFAULT_RELAY_DECIDED = "default_relay_decided"
+    internal const val KEY_RELAY_FROM_DEFAULT = "relay_from_default"
+    internal const val KEY_CHECK_FOR_UPDATES = "check_for_updates"
 
     /** Java/Android package name: at least two dot-separated segments, each starting with a letter. */
     private val PACKAGE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
@@ -36,16 +39,27 @@ object SettingsCodec {
 
     /**
      * Normalizes user input: trims URL/key whitespace (common with pasted values), clamps the port
-     * and drops malformed package names from the never-allow list.
+     * and drops malformed package names from the never-allow list. Without a relay URL there is no
+     * default relay either.
      */
-    fun sanitize(settings: BridgeSettings): BridgeSettings = settings.copy(
-        relayUrl = settings.relayUrl.trim(),
-        relayAccessKey = settings.relayAccessKey.trim(),
-        localServerPort = clampPort(settings.localServerPort),
-        neverAllowApps = sanitizePackages(settings.neverAllowApps),
-    )
+    fun sanitize(settings: BridgeSettings): BridgeSettings {
+        val relayUrl = settings.relayUrl.trim()
+        return settings.copy(
+            relayUrl = relayUrl,
+            relayAccessKey = settings.relayAccessKey.trim(),
+            localServerPort = clampPort(settings.localServerPort),
+            neverAllowApps = sanitizePackages(settings.neverAllowApps),
+            relayFromDefault = settings.relayFromDefault && relayUrl.isNotEmpty(),
+        )
+    }
 
-    /** Values of the wrong type (or missing) fall back to the defaults instead of crashing. */
+    /**
+     * Values of the wrong type (or missing) fall back to the defaults instead of crashing.
+     *
+     * Migration: settings saved before [BridgeSettings.defaultRelayDecided] existed (a non-empty
+     * store without that key) decode it as true. Only a fresh install (empty store) may get the
+     * build's default relay, so an update never changes how an existing user is connected.
+     */
     fun decode(values: Map<String, *>): BridgeSettings {
         val defaults = BridgeSettings()
         fun bool(key: String, default: Boolean) = values[key] as? Boolean ?: default
@@ -66,6 +80,9 @@ object SettingsCodec {
                 redactOneTimeCodes = bool(KEY_REDACT_ONE_TIME_CODES, defaults.redactOneTimeCodes),
                 securityDefaultsApplied = bool(KEY_SECURITY_DEFAULTS_APPLIED, defaults.securityDefaultsApplied),
                 localPluginsEnabled = bool(KEY_LOCAL_PLUGINS_ENABLED, defaults.localPluginsEnabled),
+                defaultRelayDecided = bool(KEY_DEFAULT_RELAY_DECIDED, values.isNotEmpty()),
+                relayFromDefault = bool(KEY_RELAY_FROM_DEFAULT, defaults.relayFromDefault),
+                checkForUpdates = bool(KEY_CHECK_FOR_UPDATES, defaults.checkForUpdates),
             ),
         )
     }
@@ -84,6 +101,9 @@ object SettingsCodec {
         KEY_REDACT_ONE_TIME_CODES to settings.redactOneTimeCodes,
         KEY_SECURITY_DEFAULTS_APPLIED to settings.securityDefaultsApplied,
         KEY_LOCAL_PLUGINS_ENABLED to settings.localPluginsEnabled,
+        KEY_DEFAULT_RELAY_DECIDED to settings.defaultRelayDecided,
+        KEY_RELAY_FROM_DEFAULT to settings.relayFromDefault,
+        KEY_CHECK_FOR_UPDATES to settings.checkForUpdates,
     )
 
     /** Android's limit is far lower in practice; this only bounds pathological stored values. */

@@ -25,9 +25,11 @@ export const CloseCode = Object.freeze({
   PROTOCOL_VERSION: 4002,
   HELLO_TIMEOUT: 4008,
   REPLACED: 4009,
+  /** MAX_DEVICES phones are connected already; retry later with backoff (like 1013 "Try Again Later"). */
+  RELAY_FULL: 4013,
 });
 
-export type HandshakeErrorCode = 'unauthorized' | 'bad_request' | 'protocol_version' | 'access_key';
+export type HandshakeErrorCode = 'unauthorized' | 'bad_request' | 'protocol_version' | 'access_key' | 'relay_full';
 
 /** First frame from the device. Optional descriptive fields are informational only. */
 export interface HelloFrame {

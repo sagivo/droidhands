@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,6 +114,29 @@ internal fun SetupHintCard(progress: SetupProgress, onOpenSetup: () -> Unit, mod
                 )
             }
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Open permissions")
+        }
+    }
+}
+
+/**
+ * "Update available: v1.3.0" (from the daily GitHub check). Download opens the release's APK in the
+ * browser; Android then installs it over this version, keeping agents and settings. Not now hides
+ * the card until the next release.
+ */
+@Composable
+internal fun UpdateCard(version: String, onDownload: () -> Unit, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedCard(modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Update available: v$version", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Download it, then open the file to install. Your agents and settings stay as they are.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                TextButton(onClick = onDismiss) { Text("Not now") }
+                Button(onClick = onDownload) { Text("Download") }
+            }
         }
     }
 }

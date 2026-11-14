@@ -49,6 +49,7 @@ import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
+import dev.phonebridge.android.ui.onboarding.DEFAULT_RELAY_NOTE
 import dev.phonebridge.android.ui.setup.SetupUiState
 
 /** Navigation callbacks of the Settings tab. */
@@ -110,7 +111,10 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
     ) { padding ->
         LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item(key = "connection-header") { SectionHeader("Connection") }
-            item(key = "relay") { RelaySection(form, validation, vm::edit) }
+            item(key = "relay") {
+                val usingDefault = current.relayFromDefault && RelayUrls.normalize(form.relayUrl) == current.relayUrl
+                RelaySection(form, validation, usingDefault, vm::edit)
+            }
             item(key = "local") { LocalServerSection(form, validation, vm::edit) }
             item(key = "general") {
                 SettingsCard {
@@ -147,19 +151,32 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                 )
             }
             item(key = "about-header") { SectionHeader("About") }
-            item(key = "about") { AboutSection(vm.deviceId, actions.onRunSetupAgain) }
+            item(key = "about") {
+                AboutSection(
+                    deviceId = vm.deviceId,
+                    onRunSetupAgain = actions.onRunSetupAgain,
+                    // Only builds that name a GitHub repository (release builds) can check for updates.
+                    checkForUpdates = if (vm.updatesSupported) current.checkForUpdates else null,
+                    onCheckForUpdatesChange = vm::setCheckForUpdates,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun RelaySection(form: SettingsForm, validation: SettingsForm.Validation, edit: ((SettingsForm) -> SettingsForm) -> Unit) {
+private fun RelaySection(
+    form: SettingsForm,
+    validation: SettingsForm.Validation,
+    usingDefault: Boolean,
+    edit: ((SettingsForm) -> SettingsForm) -> Unit,
+) {
     var showKey by rememberSaveable { mutableStateOf(false) }
     SettingsCard {
         SwitchRow(
             title = "Connect to a relay",
-            subtitle = "Reach this phone from anywhere. The phone connects out to your self-hosted relay, so it " +
-                "works behind NAT and on mobile data.",
+            subtitle = "Reach this phone from anywhere. The phone connects out to the relay, so it works behind NAT " +
+                "and on mobile data.",
             checked = form.relayEnabled,
             onCheckedChange = { v -> edit { it.copy(relayEnabled = v) } },
         )
@@ -177,6 +194,7 @@ private fun RelaySection(form: SettingsForm, validation: SettingsForm.Validation
             modifier = Modifier.fillMaxWidth(),
         )
         validation.relayUrlWarning?.let { Notice(it, kind = NoticeKind.DANGER) }
+        if (usingDefault) Notice(DEFAULT_RELAY_NOTE, title = "The relay this app comes with")
         OutlinedTextField(
             value = form.relayAccessKey,
             onValueChange = { v -> edit { it.copy(relayAccessKey = v) } },
@@ -224,11 +242,26 @@ private fun LocalServerSection(form: SettingsForm, validation: SettingsForm.Vali
 }
 
 @Composable
-private fun AboutSection(deviceId: String, onRunSetupAgain: () -> Unit) {
+private fun AboutSection(
+    deviceId: String,
+    onRunSetupAgain: () -> Unit,
+    /** Null when this build can't check for updates (no GitHub repository built in). */
+    checkForUpdates: Boolean?,
+    onCheckForUpdatesChange: (Boolean) -> Unit,
+) {
     val copy = rememberCopier()
     SettingsCard {
         Text("Version", style = MaterialTheme.typography.labelLarge)
         Text(BuildConfig.VERSION_NAME, style = MaterialTheme.typography.bodyMedium)
+        if (checkForUpdates != null) {
+            SwitchRow(
+                title = "Check for updates",
+                subtitle = "Once a day, ask GitHub whether a newer PhoneBridge is out, and say so on Home. The request " +
+                    "carries no account or phone data, and nothing is installed without you.",
+                checked = checkForUpdates,
+                onCheckedChange = onCheckForUpdatesChange,
+            )
+        }
         Text("Device ID", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
         CodeBlock(deviceId)
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -40,7 +40,65 @@ class SettingsCodecTest {
                 SettingsCodec.KEY_ACCESS_ENABLED to false,
             ),
         )
-        assertEquals(BridgeSettings(accessEnabled = false), decoded)
+        // A non-empty store is an existing install: the default relay counts as decided (migration).
+        assertEquals(BridgeSettings(accessEnabled = false, defaultRelayDecided = true), decoded)
+    }
+
+    @Test
+    fun freshInstallStillHasToDecideTheDefaultRelay() {
+        val fresh = SettingsCodec.decode(emptyMap<String, Any>())
+        assertFalse(fresh.defaultRelayDecided)
+        assertFalse(fresh.relayFromDefault)
+        assertTrue("update checks are on by default", fresh.checkForUpdates)
+    }
+
+    @Test
+    fun migrationKeepsExistingUsersSettingsAndNeverAddsARelay() {
+        // Stored by a version from before the default relay existed: an existing user without a relay.
+        val noRelay = mapOf(
+            SettingsCodec.KEY_RELAY_ENABLED to false,
+            SettingsCodec.KEY_RELAY_URL to "",
+            SettingsCodec.KEY_LOCAL_ENABLED to true,
+            SettingsCodec.KEY_SECURITY_DEFAULTS_APPLIED to true,
+        )
+        val migrated = SettingsCodec.decode(noRelay)
+        assertTrue("the first-run default relay must not apply to existing installs", migrated.defaultRelayDecided)
+        assertFalse(migrated.relayFromDefault)
+        assertFalse(migrated.relayEnabled)
+        assertTrue(migrated.localServerEnabled)
+        assertTrue(migrated.checkForUpdates)
+
+        // An existing user's own relay stays theirs.
+        val ownRelay = SettingsCodec.decode(
+            mapOf(
+                SettingsCodec.KEY_RELAY_ENABLED to true,
+                SettingsCodec.KEY_RELAY_URL to "https://relay.example.com",
+                SettingsCodec.KEY_RELAY_ACCESS_KEY to "k",
+            ),
+        )
+        assertEquals("https://relay.example.com", ownRelay.relayUrl)
+        assertEquals("k", ownRelay.relayAccessKey)
+        assertTrue(ownRelay.relayEnabled)
+        assertFalse(ownRelay.relayFromDefault)
+        assertTrue(ownRelay.defaultRelayDecided)
+    }
+
+    @Test
+    fun storedDecisionWins() {
+        // Written by this version on a fresh install before the UI decided (e.g. by the security defaults).
+        val undecided = SettingsCodec.decode(mapOf(SettingsCodec.KEY_SECURITY_DEFAULTS_APPLIED to true, SettingsCodec.KEY_DEFAULT_RELAY_DECIDED to false))
+        assertFalse(undecided.defaultRelayDecided)
+        val off = SettingsCodec.decode(mapOf(SettingsCodec.KEY_CHECK_FOR_UPDATES to false))
+        assertFalse(off.checkForUpdates)
+    }
+
+    @Test
+    fun noRelayUrlMeansNoDefaultRelay() {
+        assertFalse(SettingsCodec.sanitize(BridgeSettings(relayUrl = "  ", relayFromDefault = true)).relayFromDefault)
+        assertTrue(SettingsCodec.sanitize(BridgeSettings(relayUrl = "https://r.example.com", relayFromDefault = true)).relayFromDefault)
+        assertFalse(
+            SettingsCodec.decode(mapOf(SettingsCodec.KEY_RELAY_URL to "", SettingsCodec.KEY_RELAY_FROM_DEFAULT to true)).relayFromDefault,
+        )
     }
 
     @Test
@@ -63,10 +121,16 @@ class SettingsCodecTest {
             redactOneTimeCodes = false,
             securityDefaultsApplied = true,
             localPluginsEnabled = true,
+            defaultRelayDecided = true,
+            relayFromDefault = true,
+            checkForUpdates = false,
         )
         val encoded = SettingsCodec.encode(settings)
-        assertEquals(12, encoded.size)
+        assertEquals(15, encoded.size)
         assertEquals(settings, SettingsCodec.decode(encoded))
+        // Fresh-install values survive a save too (the store is no longer empty afterwards).
+        val fresh = BridgeSettings(securityDefaultsApplied = true)
+        assertEquals(fresh, SettingsCodec.decode(SettingsCodec.encode(fresh)))
     }
 
     @Test

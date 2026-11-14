@@ -111,6 +111,16 @@ export function acceptDeviceSocket(
         return;
       }
     }
+    // A phone that is connected already may always reconnect: its new connection replaces the old one.
+    if (registry.get(deviceId) === undefined && registry.size >= config.maxDevices) {
+      reject(
+        'relay_full',
+        CloseCode.RELAY_FULL,
+        'This relay is full right now. PhoneBridge keeps retrying; to connect now, use another relay or run your own.',
+      );
+      logger.warn('relay full: refused a new device', { devices: registry.size, maxDevices: config.maxDevices });
+      return;
+    }
     if (ws.readyState !== WebSocket.OPEN) {
       state = 'closed';
       return;

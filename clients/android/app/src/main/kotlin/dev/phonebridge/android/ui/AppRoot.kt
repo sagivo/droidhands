@@ -153,6 +153,11 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
             launch { snackbar.showSnackbar(message) }
         }
     }
+    // First run: go online through the build's default relay (once per install; a no-op afterwards).
+    // Not while a setup link waits for an answer: its relay is about to be chosen instead.
+    LaunchedEffect(Unit) {
+        if (links.pending.value == null) main.applyDefaultRelayIfNeeded()
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { setup.refresh(activity) }
     // Only for people who never see the wizard this session (it asks for notifications itself).
     val skipsWizard = remember(onboarding != null) { onboarding == false }

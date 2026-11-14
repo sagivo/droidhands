@@ -60,6 +60,9 @@ object SystemIntents {
 
     fun dndAccessSettings() = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
 
+    /** An https:// page in the user's browser (e.g. the latest release's APK download). */
+    fun webPage(url: String) = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+
     /**
      * Starts the first of [intents] that resolves. Returns false if none could be started, so the
      * caller can tell the user where to go by hand.

@@ -9,6 +9,10 @@ captures/
 .cxx/
 *.apk
 *.aab
+# Signing keys (scripts/make-release-key.sh writes them outside the repository; keep it that way)
+*.jks
+*.keystore
+*.jks.password
 # Node
 node_modules/
 dist/

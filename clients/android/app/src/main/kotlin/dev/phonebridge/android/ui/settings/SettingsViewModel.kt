@@ -47,6 +47,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     val deviceId: String = graph.identity.deviceId
     val messages: Flow<String> = _messages.receiveAsFlow()
 
+    /** True when this build can check GitHub for new releases (it names a repository). */
+    val updatesSupported: Boolean = graph.updates.isSupported
+
     /** Packages no agent may touch (Settings > Security). */
     val neverAllowApps: StateFlow<Set<String>> = settings
         .map { GraphAdapters.neverAllowApps(it) }
@@ -144,6 +147,23 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveNeverAllowApps(packages: Set<String>) = saveSecurity("Couldn't save the never-allow list", "Never-allow list saved") {
         GraphAdapters.withNeverAllowApps(it, packages)
+    }
+
+    /** Settings > About > "Check for updates" (saved immediately). Turning it on checks now if a day has passed. */
+    fun setCheckForUpdates(on: Boolean) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    graph.settings.update { it.copy(checkForUpdates = on) }
+                    if (on) graph.updates.refresh()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Changing the update check failed: ${e.javaClass.name}")
+                _messages.send("Couldn't change the setting: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
     }
 
     /** Loads the app list and the sensitive-app suggestions (PackageManager, on IO). */

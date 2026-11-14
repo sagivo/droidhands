@@ -46,17 +46,22 @@ data class SettingsForm(
 
     /**
      * Applies the edited fields to [current], keeping everything this form doesn't own (for example
-     * the global access switch). Call only when [validate] is valid.
+     * the global access switch). A different relay URL is the user's own choice, so it no longer
+     * counts as the build's default relay. Call only when [validate] is valid.
      */
-    fun applyTo(current: BridgeSettings): BridgeSettings = current.copy(
-        relayEnabled = relayEnabled,
-        relayUrl = RelayUrls.normalize(relayUrl),
-        relayAccessKey = relayAccessKey.trim(),
-        localServerEnabled = localServerEnabled,
-        localServerPort = localServerPort.trim().toIntOrNull() ?: current.localServerPort,
-        localServerBindAll = localServerBindAll,
-        startOnBoot = startOnBoot,
-    )
+    fun applyTo(current: BridgeSettings): BridgeSettings {
+        val url = RelayUrls.normalize(relayUrl)
+        return current.copy(
+            relayEnabled = relayEnabled,
+            relayUrl = url,
+            relayAccessKey = relayAccessKey.trim(),
+            localServerEnabled = localServerEnabled,
+            localServerPort = localServerPort.trim().toIntOrNull() ?: current.localServerPort,
+            localServerBindAll = localServerBindAll,
+            startOnBoot = startOnBoot,
+            relayFromDefault = current.relayFromDefault && url == RelayUrls.normalize(current.relayUrl),
+        )
+    }
 
     /** True if saving would change [current]. */
     fun differsFrom(current: BridgeSettings): Boolean = applyTo(current) != current

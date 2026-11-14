@@ -81,12 +81,13 @@ object ConfigureLinks {
     /**
      * Settings after accepting [request]: relay on, URL and key from the link. A link without a key
      * keeps the stored key only when it points at the relay already configured (the key may have
-     * been entered by hand); for another relay the old key is meaningless and is cleared.
+     * been entered by hand); for another relay the old key is meaningless and is cleared. The user
+     * chose this relay, so it is no longer the build's default one.
      */
     fun applyTo(settings: BridgeSettings, request: ConfigureRequest): BridgeSettings {
         val sameRelay = RelayUrls.normalize(settings.relayUrl).equals(request.relayUrl, ignoreCase = true)
         val key = request.accessKey ?: if (sameRelay) settings.relayAccessKey else ""
-        return settings.copy(relayEnabled = true, relayUrl = request.relayUrl, relayAccessKey = key)
+        return settings.copy(relayEnabled = true, relayUrl = request.relayUrl, relayAccessKey = key, relayFromDefault = false)
     }
 
     /** True if accepting [request] would change nothing. */

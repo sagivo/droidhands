@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.ui.components.Notice
 import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.SectionHeader
+import dev.phonebridge.android.ui.setup.RestrictedSettingsGuide
 import dev.phonebridge.android.ui.setup.RestrictedSettingsHelp
 import dev.phonebridge.android.ui.setup.SetupActions
 import dev.phonebridge.android.ui.setup.SetupItem
@@ -70,6 +71,8 @@ internal fun PermissionsStep(setup: SetupViewModel) {
             RuntimeCard(state.items, actions)
             val next = OnboardingFlow.nextSpecialAccess(state.items, skipped.toSet())
             if (next != null) {
+                // Installed from the web on Android 13+: accessibility needs "Allow restricted settings" first.
+                if (next.restrictedSettingsGuide) RestrictedSettingsCard(actions.openAppInfo)
                 NextAccessCard(next, actions, onSkip = { skipped = skipped + next.id })
             } else {
                 val (done, total) = OnboardingFlow.specialProgress(state.items)
@@ -147,12 +150,26 @@ private fun NextAccessCard(item: SetupItem, actions: SetupActions, onSkip: () ->
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
-            if (item.restrictedSettingsHelp) RestrictedSettingsHelp(actions.openAppInfo)
+            // The guided card above already covers it.
+            if (item.restrictedSettingsHelp && !item.restrictedSettingsGuide) RestrictedSettingsHelp(actions.openAppInfo)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                 TextButton(onClick = onSkip) { Text("Skip") }
                 Button(onClick = { actions.onAction(item) }) { Text(SetupLogic.actionLabel(item) ?: "Open settings") }
             }
         }
+    }
+}
+
+/** The "Allow restricted settings" steps, as their own card right above the accessibility card. */
+@Composable
+private fun RestrictedSettingsCard(onOpenAppInfo: () -> Unit) {
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        RestrictedSettingsGuide(onOpenAppInfo, Modifier.padding(16.dp))
     }
 }
 

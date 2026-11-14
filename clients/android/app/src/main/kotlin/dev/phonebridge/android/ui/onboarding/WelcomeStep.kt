@@ -62,7 +62,7 @@ internal fun WelcomeStep() {
             }
         }
         Text(
-            "Setup takes about two minutes: allow a few permissions, connect to your relay, and add your first agent.",
+            "Setup takes about two minutes: allow a few permissions, get the phone online, and add your first agent.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

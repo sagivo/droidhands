@@ -28,6 +28,7 @@ import dev.phonebridge.android.ui.components.OverflowMenu
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SecureWindowEffect
 import dev.phonebridge.android.ui.components.SectionHeader
+import dev.phonebridge.android.ui.components.SystemIntents
 import dev.phonebridge.android.ui.components.TouchShieldEffect
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
@@ -62,6 +63,7 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
     val allPairings by vm.pendingPairings.collectAsStateWithLifecycle()
     val entries by vm.auditEntries.collectAsStateWithLifecycle()
     val usage by vm.usage.collectAsStateWithLifecycle()
+    val update by vm.availableUpdate.collectAsStateWithLifecycle()
     val now by rememberNow(intervalMs = if (pending.isNotEmpty() || allPairings.isNotEmpty()) 1_000 else 30_000)
     val formatTime = rememberTimestampFormatter()
     val context = LocalContext.current
@@ -125,6 +127,20 @@ fun HomeScreen(vm: MainViewModel, setup: SetupUiState, actions: HomeActions) {
             }
             if (setup.loaded && !setup.progress.essentialComplete) {
                 item(key = "setup-hint") { SetupHintCard(setup.progress, onOpenSetup = actions.onOpenPermissions) }
+            }
+            val newVersion = update
+            val downloadUrl = vm.updateDownloadUrl
+            if (newVersion != null && downloadUrl != null) {
+                item(key = "update") {
+                    UpdateCard(
+                        version = newVersion,
+                        onDownload = {
+                            // No browser: copy the link instead, so it can be opened elsewhere.
+                            if (!SystemIntents.launch(context, SystemIntents.webPage(downloadUrl))) copy("Download link", downloadUrl, false)
+                        },
+                        onDismiss = { vm.dismissUpdate(newVersion) },
+                    )
+                }
             }
             item(key = "connect") { ConnectAgentCard(hasActiveAgents = activeAgents > 0, onConnect = actions.onConnectAgent) }
             item(key = "today") { TodayCard(today, onOpenAgents = actions.onOpenAgents) }

@@ -39,6 +39,19 @@ data class BridgeSettings(
      * of theirs asks for approval). Off by default (docs/PLUGINS.md §10).
      */
     val localPluginsEnabled: Boolean = false,
+    /**
+     * True once the first-run default relay step ran ([dev.phonebridge.android.graph.DefaultRelay]):
+     * it either connected to the build's default relay or found a connection already set up. Stored
+     * settings from before this field existed count as decided, so an app update never adds a relay.
+     */
+    val defaultRelayDecided: Boolean = false,
+    /**
+     * The relay in [relayUrl] is the build's default relay, not one the user entered or opened a
+     * setup link for. Cleared as soon as the user picks a relay themselves.
+     */
+    val relayFromDefault: Boolean = false,
+    /** Ask GitHub once a day whether a newer release exists (only in builds that name a repository). */
+    val checkForUpdates: Boolean = true,
 ) {
     /** Never print the access key (e.g. in crash logs or debug output). */
     override fun toString(): String =
@@ -46,7 +59,7 @@ data class BridgeSettings(
             "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBindAll=$localServerBindAll, " +
             "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot, neverAllowApps=${neverAllowApps.size} apps, " +
             "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied, " +
-            "localPluginsEnabled=$localPluginsEnabled)"
+            "localPluginsEnabled=$localPluginsEnabled, defaultRelayDecided=$defaultRelayDecided, relayFromDefault=$relayFromDefault, checkForUpdates=$checkForUpdates)"
 }
 
 /**

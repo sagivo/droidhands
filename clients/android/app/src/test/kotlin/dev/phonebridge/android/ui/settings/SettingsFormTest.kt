@@ -74,6 +74,20 @@ class SettingsFormTest {
     }
 
     @Test
+    fun editingTheRelayUrlMakesItTheUsersOwnRelay() {
+        val onDefault = base.copy(relayEnabled = true, relayUrl = "https://default.example.com", relayFromDefault = true, defaultRelayDecided = true)
+        val untouched = SettingsForm.from(onDefault)
+        assertFalse("unchanged form is not dirty", untouched.differsFrom(onDefault))
+        assertTrue("other edits keep the default relay", untouched.copy(startOnBoot = false).applyTo(onDefault).relayFromDefault)
+        assertTrue("turning it off keeps it the default one", untouched.copy(relayEnabled = false).applyTo(onDefault).relayFromDefault)
+
+        val own = untouched.copy(relayUrl = "https://mine.example.com").applyTo(onDefault)
+        assertEquals("https://mine.example.com", own.relayUrl)
+        assertFalse(own.relayFromDefault)
+        assertTrue(own.defaultRelayDecided)
+    }
+
+    @Test
     fun whitespaceOnlyEditsAreNotChanges() {
         val current = base.copy(relayUrl = "https://relay.example.com")
         val form = SettingsForm.from(current).copy(relayUrl = "https://relay.example.com/ ")
