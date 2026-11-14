@@ -9,6 +9,7 @@ object AndroidToolCatalog {
         val app = context.applicationContext
         return contactTools(app) +
             messagingTools(app) +
+            callControlTools(app) +
             whatsAppTools(app) +
             emailTools(app) +
             notificationTools(app) +

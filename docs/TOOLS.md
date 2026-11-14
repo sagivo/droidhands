@@ -70,12 +70,17 @@ candidates, so the agent can ask the user. It never guesses.
 | `sms_send` | messages.send | SENSITIVE (internal) | `to` (phone) or `contact` (name), `message` (req) → waits up to 30 s for the radio's sent status |
 | `whatsapp_send` | messages.send | SENSITIVE (internal) | `to` (phone, international format preferred) or `contact` (name), `message` (req), `business` bool (use WhatsApp Business). Needs accessibility for the automatic Send tap. Without it, the chat opens with the text prefilled and the result says the user must tap Send. Fails if the phone is locked. |
 | `phone_call` | calls | SENSITIVE (internal) | `to` (phone) or `contact` (name) – places a call |
+| `call_status` | calls | READ | – → `{state: idle\|ringing\|in_call, incoming_number?, contact_name?}` (number/name only with READ_CALL_LOG/READ_CONTACTS) |
+| `call_answer` | calls | SENSITIVE (pre) | – answers the ringing call (Android 15 hides call-notification actions from listeners, so this uses the telephony API) |
+| `call_end` | calls | ACTION | – ends the current call or rejects a ringing one |
 | `email_send` | messages.send | SENSITIVE (internal) | `to` (email address(es), comma-separated) or `contact` (name, resolved to the contact's email), `cc`, `subject`, `body` (req), `app` (package, default: the default email app, preferring Gmail) – opens the app's compose screen pre-filled and taps Send with accessibility. Without accessibility, the compose screen is left open and the result says the user must tap Send. To reply to a received email: use `notification_reply` when the mail notification has an inline reply, otherwise `notification_action` "Reply" plus screen tools, or the mail app via screen tools. |
 
 ## Notifications — scopes `notifications.read`, `notifications.act`
 
-Requires notification access. Replies through notifications work **even when the phone is
-locked**, and work for any messaging app with a reply action (WhatsApp, Telegram, Signal,
+Requires notification access. On Android 15+ the system may hide the *content* (and action titles) of
+notifications it classifies as sensitive from listeners like PhoneBridge ("Sensitive notification content
+hidden"); replies via `notification_reply` still work, and SMS can be read with `sms_list`. Replies through
+notifications work **even when the phone is locked**, and work for any messaging app with a reply action (WhatsApp, Telegram, Signal,
 Messages, Slack…).
 
 | tool | scope | risk | args |

@@ -37,8 +37,11 @@ object PermissionCatalog {
             listOf(Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS), listOf(Scopes.MESSAGES_READ, Scopes.MESSAGES_SEND),
         ),
         PermissionGroup(
-            "phone", "Phone & call log", "Place calls and read call history.",
-            listOf(Manifest.permission.CALL_PHONE, Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE),
+            "phone", "Phone & call log", "Place, answer and end calls, and read call history.",
+            listOf(
+                Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS,
+                Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE,
+            ),
             listOf(Scopes.CALLS, Scopes.MESSAGES_READ),
         ),
         PermissionGroup(
