@@ -2,6 +2,8 @@ package dev.phonebridge.core.auth
 
 import dev.phonebridge.core.util.Encoding
 import java.security.SecureRandom
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * The device's long-term identity: a 32-byte secret and the self-certifying id derived from it
@@ -23,6 +25,17 @@ class DeviceIdentity(secret: ByteArray) {
 
     /** base64url, no padding (43 chars). Sent only to the relay in the `hello` frame. */
     val secretEncoded: String get() = Encoding.base64Url(secret)
+
+    /**
+     * A 32-byte key for one local [purpose] (`HMAC-SHA256(secret, "phonebridge:" + purpose)`): stable
+     * for this identity, independent between purposes, and revealing nothing about the secret. Never
+     * leaves the phone.
+     */
+    fun deriveKey(purpose: String): ByteArray =
+        Mac.getInstance("HmacSHA256").run {
+            init(SecretKeySpec(secret, "HmacSHA256"))
+            doFinal("phonebridge:$purpose".toByteArray(Charsets.UTF_8))
+        }
 
     override fun toString(): String = "DeviceIdentity(deviceId=$deviceId)"
 

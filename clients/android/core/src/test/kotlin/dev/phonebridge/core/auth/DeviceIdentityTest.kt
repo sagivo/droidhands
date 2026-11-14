@@ -1,7 +1,10 @@
 package dev.phonebridge.core.auth
 
+import dev.phonebridge.core.util.Encoding
 import org.junit.Test
 import java.security.SecureRandom
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -17,6 +20,21 @@ class DeviceIdentityTest {
         assertEquals("mmg42klgyqzwneiskrelxms3j4", identity.deviceId)
         assertEquals("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8", identity.secretEncoded)
         assertEquals("mmg42klgyqzwneiskrelxms3j4", DeviceIdentity.deriveDeviceId(vectorSecret))
+    }
+
+    @Test
+    fun derivedKeysAreStableAndSeparatedByPurpose() {
+        val identity = DeviceIdentity(vectorSecret)
+        val key = identity.deriveKey("local-oauth-clients")
+        assertEquals(32, key.size)
+        val expected = Mac.getInstance("HmacSHA256").run {
+            init(SecretKeySpec(vectorSecret, "HmacSHA256"))
+            doFinal("phonebridge:local-oauth-clients".toByteArray())
+        }
+        assertEquals(Encoding.hex(expected), Encoding.hex(key))
+        assertEquals(Encoding.hex(key), Encoding.hex(DeviceIdentity(vectorSecret).deriveKey("local-oauth-clients")))
+        assertNotEquals(Encoding.hex(key), Encoding.hex(identity.deriveKey("other")))
+        assertNotEquals(Encoding.hex(key), Encoding.hex(DeviceIdentity.generate().deriveKey("local-oauth-clients")))
     }
 
     @Test
