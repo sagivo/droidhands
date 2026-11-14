@@ -31,7 +31,8 @@ internal fun uiTypeTool(context: Context): Tool = tool(
     description = "Types text into a text field in any app (replaces its content; append=true adds to it). Target: " +
         "ref of an [editable] element, else the field that has input focus, else the only text field on screen. " +
         "An empty text clears the field. submit=true then presses the keyboard's action key (send/search/go). " +
-        "Returns what the field shows afterwards. To tap a Send button instead, use ui_tap.",
+        "Returns what the field shows afterwards. To tap a Send button instead, use ui_tap. If the phone is locked, the " +
+        "user is asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent.",
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema {
@@ -40,20 +41,23 @@ internal fun uiTypeTool(context: Context): Tool = tool(
         boolean("append", "Add to the existing text instead of replacing it")
         boolean("submit", "Press the keyboard action key (IME enter) afterwards")
     },
-    timeoutMs = 30_000,
+    timeoutMs = 30_000 + UiAutomation.UNLOCK_WAIT_MS,
     unavailable = { UiAutomation.actionUnavailableReason(context) },
     describe = { args -> "Type \"${TextNorm.truncate(rawText(args) ?: "", 80)}\" into ${args.optString("ref") ?: "the focused field"}" },
-) { args, _ ->
+) { args, ctx ->
     val text = rawText(args) ?: throw ToolException("Missing required argument 'text'")
     val append = args.optBool("append") ?: false
     val submit = args.optBool("submit") ?: false
     val service = UiAutomation.service()
-    UiAutomation.requireUnlocked(context)
+    val access = ScreenAccess.of(context, ctx)
+    UiAutomation.awaitUsable(context, ctx.tokenName, "type text on the screen")
     UiAutomation.exclusive {
-        val field = withContext(Dispatchers.IO) { resolveField(context, service, args.optString("ref")?.trim()) }
+        UiAutomation.requireUnlocked(context)
+        UiAutomation.requireOperable(service, access)
+        val field = withContext(Dispatchers.IO) { resolveField(context, service, access, args.optString("ref")?.trim()) }
         val node = field.fresh
+        withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, node, access) }
         val label = "${field.ref} ${TreeSerializer.label(node)}"
-        withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, node) }
         if (append && node.password) {
             throw ToolException("Can't append to the password field $label (its content is hidden). Pass the full text with append=false.")
         }
@@ -86,7 +90,7 @@ internal fun uiTypeTool(context: Context): Tool = tool(
             node.password -> ""
             else -> " Field now shows: \"${TextNorm.truncate(TextNorm.clean(shown.text), 120)}\"."
         }
-        ToolResult.text(UiAutomation.report(service, "Typed into $label.$shownNote$submitNote", settleFirst = false))
+        ToolResult.text(UiAutomation.report(service, access, "Typed into $label.$shownNote$submitNote", settleFirst = false))
     }
 }
 
@@ -95,9 +99,9 @@ private fun rawText(args: JsonObject): String? = (args["text"] as? JsonPrimitive
     ?: args.optString("text")
 
 /** Picks the field: ref (or an editable inside it), else input focus, else the only editable on screen. */
-private suspend fun resolveField(context: Context, service: BridgeAccessibilityService, ref: String?): ScreenSession.Live {
+private suspend fun resolveField(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, ref: String?): ScreenSession.Live {
     if (ref != null) {
-        val live = ScreenSession.resolve(ref)
+        val live = ScreenSession.resolve(ref, access)
         if (live.fresh.editable) return live
         val inner = NodeQueries.editableWithin(live.node)
             ?: throw ToolException("Element ${live.ref} (${TreeSerializer.label(live.fresh)}) is not a text field. Pass the ref of an [editable] element.")
@@ -109,8 +113,11 @@ private suspend fun resolveField(context: Context, service: BridgeAccessibilityS
     } catch (e: RuntimeException) {
         null
     }
-    if (focused != null && focused.editable) return ScreenSession.Live(ScreenSession.refs.register(focused), focused, focused)
-    val state = ScreenCapture.capture(context, service)
+    if (focused != null && focused.editable && access.allows(focused.packageName)) {
+        return ScreenSession.Live(ScreenSession.refs.register(focused), focused, focused)
+    }
+    val state = ScreenCapture.capture(context, service, access.visibility)
+    state.blockedForeground?.let { access.refuse(it) }
     return when (val choice = NodeQueries.chooseEditable(null, state.roots)) {
         is EditableChoice.Found -> {
             val fresh = NodeActions.refresh(choice.node) ?: throw ToolException("The text field disappeared; call screen_read again.")

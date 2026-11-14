@@ -2,6 +2,7 @@ package dev.phonebridge.android.tools.screen
 
 import android.accessibilityservice.AccessibilityService
 import dev.phonebridge.android.access.Bounds
+import dev.phonebridge.android.access.SystemOverlay
 import dev.phonebridge.android.access.UiAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -76,5 +77,18 @@ class ScreenHelpersTest {
         assertEquals("power_dialog" to AccessibilityService.GLOBAL_ACTION_POWER_DIALOG, GlobalActions.parse("power dialog"))
         assertNull(GlobalActions.parse("reboot"))
         assertEquals(listOf("back", "home", "recents", "notifications", "quick_settings", "lock_screen", "power_dialog"), GlobalActions.NAMES)
+    }
+
+    @Test
+    fun `app access messages tell the agent what happened and what to do`() {
+        val escaped = UiAutomation.blockedAfterAction("Tapped n3 Button \"Open\".", "Bank", wentHome = true)
+        assertTrue(escaped, escaped.startsWith("Tapped n3 Button \"Open\". This brought Bank to the foreground"))
+        assertTrue(escaped.contains("went back to the home screen") && escaped.contains("Don't try to open Bank another way"))
+        assertTrue(UiAutomation.blockedAfterAction("Swiped.", "Bank", wentHome = false).contains("tried to go back"))
+        val shade = ScreenAccess.overlayRefusal(SystemOverlay.NOTIFICATION_SHADE)
+        assertTrue(shade, shade.contains("the notification shade is showing") && shade.contains("notifications_list"))
+        assertTrue(ScreenAccess.overlayRefusal(SystemOverlay.LOCK_SCREEN).contains("unlock the phone"))
+        assertTrue(ScreenAccess.overlayRefusal(SystemOverlay.RECENTS).contains("ui_global_action"))
+        assertTrue(UiAutomation.STAYED_LOCKED.startsWith("The phone stayed locked; the user didn't unlock within 60 s."))
     }
 }

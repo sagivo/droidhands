@@ -9,7 +9,6 @@ import dev.phonebridge.android.access.NodeQueries
 import dev.phonebridge.android.access.SerializeOptions
 import dev.phonebridge.android.access.TextNorm
 import dev.phonebridge.android.access.TreeSerializer
-import dev.phonebridge.android.tools.support.Accessibility
 import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.tools.Tool
@@ -38,7 +37,8 @@ internal fun screenReadTool(context: Context): Tool = tool(
         "Use the refs (n12) with ui_tap/ui_type/ui_scroll; they stay valid until the next screen_read. " +
         "Other windows (dialogs, notification shade) follow under 'window:' headers. By default layout-only " +
         "containers are hidden; include_all shows everything. Use screen_screenshot when the tree is empty or unclear " +
-        "(games, maps, some web content).",
+        "(games, maps, some web content). Apps the user blocked for this agent are left out, and reading is refused " +
+        "while one of them is in the foreground.",
     scope = Scopes.SCREEN_READ,
     risk = Risk.READ,
     schema = objectSchema {
@@ -46,12 +46,14 @@ internal fun screenReadTool(context: Context): Tool = tool(
         integer("max_nodes", "Maximum number of element lines (default $DEFAULT_MAX_NODES)", minimum = 1, maximum = MAX_MAX_NODES.toLong())
     },
     timeoutMs = 30_000,
-    unavailable = { Accessibility.unavailableReason() },
-) { args, _ ->
+    unavailable = { UiAutomation.unavailableReason() },
+) { args, ctx ->
     val service = UiAutomation.service()
     val includeAll = args.optBool("include_all") ?: false
     val maxNodes = (args.optInt("max_nodes") ?: DEFAULT_MAX_NODES).coerceIn(1, MAX_MAX_NODES)
-    val state = ScreenCapture.capture(context, service, includeAll)
+    val access = ScreenAccess.of(context, ctx)
+    val state = ScreenCapture.capture(context, service, access.visibility, includeAll)
+    state.blockedForeground?.let { access.refuse(it) }
     val body = ScreenSession.refs.newSnapshot { register ->
         TreeSerializer.serialize(state.windows, SerializeOptions(includeAll = includeAll, maxNodes = maxNodes), register)
     }
@@ -59,6 +61,7 @@ internal fun screenReadTool(context: Context): Tool = tool(
         buildString {
             append(TreeSerializer.header(state.packageName, state.activity, state.locked))
             if (!state.screenOn) append("\n(the screen is off)")
+            if (state.omittedWindows > 0) append("\n(${state.omittedWindows} window(s) of apps blocked for this agent are not shown)")
             append('\n')
             append(
                 body.text.ifEmpty {
@@ -87,8 +90,8 @@ internal fun screenFindTool(context: Context): Tool = tool(
         boolean("clickable_only", "Only elements that respond to taps")
     },
     timeoutMs = 30_000,
-    unavailable = { Accessibility.unavailableReason() },
-) { args, _ ->
+    unavailable = { UiAutomation.unavailableReason() },
+) { args, ctx ->
     val criteria = FindCriteria(
         text = args.optString("text"),
         viewId = args.optString("view_id"),
@@ -97,7 +100,9 @@ internal fun screenFindTool(context: Context): Tool = tool(
     )
     if (criteria.isEmpty) throw ToolException("Pass at least one of text, view_id, description, or clickable_only=true.")
     val service = UiAutomation.service()
-    val state = ScreenCapture.capture(context, service)
+    val access = ScreenAccess.of(context, ctx)
+    val state = ScreenCapture.capture(context, service, access.visibility)
+    state.blockedForeground?.let { access.refuse(it) }
     val matches = NodeQueries.find(state.roots, criteria)
     if (matches.isEmpty()) {
         return@tool ToolResult.text(
@@ -117,7 +122,7 @@ internal fun uiWaitTool(context: Context): Tool = tool(
     description = "Waits until the given text is visible on screen (text or content description, case-insensitive " +
         "contains) and/or the given app package is in the foreground, up to timeout_ms. Returns " +
         "{found, package, waited_ms} and, for text, the matching element's ref. Use it after opening an app or " +
-        "tapping something that loads, instead of fixed sleeps.",
+        "tapping something that loads, instead of fixed sleeps. Text in apps the user blocked for this agent never matches.",
     scope = Scopes.SCREEN_READ,
     risk = Risk.READ,
     schema = objectSchema {
@@ -126,25 +131,30 @@ internal fun uiWaitTool(context: Context): Tool = tool(
         integer("timeout_ms", "Max wait (default 5000, max 30000)", minimum = 0, maximum = 30_000)
     },
     timeoutMs = 40_000,
-    unavailable = { Accessibility.unavailableReason() },
-) { args, _ ->
+    unavailable = { UiAutomation.unavailableReason() },
+) { args, ctx ->
     val text = args.optString("text")?.takeIf { it.isNotBlank() }
     val pkg = args.optString("package")?.trim()?.takeIf { it.isNotEmpty() }
     if (text == null && pkg == null) throw ToolException("Pass text and/or package to wait for.")
     val timeout = (args.optLong("timeout_ms") ?: 5_000L).coerceIn(0L, 30_000L)
-    waitFor(context, text?.let(TextNorm::key), pkg, timeout)
+    val access = ScreenAccess.of(context, ctx)
+    pkg?.let { access.require(it) }
+    waitFor(context, access, text?.let(TextNorm::key), pkg, timeout)
 }
 
-/** The ui_wait loop: checks, then sleeps until the next UI event (or [POLL_MS]), until found or [timeout]. */
-private suspend fun waitFor(context: Context, key: String?, pkg: String?, timeout: Long): ToolResult {
+/**
+ * The ui_wait loop: checks, then sleeps until the next UI event (or [POLL_MS]), until found or [timeout].
+ * A blocked app in the foreground never matches; if one is still there at the timeout, the wait is refused.
+ */
+private suspend fun waitFor(context: Context, access: ScreenAccess, key: String?, pkg: String?, timeout: Long): ToolResult {
     val start = SystemClock.uptimeMillis()
     while (true) {
         val service = UiAutomation.service()
         val seen = BridgeAccessibilityService.lastEventAt.value
-        val probe = probe(context, service, key)
+        val probe = probe(context, service, access, key)
         val pkgOk = pkg == null || pkg.equals(probe.packageName, ignoreCase = true)
         val elapsed = SystemClock.uptimeMillis() - start
-        if (pkgOk && (key == null || probe.ref != null)) {
+        if (probe.blocked == null && pkgOk && (key == null || probe.ref != null)) {
             return ToolResult.json {
                 put("found", true)
                 put("package", probe.packageName)
@@ -154,6 +164,7 @@ private suspend fun waitFor(context: Context, key: String?, pkg: String?, timeou
             }
         }
         if (elapsed >= timeout) {
+            probe.blocked?.let { access.refuse(it) }
             return ToolResult.json {
                 put("found", false)
                 put("package", probe.packageName)
@@ -169,12 +180,16 @@ private suspend fun waitFor(context: Context, key: String?, pkg: String?, timeou
 private const val POLL_MS = 250L
 private const val MIN_GAP_MS = 100L
 
-private class Probe(val packageName: String?, val ref: String?, val line: String?)
+private class Probe(val packageName: String?, val ref: String?, val line: String?, val blocked: String? = null)
 
 /** One ui_wait check. Package-only waits skip the (heavier) tree capture. */
-private suspend fun probe(context: Context, service: BridgeAccessibilityService, key: String?): Probe {
-    if (key == null) return Probe(UiAutomation.foregroundPackage(service), null, null)
-    val state = ScreenCapture.capture(context, service)
+private suspend fun probe(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, key: String?): Probe {
+    if (key == null) {
+        val pkg = UiAutomation.foregroundPackage(service)
+        return Probe(pkg, null, null, blocked = pkg?.takeUnless(access::allows))
+    }
+    val state = ScreenCapture.capture(context, service, access.visibility)
+    if (state.blockedForeground != null) return Probe(state.packageName, null, null, blocked = state.blockedForeground)
     val node = NodeQueries.visibleNodes(state.roots).firstOrNull { NodeQueries.textLevel(it, key) != MatchLevel.NONE }
         ?: return Probe(state.packageName, null, null)
     val ref = ScreenSession.refs.register(node)

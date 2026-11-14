@@ -18,6 +18,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import android.view.inputmethod.InputMethodManager
+import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,18 +56,22 @@ class WindowRoot(
 /**
  * Generic UI automation for any app (docs/TOOLS.md "Screen"): reads window trees, performs
  * gestures, global actions and screenshots. Being bound by the system, it also exempts PhoneBridge
- * from background-activity-launch limits (see `Launcher`).
+ * from background-activity-launch limits (see `Launcher`). It also watches its own health
+ * ([health], [AccessibilityHealth]): after an app update Android may keep it bound but deliver nothing.
  *
  * Node reads and node actions are blocking IPC: call them from Dispatchers.IO. Gestures,
  * global actions and screenshots are dispatched on the main thread by the helpers below.
  */
 class BridgeAccessibilityService : AccessibilityService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val monitor = HealthMonitor(this, healthState)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         tracker.configure(packageName, emptyList())
+        healthState.reset()
         instance = this
+        monitor.start(scope)
         scope.launch(Dispatchers.IO) {
             val imes = try {
                 getSystemService(InputMethodManager::class.java)?.inputMethodList?.map { it.packageName }.orEmpty()
@@ -74,6 +79,7 @@ class BridgeAccessibilityService : AccessibilityService() {
                 emptyList()
             }
             tracker.configure(packageName, imes)
+            keyboardPackages = imes.toSet()
             tracker.seed(runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull())
         }
     }
@@ -84,6 +90,7 @@ class BridgeAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString()
         val cls = event.className?.toString()
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) tracker.onWindowStateChanged(pkg, cls, now)
+        healthState.onEvent()
         lastEvent.value = now
         eventFlow.tryEmit(UiEvent(event.eventType, pkg, cls, now))
     }
@@ -102,6 +109,7 @@ class BridgeAccessibilityService : AccessibilityService() {
     }
 
     private fun disconnect() {
+        monitor.stop()
         if (instance === this) {
             instance = null
             tracker.reset()
@@ -134,6 +142,26 @@ class BridgeAccessibilityService : AccessibilityService() {
             WindowRoot(root, facts.kind, w.title?.toString(), root.packageName?.toString(), facts.bounds, primary = z == primary, zIndex = z)
         }
         return listOf(all[primary]) + all.filterIndexed { z, _ -> z != primary }
+    }
+
+    /**
+     * [rootNodes], but when the phone is usable (screen on, unlocked) and no window shows up for about a
+     * second, throws a [ToolException] saying the service is stuck (see [AccessibilityHealth]). Blocking IPC
+     * between short delays: call from Dispatchers.IO.
+     */
+    suspend fun rootNodesOrStuck(): List<WindowRoot> {
+        val first = rootNodes()
+        monitor.record(empty = first.isEmpty())
+        if (first.isNotEmpty() || !monitor.usable()) return first
+        val deadline = SystemClock.uptimeMillis() + HealthMonitor.CONFIRM_MS + STUCK_PROBE_MS
+        while (SystemClock.uptimeMillis() < deadline) {
+            delay(STUCK_PROBE_MS)
+            val again = rootNodes()
+            monitor.record(empty = again.isEmpty())
+            if (again.isNotEmpty()) return again
+        }
+        monitor.cached()?.let { throw ToolException(it) }
+        return emptyList()
     }
 
     /** Full display size in pixels (current rotation). */
@@ -202,6 +230,9 @@ class BridgeAccessibilityService : AccessibilityService() {
         private const val TAP_MS = 60L
         private const val LONG_PRESS_MS = 600L
         private const val GESTURE_GRACE_MS = 3_000L
+        private const val STUCK_PROBE_MS = 200L
+
+        private val healthState = AccessibilityHealth()
 
         /** Connected service instance, or null when accessibility is off / not yet bound. */
         @Volatile
@@ -226,6 +257,33 @@ class BridgeAccessibilityService : AccessibilityService() {
                 null
             }
             return EnabledServices.contains(setting, context.packageName, BridgeAccessibilityService::class.java.name)
+        }
+
+        /** Packages of the installed keyboards (known once the service connected). */
+        @Volatile
+        var keyboardPackages: Set<String> = emptySet()
+            private set
+
+        /**
+         * Status for `bridge_capabilities`: null when the service is connected and working, otherwise an
+         * agent-facing explanation (not running, or connected but stuck, e.g. right after an app update). Off the
+         * main thread it probes the window list and may block about a second to confirm a problem.
+         */
+        fun health(): String? {
+            val service = instance ?: return AccessibilityHealth.NOT_RUNNING_MESSAGE
+            return service.monitor.check()
+        }
+
+        /** Like [health] but only from what is already known (cheap; for `unavailableReason`). Null when not connected. */
+        fun healthCached(): String? = instance?.monitor?.cached()
+
+        /**
+         * Tells the health check that the UI should change now (PhoneBridge is launching an app): if no
+         * accessibility event follows within a few seconds, the service is reported as stuck.
+         */
+        fun expectUiChange() {
+            val service = instance ?: return
+            healthState.onExpectedChange(SystemClock.uptimeMillis(), service.monitor.usable())
         }
 
         /** Package currently in the foreground (tracked from window events), or null if unknown. */
