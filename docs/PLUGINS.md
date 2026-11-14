@@ -282,7 +282,9 @@ than `index`. `id` may be short (`search_src_text`, which gets the app's package
 parameter left out) matches nothing.
 
 **Confinement:** before every tap, long-press, type, scroll or Back, PhoneBridge checks that the
-plugin's app is in the foreground. If another app is, the action stops with an error naming it.
+plugin's app is in the foreground. If another app is, the action stops with an error naming it. A tap
+or swipe made by coordinates must also land on the app's own window, not on a keyboard, notification or
+other app covering the element.
 Recipes can't press Home, open the notification shade, or touch other apps or PhoneBridge itself.
 
 **Limits:** 40 steps in total (nested ones included), and 90 s per action.

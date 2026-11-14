@@ -64,7 +64,8 @@ private class StoppedAtStep(message: String) : ToolException(message)
  *
  * Selectors only see the windows of the recipe's app, and before every tap, long-press, type, scroll and Back the
  * app must be in the foreground ([StepScreens.confinement]); otherwise the recipe stops with an error naming the
- * app in front. There is no Home or notification-shade step. Every wait is bounded by its step's timeout and the
+ * app in front. Coordinate gestures (a tap's fallback, scroll swipes) must also land on the app's own window, not on a
+ * keyboard, notification or other app covering the element. There is no Home or notification-shade step. Every wait is bounded by its step's timeout and the
  * whole recipe by [PluginRules.STEPS_TIMEOUT_MS]. A failing `optional` step is skipped, unless the failure is a
  * refusal (blocked app, stopped call, another app in front) or the safety checks no longer pass.
  */
@@ -162,7 +163,7 @@ internal class StepRunner private constructor(
         confine(number, (if (longPress) "long_press " else "tap ") + SelectorMatcher.describe(selector))
         UiAutomation.requireUnlocked(context)
         val live = live(node) ?: throw StepFailure("${SelectorMatcher.describe(selector)} disappeared before it could be tapped")
-        tapNode(context, service, access, live, longPress)
+        tapNode(context, service, access, live, longPress, confineTo = pkg)
         settle()
     }
 
@@ -243,7 +244,7 @@ internal class StepRunner private constructor(
         }
         confine(number, "scroll ${direction.name.lowercase()}")
         UiAutomation.requireUnlocked(context)
-        val outcome = scrollWith(context, service, access, direction, container)
+        val outcome = scrollWith(context, service, access, direction, container, confineTo = pkg)
         settle()
         return outcome
     }

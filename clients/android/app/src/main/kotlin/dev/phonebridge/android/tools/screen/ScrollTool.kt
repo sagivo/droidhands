@@ -84,7 +84,8 @@ internal class ScrollOutcome(val message: String, val atEnd: Boolean = false)
 /**
  * Scrolls [container] (null: swipes across the screen) in [direction]: its scroll action if it has one, else a
  * swipe inside it. Shared by ui_scroll and app-action screen recipes; every action is checked ([ScreenGuard],
- * [UiAutomation.beforeAction]) right before it happens. The caller holds the UI mutex.
+ * [UiAutomation.beforeAction]) right before it happens. With [confineTo] (a screen recipe's app), swipes must start
+ * on that app's own window ([ScreenGuard.checkConfined]). The caller holds the UI mutex.
  */
 internal suspend fun scrollWith(
     context: Context,
@@ -92,12 +93,13 @@ internal suspend fun scrollWith(
     access: ScreenAccess,
     direction: ScrollDirection,
     container: ScreenSession.Live?,
+    confineTo: String? = null,
 ): ScrollOutcome {
     val dir = direction.name.lowercase()
     val screen = service.screenBounds()
     if (container == null) {
         val plan = ScrollPlanner.swipe(direction, inset(screen))
-        swipe(context, service, access, plan)
+        swipe(context, service, access, plan, confineTo)
         return ScrollOutcome("No scrollable element found; swiped $dir across the screen.")
     }
     val label = "${container.ref} ${TreeSerializer.label(container.fresh)}"
@@ -109,11 +111,11 @@ internal suspend fun scrollWith(
             if (withContext(Dispatchers.IO) { NodeActions.scroll(container.fresh, plan.action) }) {
                 ScrollOutcome("Scrolled $dir in $label.")
             } else {
-                ScrollOutcome(swipeWithin(context, service, access, direction, area, label))
+                ScrollOutcome(swipeWithin(context, service, access, direction, area, label, confineTo))
             }
         }
         ScrollPlan.AtEnd -> ScrollOutcome("Can't scroll $dir in $label: already at the end in that direction.", atEnd = true)
-        is ScrollPlan.Swipe -> ScrollOutcome(swipeWithin(context, service, access, direction, area, label))
+        is ScrollPlan.Swipe -> ScrollOutcome(swipeWithin(context, service, access, direction, area, label, confineTo))
     }
 }
 
@@ -124,14 +126,24 @@ private suspend fun swipeWithin(
     direction: ScrollDirection,
     area: Bounds,
     label: String,
+    confineTo: String?,
 ): String {
     if (area.isEmpty) throw ToolException("Element $label is not visible on screen, so it can't be scrolled. Call screen_read again.")
-    swipe(context, service, access, ScrollPlanner.swipe(direction, area))
+    swipe(context, service, access, ScrollPlanner.swipe(direction, area), confineTo)
     return "Swiped ${direction.name.lowercase()} inside $label."
 }
 
-private suspend fun swipe(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, plan: ScrollPlan.Swipe) {
-    withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, plan.x1, plan.y1, access) }
+private suspend fun swipe(
+    context: Context,
+    service: BridgeAccessibilityService,
+    access: ScreenAccess,
+    plan: ScrollPlan.Swipe,
+    confineTo: String? = null,
+) {
+    withContext(Dispatchers.IO) {
+        ScreenGuard.checkPoint(context, service, plan.x1, plan.y1, access)
+        confineTo?.let { ScreenGuard.checkConfined(service, plan.x1, plan.y1, it) }
+    }
     UiAutomation.beforeAction(access)
     if (!service.swipe(plan.x1, plan.y1, plan.x2, plan.y2, ScrollPlanner.SWIPE_MS)) {
         throw ToolException("Android cancelled the swipe gesture. Retry.")

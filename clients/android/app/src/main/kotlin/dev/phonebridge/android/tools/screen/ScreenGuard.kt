@@ -68,6 +68,16 @@ object ScreenGuard {
         }
     }
 
+    /**
+     * Throws [SelfProtection.CoveredTouchException] unless a touch at ([x], [y]) lands on an application window of
+     * [confineTo] (a screen recipe's app). Call after [checkPoint].
+     */
+    fun checkConfined(service: BridgeAccessibilityService, x: Int, y: Int, confineTo: String) {
+        val target = SelfProtection.touchedWindow(service.touchWindows(), x, y, { it.kind }, { it.bounds }, { it.root != null })
+        val pkg = target?.root?.packageName?.toString()
+        if (SelfProtection.coversConfinedApp(target?.kind, pkg, confineTo)) throw SelfProtection.CoveredTouchException(x, y)
+    }
+
     /** Titles of the action buttons on PhoneBridge's currently posted notifications (no permission needed). */
     private fun ownNotificationActionTitles(context: Context): Set<String> = try {
         context.getSystemService(NotificationManager::class.java)?.activeNotifications.orEmpty()

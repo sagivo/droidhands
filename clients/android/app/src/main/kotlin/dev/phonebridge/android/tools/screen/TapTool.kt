@@ -100,7 +100,8 @@ private suspend fun tapText(context: Context, service: BridgeAccessibilityServic
 /**
  * Clicks [live] (or its nearest clickable container) with an accessibility action; falls back to
  * a real touch gesture at the element's visible center. Both are checked right before they happen
- * ([UiAutomation.beforeAction], [ScreenGuard]).
+ * ([UiAutomation.beforeAction], [ScreenGuard]). With [confineTo] (a screen recipe's app), the gesture must land
+ * on that app's own window ([ScreenGuard.checkConfined]).
  */
 internal suspend fun tapNode(
     context: Context,
@@ -108,6 +109,7 @@ internal suspend fun tapNode(
     access: ScreenAccess,
     live: ScreenSession.Live,
     longPress: Boolean,
+    confineTo: String? = null,
 ): String {
     withContext(Dispatchers.IO) { ScreenGuard.checkNode(context, live.fresh, access) }
     val label = "${live.ref} ${TreeSerializer.label(live.fresh)}"
@@ -136,7 +138,7 @@ internal suspend fun tapNode(
     if (!live.fresh.visible || area.isEmpty) {
         throw ToolException("Element $label is not visible on screen, so it can't be tapped. Scroll to it (ui_scroll), then screen_read again.")
     }
-    gestureAt(context, service, access, area.centerX, area.centerY, longPress)
+    gestureAt(context, service, access, area.centerX, area.centerY, longPress, confineTo)
     return "$verb $label at (${area.centerX},${area.centerY})."
 }
 
@@ -147,8 +149,19 @@ private suspend fun tapPoint(context: Context, service: BridgeAccessibilityServi
     return "${if (longPress) "Long-pressed" else "Tapped"} at ($x,$y)."
 }
 
-private suspend fun gestureAt(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, x: Int, y: Int, longPress: Boolean) {
-    withContext(Dispatchers.IO) { ScreenGuard.checkPoint(context, service, x, y, access) }
+private suspend fun gestureAt(
+    context: Context,
+    service: BridgeAccessibilityService,
+    access: ScreenAccess,
+    x: Int,
+    y: Int,
+    longPress: Boolean,
+    confineTo: String? = null,
+) {
+    withContext(Dispatchers.IO) {
+        ScreenGuard.checkPoint(context, service, x, y, access)
+        confineTo?.let { ScreenGuard.checkConfined(service, x, y, it) }
+    }
     UiAutomation.beforeAction(access)
     val ok = if (longPress) service.longPress(x, y) else service.tap(x, y)
     if (!ok) throw ToolException("Android cancelled the touch gesture (another gesture or the user interrupted it). Retry.")
