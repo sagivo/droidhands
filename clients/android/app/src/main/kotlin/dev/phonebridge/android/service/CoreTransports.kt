@@ -61,7 +61,8 @@ internal object CoreTransports {
 
     fun localFactory(handler: suspend (TransportRequest) -> TransportResponse): LocalTransportFactory =
         LocalTransportFactory { config ->
-            val server = LocalHttpServer(port = config.port, bindAddress = config.bindAddress, handler = handler)
+            val bindAddress = requireNotNull(config.bindAddress) { "No address to listen on" }
+            val server = LocalHttpServer(port = config.port, bindAddress = bindAddress, handler = handler)
             object : LocalTransport {
                 override fun start() = server.start()
                 override fun stop() = server.stop()

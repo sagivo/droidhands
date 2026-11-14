@@ -62,7 +62,8 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
             relayEnabled = settings.relayEnabled,
             relayUrl = settings.relayUrl,
             relayConnectedUrl = (relay as? RelayStatus.Connected)?.mcpUrl,
-            localServerEnabled = settings.localServerEnabled,
+            // A server listening on the tailnet only isn't reachable over USB (adb forward).
+            localServerEnabled = settings.localServerEnabled && settings.localServerBind.reachesLoopback,
             localServerPort = settings.localServerPort,
             localUrls = (local as? LocalServerStatus.Running)?.urls.orEmpty(),
         )

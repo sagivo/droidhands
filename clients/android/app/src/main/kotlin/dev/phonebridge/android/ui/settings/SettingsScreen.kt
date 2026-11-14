@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.plugins.LocalPluginEntry
 import dev.phonebridge.android.plugins.PluginImports
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.android.ui.components.BottomActionBar
 import dev.phonebridge.android.ui.components.CodeBlock
 import dev.phonebridge.android.ui.components.ConfirmDialog
@@ -234,10 +235,10 @@ private fun LocalServerSection(form: SettingsForm, validation: SettingsForm.Vali
             title = "Listen on all interfaces",
             subtitle = "Off: only 127.0.0.1, reached over USB with adb forward. On: also reachable from your " +
                 "Wi-Fi/LAN and Tailscale.",
-            checked = form.localServerBindAll,
-            onCheckedChange = { v -> edit { it.copy(localServerBindAll = v) } },
+            checked = form.localServerBind == LocalBind.ALL_INTERFACES,
+            onCheckedChange = { v -> edit { it.copy(localServerBind = if (v) LocalBind.ALL_INTERFACES else LocalBind.LOOPBACK) } },
         )
-        if (form.localServerBindAll) Notice(SettingsForm.BIND_ALL_WARNING, kind = NoticeKind.WARNING)
+        if (form.localServerBind == LocalBind.ALL_INTERFACES) Notice(SettingsForm.BIND_ALL_WARNING, kind = NoticeKind.WARNING)
     }
 }
 

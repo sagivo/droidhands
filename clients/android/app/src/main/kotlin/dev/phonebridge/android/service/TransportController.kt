@@ -2,6 +2,7 @@ package dev.phonebridge.android.service
 
 import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.core.transport.RelayStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,10 @@ fun interface LocalTransportFactory {
  *
  * Transports only run while the controller is *active*: [apply] activates it, [stopAll]
  * deactivates it, and [restartRelay]/[retryRelay]/[refreshLocalUrls] are ignored while inactive.
+ *
+ * A local server that listens on the tailnet only ([LocalBind.TAILSCALE]) binds the phone's current
+ * tailnet address: [refreshLocalUrls] rebinds it when that address appears or changes, and while
+ * there is none the server waits ([LocalServerStatus.WaitingForTailscale]) instead of listening.
  */
 class TransportController(
     private val scope: CoroutineScope,
@@ -56,6 +61,8 @@ class TransportController(
     private val localFactory: LocalTransportFactory,
     /** Non-loopback IPv4 addresses of this device (only queried when the server binds all interfaces). */
     private val lanAddresses: () -> List<String>,
+    /** The phone's tailnet address now, or null (only queried for [LocalBind.TAILSCALE]). Blocking is fine. */
+    private val tailnet: () -> TailnetAddress? = { null },
     private val onRelayStatus: (RelayStatus) -> Unit,
     private val onLocalStatus: (LocalServerStatus) -> Unit,
     private val log: (message: String, error: Throwable?) -> Unit = { _, _ -> },
@@ -113,7 +120,10 @@ class TransportController(
     fun retryRelay(alsoWhileConnecting: Boolean = false) =
         submit(if (alsoWhileConnecting) Command.RETRY_STALLED_RELAY else Command.RETRY_RELAY)
 
-    /** Re-publishes the local server URLs (the device's IP addresses may have changed). */
+    /**
+     * Re-publishes the local server URLs (the device's IP addresses may have changed); a tailnet-only
+     * server is rebound, started or stopped to follow the tailnet address.
+     */
     fun refreshLocalUrls() = submit(Command.REFRESH_LOCAL_URLS)
 
     /** Stops every transport and deactivates the controller. */
@@ -132,7 +142,7 @@ class TransportController(
             Command.RESTART_RELAY -> if (active) restartRelayNow()
             Command.RETRY_RELAY -> if (active) retryRelayNow(alsoWhileConnecting = false)
             Command.RETRY_STALLED_RELAY -> if (active) retryRelayNow(alsoWhileConnecting = true)
-            Command.REFRESH_LOCAL_URLS -> if (active) publishLocalRunning()
+            Command.REFRESH_LOCAL_URLS -> if (active) refreshLocal()
             Command.STOP_ALL -> {
                 active = false
                 stopRelay(publishIdle = true)
@@ -152,13 +162,28 @@ class TransportController(
             onRelayStatus(TransportConfig.idleRelayStatus(current))
         }
 
-        val wantedLocal = TransportConfig.local(current)
-        if (local?.config != wantedLocal) {
-            stopLocal()
-            if (wantedLocal != null) startLocal(wantedLocal)
-        } else if (wantedLocal != null) {
-            publishLocalRunning()
+        reconcileLocal(current)
+    }
+
+    private fun reconcileLocal(current: BridgeSettings) {
+        val tailnetNow = if (current.localServerEnabled && current.localServerBind == LocalBind.TAILSCALE) tailnet() else null
+        val wanted = TransportConfig.local(current, tailnetNow?.address)
+        if (local?.config == wanted) {
+            if (wanted != null) publishLocalRunning(tailnetNow)
+            return
         }
+        val waiting = wanted != null && wanted.bindAddress == null
+        stopLocal(publishStopped = !waiting)
+        when {
+            wanted == null -> Unit
+            waiting -> onLocalStatus(LocalServerStatus.WaitingForTailscale)
+            else -> startLocal(wanted, tailnetNow)
+        }
+    }
+
+    private fun refreshLocal() {
+        val current = settings()
+        if (current.localServerBind == LocalBind.TAILSCALE) reconcileLocal(current) else publishLocalRunning(null)
     }
 
     private fun startRelay(config: RelayConfig) {
@@ -222,14 +247,20 @@ class TransportController(
         startRelay(running.config)
     }
 
-    private fun startLocal(config: LocalConfig) {
+    private fun startLocal(config: LocalConfig, tailnetNow: TailnetAddress?) {
         val transport = try {
             localFactory.create(config).also { it.start() }
         } catch (e: IOException) {
             log("Local server failed to bind", e)
+            val reason = e.message ?: "bind failed"
             onLocalStatus(
                 LocalServerStatus.Error(
-                    "Port ${config.port} is unavailable (${e.message ?: "bind failed"}). Choose another port in PhoneBridge settings.",
+                    if (config.bind == LocalBind.TAILSCALE) {
+                        "Couldn't listen on your Tailscale address, port ${config.port} ($reason). PhoneBridge tries again when " +
+                            "Tailscale reconnects, or choose another port in PhoneBridge settings."
+                    } else {
+                        "Port ${config.port} is unavailable ($reason). Choose another port in PhoneBridge settings."
+                    },
                 ),
             )
             return
@@ -239,10 +270,10 @@ class TransportController(
             return
         }
         local = RunningLocal(config, transport)
-        publishLocalRunning()
+        publishLocalRunning(tailnetNow)
     }
 
-    private fun stopLocal() {
+    private fun stopLocal(publishStopped: Boolean = true) {
         val running = local
         local = null
         if (running != null) {
@@ -252,17 +283,21 @@ class TransportController(
                 log("Local server failed to stop cleanly", e)
             }
         }
-        onLocalStatus(LocalServerStatus.Stopped)
+        if (publishStopped) onLocalStatus(LocalServerStatus.Stopped)
     }
 
-    private fun publishLocalRunning() {
+    /** [tailnetNow]: the tailnet address just looked up, if any (its MagicDNS name goes into the URL). */
+    private fun publishLocalRunning(tailnetNow: TailnetAddress?) {
         val running = local ?: return
         val port = try {
             running.transport.boundPort.takeIf { it > 0 }
         } catch (e: Exception) {
             null
         } ?: running.config.port
-        val addresses = if (running.config.bindAll) lanAddresses() else emptyList()
-        onLocalStatus(LocalServerStatus.Running(TransportConfig.localUrls(port, running.config.bindAll, addresses)))
+        val bind = running.config.bind
+        val addresses = if (bind == LocalBind.ALL_INTERFACES) lanAddresses() else emptyList()
+        // The name only counts for the address the server is bound to.
+        val tailnetHost = tailnetNow?.takeIf { it.address == running.config.tailnet }?.host ?: running.config.tailnet
+        onLocalStatus(LocalServerStatus.Running(TransportConfig.localUrls(port, bind, addresses, tailnetHost)))
     }
 }

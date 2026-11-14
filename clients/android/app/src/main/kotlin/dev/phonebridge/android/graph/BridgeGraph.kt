@@ -19,6 +19,7 @@ import dev.phonebridge.android.service.BridgeService
 import dev.phonebridge.android.service.CoreTransports
 import dev.phonebridge.android.service.NetworkAddresses
 import dev.phonebridge.android.service.StatusText
+import dev.phonebridge.android.service.TailscaleMonitor
 import dev.phonebridge.android.service.TransportConfig
 import dev.phonebridge.android.service.TransportController
 import dev.phonebridge.android.service.WakeLockedHandler
@@ -66,6 +67,9 @@ sealed interface LocalServerStatus {
     data class Running(val urls: List<String>) : LocalServerStatus
 
     data class Error(val message: String) : LocalServerStatus
+
+    /** Set to listen on the tailnet only, but the phone isn't on Tailscale right now. */
+    data object WaitingForTailscale : LocalServerStatus
 }
 
 /**
@@ -195,6 +199,12 @@ class BridgeGraph private constructor(val app: Application) {
     val publicRelayMcpUrl: String?
         get() = RelayUrls.publicMcpUrl(relayStatus.value, settings.state.value.relayUrl)
 
+    /**
+     * Tailscale on this phone (app installed, tailnet address, MagicDNS name) for the Tailscale route.
+     * Refreshed by the transports and by the UI; a newly found MagicDNS name re-publishes the local URLs.
+     */
+    val tailscale: TailscaleMonitor by lazy { TailscaleMonitor(app, appScope, onNameFound = { transports.refreshLocalUrls() }) }
+
     /** MCP handler shared by both transports: per-request wake lock + internal-error safety net. */
     private val requestHandler: WakeLockedHandler by lazy { WakeLockedHandler(app) { mcpServer.handle(it) } }
 
@@ -206,6 +216,7 @@ class BridgeGraph private constructor(val app: Application) {
             relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle, pairingHandler = { pairing }),
             localFactory = CoreTransports.localFactory(requestHandler::handle),
             lanAddresses = NetworkAddresses::nonLoopbackIpv4,
+            tailnet = { tailscale.refresh() },
             onRelayStatus = ::updateRelayStatus,
             onLocalStatus = ::updateLocalServerStatus,
             log = { message, error -> Log.w(TAG, message, error) },

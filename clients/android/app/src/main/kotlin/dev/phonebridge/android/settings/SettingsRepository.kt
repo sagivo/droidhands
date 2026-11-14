@@ -16,8 +16,11 @@ data class BridgeSettings(
     /** Serve MCP directly from the phone. */
     val localServerEnabled: Boolean = false,
     val localServerPort: Int = 8765,
-    /** false = 127.0.0.1 only (use `adb forward`); true = all interfaces (LAN/Tailscale). */
-    val localServerBindAll: Boolean = false,
+    /**
+     * Where the local server listens: 127.0.0.1 only (`adb forward`), only the phone's Tailscale
+     * address, or all interfaces (LAN). Stored before this existed as a bind-all switch (migrated).
+     */
+    val localServerBind: LocalBind = LocalBind.LOOPBACK,
     /** Global kill switch. */
     val accessEnabled: Boolean = true,
     val startOnBoot: Boolean = true,
@@ -56,7 +59,7 @@ data class BridgeSettings(
     /** Never print the access key (e.g. in crash logs or debug output). */
     override fun toString(): String =
         "BridgeSettings(relayEnabled=$relayEnabled, relayUrl=$relayUrl, relayAccessKey=${if (relayAccessKey.isEmpty()) "" else "***"}, " +
-            "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBindAll=$localServerBindAll, " +
+            "localServerEnabled=$localServerEnabled, localServerPort=$localServerPort, localServerBind=$localServerBind, " +
             "accessEnabled=$accessEnabled, startOnBoot=$startOnBoot, neverAllowApps=${neverAllowApps.size} apps, " +
             "redactOneTimeCodes=$redactOneTimeCodes, securityDefaultsApplied=$securityDefaultsApplied, " +
             "localPluginsEnabled=$localPluginsEnabled, defaultRelayDecided=$defaultRelayDecided, relayFromDefault=$relayFromDefault, checkForUpdates=$checkForUpdates)"

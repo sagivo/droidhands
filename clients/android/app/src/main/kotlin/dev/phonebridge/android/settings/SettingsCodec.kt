@@ -14,6 +14,7 @@ object SettingsCodec {
     internal const val KEY_LOCAL_ENABLED = "local_server_enabled"
     internal const val KEY_LOCAL_PORT = "local_server_port"
     internal const val KEY_LOCAL_BIND_ALL = "local_server_bind_all"
+    internal const val KEY_LOCAL_BIND = "local_server_bind"
     internal const val KEY_ACCESS_ENABLED = "access_enabled"
     internal const val KEY_START_ON_BOOT = "start_on_boot"
     internal const val KEY_NEVER_ALLOW_APPS = "never_allow_apps"
@@ -59,6 +60,8 @@ object SettingsCodec {
      * Migration: settings saved before [BridgeSettings.defaultRelayDecided] existed (a non-empty
      * store without that key) decode it as true. Only a fresh install (empty store) may get the
      * build's default relay, so an update never changes how an existing user is connected.
+     * Likewise [BridgeSettings.localServerBind] falls back to the older bind-all switch (on: all
+     * interfaces, off: loopback), so the local server keeps listening where it did.
      */
     fun decode(values: Map<String, *>): BridgeSettings {
         val defaults = BridgeSettings()
@@ -73,7 +76,8 @@ object SettingsCodec {
                 relayAccessKey = string(KEY_RELAY_ACCESS_KEY, defaults.relayAccessKey),
                 localServerEnabled = bool(KEY_LOCAL_ENABLED, defaults.localServerEnabled),
                 localServerPort = int(KEY_LOCAL_PORT, defaults.localServerPort),
-                localServerBindAll = bool(KEY_LOCAL_BIND_ALL, defaults.localServerBindAll),
+                localServerBind = LocalBind.fromKey(values[KEY_LOCAL_BIND] as? String)
+                    ?: if (bool(KEY_LOCAL_BIND_ALL, false)) LocalBind.ALL_INTERFACES else defaults.localServerBind,
                 accessEnabled = bool(KEY_ACCESS_ENABLED, defaults.accessEnabled),
                 startOnBoot = bool(KEY_START_ON_BOOT, defaults.startOnBoot),
                 neverAllowApps = strings(KEY_NEVER_ALLOW_APPS, defaults.neverAllowApps),
@@ -87,14 +91,18 @@ object SettingsCodec {
         )
     }
 
-    /** Every key is written so the stored form is complete and self-describing. */
+    /**
+     * Every key is written so the stored form is complete and self-describing. The older bind-all
+     * switch is still written, so a downgraded app keeps the LAN choice (Tailscale-only reads as off).
+     */
     fun encode(settings: BridgeSettings): Map<String, Any> = linkedMapOf(
         KEY_RELAY_ENABLED to settings.relayEnabled,
         KEY_RELAY_URL to settings.relayUrl,
         KEY_RELAY_ACCESS_KEY to settings.relayAccessKey,
         KEY_LOCAL_ENABLED to settings.localServerEnabled,
         KEY_LOCAL_PORT to settings.localServerPort,
-        KEY_LOCAL_BIND_ALL to settings.localServerBindAll,
+        KEY_LOCAL_BIND_ALL to (settings.localServerBind == LocalBind.ALL_INTERFACES),
+        KEY_LOCAL_BIND to settings.localServerBind.key,
         KEY_ACCESS_ENABLED to settings.accessEnabled,
         KEY_START_ON_BOOT to settings.startOnBoot,
         KEY_NEVER_ALLOW_APPS to settings.neverAllowApps.toSet(),

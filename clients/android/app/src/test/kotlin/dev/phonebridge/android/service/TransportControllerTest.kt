@@ -2,6 +2,7 @@ package dev.phonebridge.android.service
 
 import dev.phonebridge.android.graph.LocalServerStatus
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.core.transport.RelayStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -61,6 +62,8 @@ class TransportControllerTest {
         var relayStatus: RelayStatus? = null
         var localStatus: LocalServerStatus? = null
         val lanAddresses = mutableListOf("192.168.1.20")
+        var tailnet: TailnetAddress? = null
+        var tailnetQueries = 0
 
         val controller = TransportController(
             scope = scope.backgroundScope,
@@ -71,6 +74,10 @@ class TransportControllerTest {
             },
             localFactory = { config -> FakeLocal(config, localFailure).also { locals += it } },
             lanAddresses = { lanAddresses.toList() },
+            tailnet = {
+                tailnetQueries++
+                tailnet
+            },
             onRelayStatus = { relayStatus = it },
             onLocalStatus = { localStatus = it },
         )
@@ -130,18 +137,18 @@ class TransportControllerTest {
         val h = Harness(this, BridgeSettings(localServerEnabled = true))
         h.controller.apply()
         runCurrent()
-        h.settings = h.settings.copy(localServerPort = 9000, localServerBindAll = true)
+        h.settings = h.settings.copy(localServerPort = 9000, localServerBind = LocalBind.ALL_INTERFACES)
         h.controller.apply()
         runCurrent()
 
         assertEquals(2, h.locals.size)
         assertFalse(h.locals[0].running)
-        assertEquals(LocalConfig(9000, true), h.locals[1].config)
+        assertEquals(LocalConfig(9000, LocalBind.ALL_INTERFACES), h.locals[1].config)
         assertEquals(
             LocalServerStatus.Running(listOf("http://127.0.0.1:9000/mcp", "http://192.168.1.20:9000/mcp")),
             h.localStatus,
         )
-        assertEquals(LocalConfig(9000, true), h.controller.localConfig)
+        assertEquals(LocalConfig(9000, LocalBind.ALL_INTERFACES), h.controller.localConfig)
     }
 
     @Test
@@ -285,7 +292,7 @@ class TransportControllerTest {
 
     @Test
     fun refreshLocalUrlsPicksUpNewAddresses() = runTest {
-        val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBindAll = true))
+        val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBind = LocalBind.ALL_INTERFACES))
         h.controller.apply()
         runCurrent()
         h.lanAddresses.clear()
@@ -294,6 +301,74 @@ class TransportControllerTest {
         runCurrent()
         assertEquals(LocalServerStatus.Running(listOf("http://127.0.0.1:8765/mcp", "http://10.0.0.5:8765/mcp")), h.localStatus)
         assertEquals(1, h.locals.size)
+    }
+
+    @Test
+    fun tailscaleServerWaitsForTheTailnetAndFollowsItsAddress() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBind = LocalBind.TAILSCALE))
+        h.controller.apply()
+        runCurrent()
+        assertTrue("nothing listens without a tailnet address", h.locals.isEmpty())
+        assertEquals(LocalServerStatus.WaitingForTailscale, h.localStatus)
+
+        // Tailscale connects: the network callback refreshes, the server binds the tailnet address.
+        h.tailnet = TailnetAddress("100.101.102.103")
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertEquals(LocalConfig(8765, LocalBind.TAILSCALE, "100.101.102.103"), h.locals.single().config)
+        assertEquals("100.101.102.103", h.locals.single().config.bindAddress)
+        assertEquals(LocalServerStatus.Running(listOf("http://100.101.102.103:8765/mcp")), h.localStatus)
+
+        // The MagicDNS name arrives: same socket, nicer URL.
+        h.tailnet = TailnetAddress("100.101.102.103", "pixel.tail1234.ts.net")
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertEquals(1, h.locals.size)
+        assertEquals(LocalServerStatus.Running(listOf("http://pixel.tail1234.ts.net:8765/mcp")), h.localStatus)
+
+        // A new tailnet address: rebind.
+        h.tailnet = TailnetAddress("100.101.102.104")
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertEquals(2, h.locals.size)
+        assertFalse(h.locals[0].running)
+        assertTrue(h.locals[1].running)
+        assertEquals("100.101.102.104", h.locals[1].config.bindAddress)
+
+        // Tailscale disconnects: stop listening and wait again.
+        h.tailnet = null
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertFalse(h.locals[1].running)
+        assertEquals(LocalServerStatus.WaitingForTailscale, h.localStatus)
+        assertNull(h.controller.localConfig)
+    }
+
+    @Test
+    fun otherBindModesNeverAskForTheTailnet() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBind = LocalBind.ALL_INTERFACES))
+        h.tailnet = TailnetAddress("100.101.102.103")
+        h.controller.apply()
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertEquals(0, h.tailnetQueries)
+        assertEquals(1, h.locals.size)
+    }
+
+    @Test
+    fun tailscaleBindFailureSaysItRetries() = runTest {
+        val h = Harness(this, BridgeSettings(localServerEnabled = true, localServerBind = LocalBind.TAILSCALE))
+        h.tailnet = TailnetAddress("100.101.102.103")
+        h.localFailure = IOException("Cannot assign requested address")
+        h.controller.apply()
+        runCurrent()
+        val error = h.localStatus as LocalServerStatus.Error
+        assertTrue(error.message.contains("Tailscale"))
+
+        h.localFailure = null
+        h.controller.refreshLocalUrls()
+        runCurrent()
+        assertTrue("a network change retries the bind", h.locals.last().running)
     }
 
     @Test

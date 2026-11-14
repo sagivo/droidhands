@@ -10,6 +10,8 @@ import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
@@ -55,6 +57,7 @@ class BridgeService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val networkTracker = NetworkChangeTracker<Network>()
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var vpnCallback: ConnectivityManager.NetworkCallback? = null
     private val reconnects by lazy { RelayReconnects(this) { graph.transports.retryRelay(it) } }
 
     /** Main-thread confined: notification updates are posted only while true. */
@@ -229,16 +232,44 @@ class BridgeService : Service() {
             // SecurityException or TooManyRequestsException: reconnects then rely on the client's backoff.
             Log.w(TAG, "Could not watch network changes", e)
         }
+        registerVpnCallback(connectivity)
+    }
+
+    /**
+     * Tailscale is a VPN that need not be the default network (e.g. with split tunneling): watch VPN
+     * networks too, so a tailnet-only local server follows the tailnet address as it comes and goes.
+     */
+    private fun registerVpnCallback(connectivity: ConnectivityManager) {
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = graph.transports.refreshLocalUrls()
+
+            override fun onLost(network: Network) = graph.transports.refreshLocalUrls()
+
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) = graph.transports.refreshLocalUrls()
+        }
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+            .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        try {
+            connectivity.registerNetworkCallback(request, callback)
+            vpnCallback = callback
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not watch VPN networks", e)
+        }
     }
 
     private fun unregisterNetworkCallback() {
-        val callback = networkCallback ?: return
-        networkCallback = null
-        try {
-            getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(callback)
-        } catch (e: IllegalArgumentException) {
-            Log.w(TAG, "Network callback was not registered", e)
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        listOfNotNull(networkCallback, vpnCallback).forEach { callback ->
+            try {
+                connectivity?.unregisterNetworkCallback(callback)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Network callback was not registered", e)
+            }
         }
+        networkCallback = null
+        vpnCallback = null
     }
 
     companion object {

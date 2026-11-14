@@ -85,7 +85,7 @@ internal fun ConnectionStatusLine(settings: BridgeSettings, relay: RelayStatus, 
     val colors = statusColors()
     val lines = buildList {
         if (settings.relayEnabled || relay !is RelayStatus.Stopped) add(StatusPresentation.relay(relay, settings.relayEnabled))
-        if (settings.localServerEnabled) add(StatusPresentation.local(local, true))
+        if (settings.localServerEnabled) add(StatusPresentation.local(local, true, settings.localServerBind))
     }
     if (lines.isEmpty()) return
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
