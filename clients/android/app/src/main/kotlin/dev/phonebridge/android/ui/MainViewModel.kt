@@ -13,10 +13,13 @@ import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.graph.BridgeGraph
 import dev.phonebridge.android.graph.DefaultRelay
 import dev.phonebridge.android.graph.LocalServerStatus
+import dev.phonebridge.android.service.TailscaleState
 import dev.phonebridge.android.settings.BridgeSettings
+import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.android.ui.activity.ActivityQuery
 import dev.phonebridge.android.ui.agents.AgentPresentation
 import dev.phonebridge.android.ui.apps.ActionNames
+import dev.phonebridge.android.ui.connect.ConnectionRoutes
 import dev.phonebridge.android.ui.deeplink.ConfigureRequest
 import dev.phonebridge.android.ui.home.StatusPresentation
 import dev.phonebridge.android.ui.onboarding.OnboardingFlow
@@ -56,6 +59,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val tokens: StateFlow<List<TokenRecord>> = graph.tokenManager.tokens
     val relayStatus: StateFlow<RelayStatus> = graph.relayStatus
     val localServerStatus: StateFlow<LocalServerStatus> = graph.localServerStatus
+
+    /** Tailscale on this phone, for the Tailscale route; [refreshTailscale] updates it. */
+    val tailscale: StateFlow<TailscaleState> = graph.tailscale.state
     val pendingApprovals: StateFlow<List<ConfirmationRequest>> = graph.confirmations.pendingRequests
     val pendingPairings: StateFlow<List<PairingRequest>> = GraphAdapters.pendingPairings(graph)
     val auditEntries: StateFlow<List<AuditEntry>> = graph.audit.entries
@@ -204,11 +210,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun enableLocalServer() = io("Couldn't start the local server") {
         graph.settings.update {
-            it.copy(localServerEnabled = true, relayEnabled = it.relayEnabled && !it.relayFromDefault, defaultRelayDecided = true)
+            // Off the tailnet-only mode (that is the Tailscale route); a LAN choice made in Settings stays.
+            val bind = if (it.localServerBind == LocalBind.TAILSCALE) LocalBind.LOOPBACK else it.localServerBind
+            it.copy(
+                localServerEnabled = true,
+                localServerBind = bind,
+                relayEnabled = it.relayEnabled && !it.relayFromDefault,
+                defaultRelayDecided = true,
+            )
         }
         graph.applySettings()
         _messages.send("Local server starting on port ${settings.value.localServerPort}…")
     }
+
+    /**
+     * The Tailscale route on or off ([ConnectionRoutes.withTailscale]): on, the local server listens on
+     * the phone's tailnet address only. A relay stays on, so both routes work at once.
+     */
+    fun setTailscale(on: Boolean) = io("Couldn't change Tailscale") {
+        graph.settings.update { ConnectionRoutes.withTailscale(it, on) }
+        graph.applySettings()
+        graph.tailscale.refresh()
+        _messages.send(if (on) "Listening on your tailnet…" else "Tailscale route off.")
+    }
+
+    /** Looks for Tailscale again (the user may have just installed or connected it). */
+    fun refreshTailscale() = io("Couldn't check Tailscale") { graph.tailscale.refresh() }
 
     /** Accepts a confirmed `phonebridge://configure` link. */
     fun applyConfigureLink(request: ConfigureRequest) = io("Couldn't apply the setup link") {

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,15 +33,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.plugins.LocalPluginEntry
 import dev.phonebridge.android.plugins.PluginImports
+import dev.phonebridge.android.service.TailscaleState
 import dev.phonebridge.android.settings.LocalBind
 import dev.phonebridge.android.ui.components.BottomActionBar
 import dev.phonebridge.android.ui.components.CodeBlock
@@ -50,6 +57,9 @@ import dev.phonebridge.android.ui.components.SectionHeader
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberCopier
+import dev.phonebridge.android.ui.connect.ActiveRoutesCard
+import dev.phonebridge.android.ui.connect.ConnectionRoutes
+import dev.phonebridge.android.ui.connect.TailscaleStatus
 import dev.phonebridge.android.ui.onboarding.DEFAULT_RELAY_NOTE
 import dev.phonebridge.android.ui.setup.SetupUiState
 
@@ -62,7 +72,8 @@ class SettingsActions(
 )
 
 /**
- * Settings: Connection (relay, local server, boot; saved together from the bottom bar),
+ * Settings: How agents reach this phone (the connection URLs of the routes that are on, then the
+ * relay, Tailscale, the local server and boot; saved together from the bottom bar),
  * Permissions & access, Security (never-allow apps, hidden one-time codes, revoke all), Developer
  * (local plugins) and About.
  */
@@ -73,12 +84,17 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
     val redact by vm.redactOneTimeCodes.collectAsStateWithLifecycle()
     val localPluginsOn by vm.localPluginsEnabled.collectAsStateWithLifecycle()
     val localPlugins by vm.localPlugins.collectAsStateWithLifecycle()
+    val relayStatus by vm.relayStatus.collectAsStateWithLifecycle()
+    val localStatus by vm.localServerStatus.collectAsStateWithLifecycle()
+    val tailscale by vm.tailscale.collectAsStateWithLifecycle()
     val form = vm.form
     val validation = remember(form) { form.validate() }
     val dirty = form.differsFrom(current)
     var removing by remember { mutableStateOf<LocalPluginEntry?>(null) }
     val pickPlugin = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importPlugin) }
 
+    // Tailscale is switched on and off outside the app.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshTailscale() }
     // Files pushed with scripts/plugin-push.sh show up whenever Settings opens.
     LaunchedEffect(localPluginsOn) { if (localPluginsOn) vm.refreshLocalPlugins() }
     vm.importErrors?.let { ImportErrorsDialog(it, onDismiss = vm::dismissImportErrors) }
@@ -111,11 +127,20 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
         },
     ) { padding ->
         LazyColumn(contentPadding = padding.padded(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item(key = "connection-header") { SectionHeader("Connection") }
+            item(key = "connection-header") { SectionHeader("How agents reach this phone") }
+            item(key = "routes") {
+                val routes = remember(current, relayStatus, localStatus) { ConnectionRoutes.active(current, relayStatus, localStatus) }
+                if (routes.isEmpty()) {
+                    Notice("Agents can't reach this phone yet. Turn on the relay or Tailscale below, then tap Save.", kind = NoticeKind.WARNING)
+                } else {
+                    ActiveRoutesCard(routes)
+                }
+            }
             item(key = "relay") {
                 val usingDefault = current.relayFromDefault && RelayUrls.normalize(form.relayUrl) == current.relayUrl
                 RelaySection(form, validation, usingDefault, vm::edit)
             }
+            item(key = "tailscale") { TailscaleSection(form, tailscale, vm::edit) }
             item(key = "local") { LocalServerSection(form, validation, vm::edit) }
             item(key = "general") {
                 SettingsCard {
@@ -175,9 +200,9 @@ private fun RelaySection(
     var showKey by rememberSaveable { mutableStateOf(false) }
     SettingsCard {
         SwitchRow(
-            title = "Connect to a relay",
-            subtitle = "Reach this phone from anywhere. The phone connects out to the relay, so it works behind NAT " +
-                "and on mobile data.",
+            title = "Relay",
+            subtitle = "Works with every agent, including claude.ai and ChatGPT, from anywhere. The phone connects out " +
+                "to the relay, so it works behind NAT and on mobile data.",
             checked = form.relayEnabled,
             onCheckedChange = { v -> edit { it.copy(relayEnabled = v) } },
         )
@@ -209,6 +234,26 @@ private fun RelaySection(
             },
             modifier = Modifier.fillMaxWidth(),
         )
+        Text(
+            "${ConnectionRoutes.OWN_RELAY_TITLE}: open its setup link on this phone, or enter its URL above. " +
+                ConnectionRoutes.OWN_RELAY_SCRIPT,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** The Tailscale route: the local server on the tailnet only (the same switch as "Tailscale only" below). */
+@Composable
+private fun TailscaleSection(form: SettingsForm, tailscale: TailscaleState, edit: ((SettingsForm) -> SettingsForm) -> Unit) {
+    SettingsCard {
+        SwitchRow(
+            title = ConnectionRoutes.TAILSCALE_TITLE,
+            subtitle = ConnectionRoutes.TAILSCALE_SUMMARY,
+            checked = form.tailscaleOn,
+            onCheckedChange = { v -> edit { it.withTailscale(v) } },
+        )
+        TailscaleStatus(tailscale)
     }
 }
 
@@ -216,8 +261,8 @@ private fun RelaySection(
 private fun LocalServerSection(form: SettingsForm, validation: SettingsForm.Validation, edit: ((SettingsForm) -> SettingsForm) -> Unit) {
     SettingsCard {
         SwitchRow(
-            title = "Serve MCP on this phone",
-            subtitle = "For USB (adb forward) or same-network use, without a relay.",
+            title = "Local server (advanced)",
+            subtitle = "Serve agents from this phone without a relay: over USB (adb forward), Tailscale or your own network.",
             checked = form.localServerEnabled,
             onCheckedChange = { v -> edit { it.copy(localServerEnabled = v) } },
         )
@@ -231,13 +276,27 @@ private fun LocalServerSection(form: SettingsForm, validation: SettingsForm.Vali
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
             modifier = Modifier.fillMaxWidth(),
         )
-        SwitchRow(
-            title = "Listen on all interfaces",
-            subtitle = "Off: only 127.0.0.1, reached over USB with adb forward. On: also reachable from your " +
-                "Wi-Fi/LAN and Tailscale.",
-            checked = form.localServerBind == LocalBind.ALL_INTERFACES,
-            onCheckedChange = { v -> edit { it.copy(localServerBind = if (v) LocalBind.ALL_INTERFACES else LocalBind.LOOPBACK) } },
-        )
+        Text("Listen on", style = MaterialTheme.typography.labelLarge)
+        Column(Modifier.selectableGroup()) {
+            BIND_CHOICES.forEach { (bind, title, subtitle) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = form.localServerBind == bind, role = Role.RadioButton) {
+                            edit { it.copy(localServerBind = bind) }
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = form.localServerBind == bind, onClick = null)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(title, style = MaterialTheme.typography.bodyLarge)
+                        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
         if (form.localServerBind == LocalBind.ALL_INTERFACES) Notice(SettingsForm.BIND_ALL_WARNING, kind = NoticeKind.WARNING)
     }
 }
@@ -284,7 +343,15 @@ private fun AboutSection(
     }
 }
 
+/** The local server's "Listen on" choices: mode, title, who can reach it. */
+private val BIND_CHOICES = listOf(
+    Triple(LocalBind.LOOPBACK, "This phone only", "Over USB, with adb forward on your computer."),
+    Triple(LocalBind.TAILSCALE, "Tailscale only", "Your own devices on your tailnet."),
+    Triple(LocalBind.ALL_INTERFACES, "All networks", "Anyone on the same Wi-Fi, hotspot or VPN. Unencrypted http://."),
+)
+
 private const val DOCS = """In the PhoneBridge repository:
+• docs/CONNECTING.md: the ways agents reach this phone (relay, Tailscale, your own relay)
 • docs/ARCHITECTURE.md: how agent, relay and phone fit together
 • docs/SECURITY.md: threat model, scopes and approval policies
 • docs/TOOLS.md: every tool agents can call
