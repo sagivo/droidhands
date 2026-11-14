@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: todoist
+name: Todoist
+description: To-do list and task manager.
+category: productivity
+homepage: https://www.todoist.com
+status: experimental
+android:
+  packages: [com.todoist]
+
+actions:
+  - id: add_task
+    title: Add a task
+    description: >-
+      Opens Todoist's add-task screen filled in with the task, due date and priority. The task is NOT saved until
+      the user (or you, with screen_read and ui_tap) taps Add. The due date can be natural language, e.g.
+      "tomorrow 5pm" or "every monday".
+    keywords: [task, todo, to-do, reminder, remember, list, add]
+    risk: action
+    params:
+      content:
+        description: The task, e.g. Renew passport
+        required: true
+        max_length: 500
+      date:
+        description: Optional due date in Todoist's words, e.g. tomorrow, friday 14:00, every monday
+        max_length: 100
+      priority:
+        type: integer
+        description: Priority from 1 (normal, shown as P4) to 4 (urgent, shown as P1); default 1
+        enum: [1, 2, 3, 4]
+        default: 1
+    completes: false
+    android:
+      url: "todoist://addtask?content={{content}}&date={{date}}&priority={{priority}}"
+    examples:
+      - params: {content: Renew passport, date: next friday, priority: 4}
+        expect: {url: "todoist://addtask?content=Renew%20passport&date=next%20friday&priority=4"}
+      - params: {content: Buy milk}
+        expect: {url: "todoist://addtask?content=Buy%20milk&date=&priority=1"}
+      - params: {content: Buy milk, priority: 5}
+        expect: {error: priority}
+      - params: {date: tomorrow}
+        expect: {error: content}
+
+  - id: search
+    title: Search tasks
+    description: Opens Todoist's search with a query, showing matching tasks. Nothing is changed.
+    keywords: [find, search, look up, tasks]
+    risk: action
+    params:
+      query:
+        description: Text to search for, e.g. passport
+        required: true
+        max_length: 200
+    completes: true
+    android:
+      url: "todoist://search?query={{query}}"
+    examples:
+      - params: {query: "Test & Today"}
+        expect: {url: "todoist://search?query=Test%20%26%20Today"}
+      - params: {}
+        expect: {error: query}
+
+  - id: open_today
+    title: Show today's tasks
+    description: Opens Todoist's Today view, with the tasks due today and overdue ones.
+    keywords: [today, due, agenda, overdue, tasks]
+    risk: action
+    completes: true
+    android:
+      url: "todoist://today"
+    examples:
+      - params: {}
+        expect: {url: "todoist://today"}
+
+  - id: open_upcoming
+    title: Show upcoming tasks
+    description: Opens Todoist's Upcoming view, with tasks for the next days.
+    keywords: [upcoming, week, schedule, plan, tasks]
+    risk: action
+    completes: true
+    android:
+      url: "todoist://upcoming"
+    examples:
+      - params: {}
+        expect: {url: "todoist://upcoming"}
+
+  - id: open_inbox
+    title: Show the inbox
+    description: Opens Todoist's Inbox, where tasks without a project go.
+    keywords: [inbox, unsorted, tasks]
+    risk: action
+    completes: true
+    android:
+      url: "todoist://inbox"
+    examples:
+      - params: {}
+        expect: {url: "todoist://inbox"}

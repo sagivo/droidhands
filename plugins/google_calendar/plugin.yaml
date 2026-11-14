@@ -1,0 +1,140 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_calendar
+name: Google Calendar
+description: Google's calendar app (shown as Calendar on the phone).
+category: productivity
+homepage: https://calendar.google.com
+status: experimental
+android:
+  packages: [com.google.android.calendar]
+
+actions:
+  - id: create_event
+    title: Create an event
+    description: >-
+      Adds an event straight to the phone's calendar with the built-in calendar_event_create tool (the primary
+      writable calendar, usually the user's Google Calendar, unless calendar_id is given). No invitations are sent
+      and no reminders are added. start is ISO-8601: 2026-11-14T15:00 (phone's time zone), with an offset, or a
+      date for an all-day event. Give end or duration_minutes (default 60). To let the user review it first, use
+      new_event.
+    keywords: [event, meeting, appointment, schedule, calendar, add, plan]
+    params:
+      title:
+        description: Event title, e.g. Dentist
+        required: true
+        max_length: 500
+      start:
+        description: Start, ISO-8601 date-time or date, e.g. 2026-11-14T15:00 or 2026-11-14
+        required: true
+        max_length: 40
+      end:
+        description: End, ISO-8601 date-time or date (instead of duration_minutes)
+        max_length: 40
+      duration_minutes:
+        type: integer
+        description: Length in minutes when end is not given (default 60)
+        minimum: 1
+        maximum: 527040
+      all_day:
+        type: boolean
+        description: All-day event (default true when start is a date)
+      location:
+        description: Where it takes place
+        max_length: 500
+      description:
+        description: Notes for the event
+        max_length: 5000
+      calendar_id:
+        type: integer
+        description: Calendar id from calendar_list (default the primary writable calendar)
+        minimum: 1
+    android:
+      tool:
+        name: calendar_event_create
+        args:
+          title: "{{title}}"
+          start: "{{start}}"
+          end: "{{end}}"
+          duration_minutes: "{{duration_minutes}}"
+          all_day: "{{all_day}}"
+          location: "{{location}}"
+          description: "{{description}}"
+          calendar_id: "{{calendar_id}}"
+    examples:
+      - params: {title: Dentist, start: "2026-11-20T09:30", duration_minutes: 45, location: Main St Clinic}
+        expect:
+          tool:
+            name: calendar_event_create
+            args: {title: Dentist, start: "2026-11-20T09:30", duration_minutes: 45, location: Main St Clinic}
+      - params: {title: Mom's birthday, start: "2026-12-03", all_day: true, calendar_id: 3}
+        expect:
+          tool:
+            name: calendar_event_create
+            args: {title: Mom's birthday, start: "2026-12-03", all_day: true, calendar_id: 3}
+      - params: {start: "2026-11-20T09:30"}
+        expect: {error: title}
+
+  - id: new_event
+    title: Open a new event form
+    description: >-
+      Opens Google Calendar's new-event screen filled in with the title, times, place and notes. Nothing is saved
+      until the user (or you, with screen_read and ui_tap) taps Save, and the user can pick the calendar and add
+      guests there. Times are Unix epoch milliseconds (UTC); without them Calendar suggests a time.
+    keywords: [event, meeting, appointment, schedule, draft, review, calendar, new]
+    risk: action
+    params:
+      title:
+        description: Event title, e.g. Team lunch
+        max_length: 500
+      start_ms:
+        type: integer
+        description: Start as Unix time in milliseconds (UTC), e.g. 1795680000000
+        minimum: 0
+      end_ms:
+        type: integer
+        description: End as Unix time in milliseconds (UTC)
+        minimum: 0
+      all_day:
+        type: boolean
+        description: All-day event
+      location:
+        description: Where it takes place
+        max_length: 500
+      description:
+        description: Notes for the event
+        max_length: 5000
+    completes: false
+    android:
+      intent:
+        action: android.intent.action.INSERT
+        # The documented intent also sets the data to Events.CONTENT_URI (a content: URI, which recipes can't use);
+        # vnd.android.cursor.dir/event is that URI's MIME type, which calendar apps filter on.
+        type: vnd.android.cursor.dir/event
+        extras:
+          title: "{{title}}"
+          beginTime: {type: long, value: "{{start_ms}}"}
+          endTime: {type: long, value: "{{end_ms}}"}
+          allDay: {type: boolean, value: "{{all_day}}"}
+          eventLocation: "{{location}}"
+          description: "{{description}}"
+    examples:
+      - params: {title: Team lunch, start_ms: 1795680000000, end_ms: 1795683600000, location: Cafe Roma}
+        expect:
+          intent:
+            action: android.intent.action.INSERT
+            package: com.google.android.calendar
+            type: vnd.android.cursor.dir/event
+            data: null
+            extras:
+              title: Team lunch
+              beginTime: 1795680000000
+              endTime: 1795683600000
+              eventLocation: Cafe Roma
+              allDay: null
+              description: null
+      - params: {title: Holiday, all_day: true}
+        expect:
+          intent:
+            extras: {title: Holiday, allDay: true, beginTime: null}
+      - params: {title: Lunch, start_ms: "tomorrow"}
+        expect: {error: start_ms}

@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: zoom
+name: Zoom
+description: Video meetings app.
+category: productivity
+homepage: https://zoom.us
+status: experimental
+android:
+  # Zoom Workplace and its Microsoft Intune build (same app).
+  packages: [us.zoom.videomeetings, us.zoom.videomeetings4intune]
+
+actions:
+  - id: join_meeting
+    title: Join a meeting
+    description: >-
+      Joins a Zoom meeting by its meeting ID, with the user's approval, so other participants may see and hear
+      the user. Zoom may first ask for the passcode, the user's name, or whether to turn video and audio on, and
+      may put the user in a waiting room: check with screen_read and ask the user. The meeting ID is the 9 to 11
+      digits in the invite (zoom.us/j/<ID>).
+    keywords: [meeting, video, conference, join, zoom, webinar, videoconference]
+    risk: sensitive
+    params:
+      meeting_id:
+        description: Meeting ID, digits only without spaces, e.g. 85746352910
+        required: true
+        pattern: "^[0-9]{9,11}$"
+    confirm: Join Zoom meeting {{meeting_id}}
+    completes: false
+    android:
+      url: "https://zoom.us/j/{{meeting_id}}"
+    examples:
+      - params: {meeting_id: "85746352910"}
+        expect: {url: "https://zoom.us/j/85746352910"}
+      - params: {meeting_id: "857 4635 2910"}
+        expect: {error: meeting_id}
+      - params: {}
+        expect: {error: meeting_id}

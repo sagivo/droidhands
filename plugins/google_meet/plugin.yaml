@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../plugin.schema.json
+id: google_meet
+name: Google Meet
+description: Google's video meetings and calling app (shown as Meet on the phone).
+category: productivity
+homepage: https://meet.google.com
+status: experimental
+android:
+  packages: [com.google.android.apps.tachyon]
+
+actions:
+  - id: open_meeting
+    title: Open a meeting's join screen
+    description: >-
+      Opens the join screen of a Google Meet meeting by its code (meet.google.com/abc-defg-hij), with the camera
+      and microphone preview. The user is NOT in the meeting yet: someone must tap "Join now" or "Ask to join"
+      there, so ask the user first if you plan to tap it with ui_tap.
+    keywords: [meeting, video, conference, join, meet, hangout, videoconference]
+    risk: action
+    params:
+      code:
+        description: Meeting code in lowercase, with or without dashes, e.g. abc-defg-hij
+        required: true
+        pattern: "^[a-z]{3}-?[a-z]{4}-?[a-z]{3}$"
+    completes: false
+    android:
+      url: "https://meet.google.com/{{code}}"
+    examples:
+      - params: {code: abc-defg-hij}
+        expect: {url: "https://meet.google.com/abc-defg-hij"}
+      - params: {code: "https://meet.google.com/abc-defg-hij"}
+        expect: {error: code}
+      - params: {}
+        expect: {error: code}
