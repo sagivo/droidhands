@@ -1,3 +1,4 @@
+import com.android.build.api.variant.impl.VariantOutputImpl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -5,6 +6,60 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+// ---- Build inputs (docs/RELEASING.md) ----
+// Each value comes from a Gradle property (-Pname=value or ~/.gradle/gradle.properties) or an
+// environment variable, so CI can set them without editing files. Blank counts as unset.
+
+fun input(property: String, env: String? = null): String? =
+    providers.gradleProperty(property).orNull?.trim()?.takeIf { it.isNotEmpty() }
+        ?: env?.let { providers.environmentVariable(it).orNull?.trim()?.takeIf { value -> value.isNotEmpty() } }
+
+/** A Java string literal for buildConfigField. */
+fun literal(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val pbVersionName: String = input("phonebridge.versionName") ?: "0.1.0"
+val pbVersionCode: Int = input("phonebridge.versionCode")?.let { raw ->
+    raw.toIntOrNull()?.takeIf { it in 1..2_100_000_000 }
+        ?: throw GradleException("phonebridge.versionCode must be a positive integer, got \"$raw\"")
+} ?: 1
+if (!Regex("^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.+-]+)?$").matches(pbVersionName)) {
+    throw GradleException("phonebridge.versionName must look like 1.2.3 (optionally with a -suffix), got \"$pbVersionName\"")
+}
+
+/** Relay the app connects to on first run when the user has none configured (empty = no default relay). */
+val defaultRelayUrl: String = (input("phonebridge.defaultRelayUrl", "PHONEBRIDGE_DEFAULT_RELAY_URL") ?: "").trimEnd('/')
+if (defaultRelayUrl.isNotEmpty() && !Regex("^https?://[^\\s/?#@\"\\\\]+(/[^\\s?#\"\\\\]*)?$").matches(defaultRelayUrl)) {
+    throw GradleException(
+        "phonebridge.defaultRelayUrl / PHONEBRIDGE_DEFAULT_RELAY_URL must be an http(s) base URL such as " +
+            "https://relay.example.com, got \"$defaultRelayUrl\"",
+    )
+}
+
+/** "owner/name" of the GitHub repository whose releases the in-app update check reads (empty = no check). */
+val githubRepo: String = input("phonebridge.githubRepo", "GITHUB_REPOSITORY") ?: ""
+if (githubRepo.isNotEmpty() && !Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").matches(githubRepo)) {
+    throw GradleException("phonebridge.githubRepo / GITHUB_REPOSITORY must be \"owner/name\", got \"$githubRepo\"")
+}
+
+/**
+ * Release signing: all four values, or none. With none, release builds fall back to the debug key
+ * (with a warning) so local sideloading keeps working. `-Pphonebridge.requireReleaseSigning=true`
+ * (used by the release workflow) makes a missing key an error, so a published APK is never
+ * debug-signed.
+ */
+val signingInputs: Map<String, String?> =
+    listOf("PB_KEYSTORE_PATH", "PB_KEYSTORE_PASSWORD", "PB_KEY_ALIAS", "PB_KEY_PASSWORD").associateWith { input(it, it) }
+val releaseSigningConfigured: Boolean = signingInputs.values.all { it != null }
+if (!releaseSigningConfigured) {
+    val missing = signingInputs.filterValues { it == null }.keys.joinToString()
+    if (signingInputs.values.any { it != null }) {
+        throw GradleException("Release signing is only partly configured. Also set: $missing (see docs/RELEASING.md)")
+    }
+    if (input("phonebridge.requireReleaseSigning")?.toBoolean() == true) {
+        throw GradleException("Release signing is required but not configured. Set $missing (see docs/RELEASING.md)")
+    }
 }
 
 android {
@@ -15,15 +70,32 @@ android {
         applicationId = "dev.phonebridge.android"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = pbVersionCode
+        versionName = pbVersionName
+        buildConfigField("String", "DEFAULT_RELAY_URL", literal(defaultRelayUrl))
+        buildConfigField("String", "GITHUB_REPO", literal(githubRepo))
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                val path = signingInputs.getValue("PB_KEYSTORE_PATH")!!
+                storeFile = file(path).also {
+                    if (!it.isFile) throw GradleException("PB_KEYSTORE_PATH does not point to a keystore file: $path")
+                }
+                storePassword = signingInputs.getValue("PB_KEYSTORE_PASSWORD")
+                keyAlias = signingInputs.getValue("PB_KEY_ALIAS")
+                keyPassword = signingInputs.getValue("PB_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Sideloaded personal build: sign release with the debug key so `assembleRelease` is installable.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without a release key (local builds) sign with the debug key, so `assembleRelease` stays
+            // installable. Such an APK can't update, or be updated by, a published release.
+            signingConfig = signingConfigs.getByName(if (releaseSigningConfigured) "release" else "debug")
         }
     }
 
@@ -48,6 +120,23 @@ android {
 
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { variant ->
+        // PhoneBridge-1.2.3.apk, the file the release workflow publishes.
+        variant.outputs.forEach { output ->
+            (output as? VariantOutputImpl)?.outputFileName?.set("PhoneBridge-$pbVersionName.apk")
+        }
+    }
+}
+
+if (!releaseSigningConfigured) {
+    val warning = "WARNING: no release key configured (PB_KEYSTORE_PATH, PB_KEYSTORE_PASSWORD, PB_KEY_ALIAS, PB_KEY_PASSWORD), " +
+        "so this release APK is signed with the DEBUG key. Fine for your own phone; never publish it. See docs/RELEASING.md."
+    tasks.matching { it.name == "packageRelease" }.configureEach {
+        doFirst { logger.warn(warning) }
+    }
 }
 
 dependencies {
