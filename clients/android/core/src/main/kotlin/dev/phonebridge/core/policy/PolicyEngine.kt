@@ -22,8 +22,8 @@ sealed interface PolicyDecision {
 
     /**
      * Refuse; [reason] is shown to the agent. [rateLimited] = a rate limit (audited RATE_LIMITED);
-     * otherwise the token's own rules refused it (a BLOCK tool rule or outside active hours, audited
-     * DENIED_POLICY).
+     * otherwise the token's own rules refused it (a BLOCK tool rule, a tool above the token's max risk, or
+     * outside active hours; audited DENIED_POLICY).
      */
     data class Deny(val reason: String, val rateLimited: Boolean = false) : PolicyDecision
 }
@@ -31,10 +31,11 @@ sealed interface PolicyDecision {
 /**
  * Scope check is done by McpServer before this. PolicyEngine applies, in this order:
  * 1. the token's per-tool rule BLOCK ([ToolRule.BLOCK]) → Deny;
- * 2. the token's [TokenRecord.activeHours], evaluated at [clock] in [zone] (phone-local time) → Deny
+ * 2. the token's [TokenRecord.maxRisk]: a tool of higher risk → Deny, whatever its tool rule says;
+ * 3. the token's [TokenRecord.activeHours], evaluated at [clock] in [zone] (phone-local time) → Deny
  *    outside the window (overnight windows such as 22:00-06:00 work);
- * 3. per-token sliding-window rate limits (recording the call when allowed);
- * 4. confirmation: rule ASK → RequireConfirmation (even for `READ` tools), rule ALLOW → Allow,
+ * 4. per-token sliding-window rate limits (recording the call when allowed);
+ * 5. confirmation: rule ASK → RequireConfirmation (even for `READ` tools), rule ALLOW → Allow,
  *    no rule → the token's ConfirmPolicy vs the tool's Risk.
  *
  * Every call counts toward the token's total limit; `SENSITIVE` calls also count toward the
@@ -62,6 +63,7 @@ class PolicyEngine(
     fun evaluate(token: TokenRecord, tool: Tool): PolicyDecision {
         val rule = token.toolRules[tool.name]
         if (rule == ToolRule.BLOCK) return PolicyDecision.Deny(blockedMessage(tool.name))
+        token.maxRisk?.let { cap -> if (exceedsMaxRisk(cap, tool.risk)) return PolicyDecision.Deny(aboveMaxRiskMessage(tool.name, cap)) }
         token.activeHours?.let { hours -> outsideActiveHours(hours, clock())?.let { return it } }
 
         val sensitive = tool.risk == Risk.SENSITIVE
@@ -149,6 +151,9 @@ class PolicyEngine(
             null -> requiresConfirmation(policy, risk)
         }
 
+        /** True when a token capped at [maxRisk] (null = no cap) may not use a tool of [risk]. */
+        fun exceedsMaxRisk(maxRisk: Risk?, risk: Risk): Boolean = maxRisk != null && risk > maxRisk
+
         internal const val INVALID_HOURS_MESSAGE =
             "This agent's active hours in PhoneBridge are not a valid time window, so it may not act right now. " +
                 "Ask the user to fix or turn off this agent's active hours in the PhoneBridge app."
@@ -156,6 +161,17 @@ class PolicyEngine(
         internal fun blockedMessage(toolName: String) =
             "The tool '$toolName' is blocked for this agent by the user. Do not try to work around it (for example " +
                 "with other tools). If the task needs it, ask the user to change this agent's tool rules in the PhoneBridge app."
+
+        internal fun aboveMaxRiskMessage(toolName: String, cap: Risk): String {
+            val limit = when (cap) {
+                Risk.READ -> "read-only tools (it may look but not change anything on the phone)"
+                Risk.ACTION -> "tools that do not act toward other people (no sending, calling or other hard-to-undo actions)"
+                Risk.SENSITIVE -> "all tools"
+            }
+            return "The tool '$toolName' is not available to this agent: the user limited it to $limit. Do not try to work " +
+                "around it (for example with other tools). If the task needs it, ask the user to change this agent's access " +
+                "level in the PhoneBridge app."
+        }
 
         internal fun outsideHoursMessage(hours: ActiveHours, nowMinute: Int) =
             "This agent may only act between ${ActiveWindow.format(hours.startMinute)} and ${ActiveWindow.format(hours.endMinute)} " +

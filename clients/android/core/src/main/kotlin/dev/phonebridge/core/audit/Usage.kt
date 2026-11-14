@@ -21,7 +21,7 @@ data class TokenUsage(
     val okCalls: Long = 0,
     /** TOOL_ERROR, TIMEOUT, EXCEPTION, UNKNOWN_TOOL. */
     val errorCalls: Long = 0,
-    /** DENIED_SCOPE, RATE_LIMITED, PAUSED, DENIED_BY_USER, CONFIRM_TIMEOUT, DENIED_POLICY, DENIED_APP. */
+    /** DENIED_SCOPE, RATE_LIMITED, PAUSED, DENIED_BY_USER, CONFIRM_TIMEOUT, DENIED_POLICY, DENIED_APP, CANCELLED. */
     val deniedCalls: Long = 0,
     val lastCallAt: Long? = null,
     /** tool name -> calls. */

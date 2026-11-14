@@ -1,5 +1,6 @@
 package dev.phonebridge.core.auth
 
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import org.junit.Test
 import java.io.IOException
@@ -49,6 +50,26 @@ class TokenManagerSettingsTest {
         assertNull(manual.record.clientHost)
         assertEquals(AppPolicy(), manual.record.appPolicy)
         assertNull(tm.issue("Blank host", emptySet(), ConfirmPolicy.NEVER, null, clientHost = "  ").record.clientHost)
+    }
+
+    @Test
+    fun maxRiskIsIssuedPersistedAndEditable() {
+        assertNull(issue().record.maxRisk, "no cap by default")
+        val readOnly = tm.issue("Reader", Scopes.PRESET_READ_ONLY, ConfirmPolicy.SENSITIVE, null, maxRisk = Risk.READ)
+        assertEquals(Risk.READ, readOnly.record.maxRisk)
+        assertEquals(Risk.READ, store.saved.first { it.id == readOnly.record.id }.maxRisk)
+
+        assertEquals(Risk.ACTION, tm.update(readOnly.record.id) { it.copy(maxRisk = Risk.ACTION) }.maxRisk)
+        assertNull(tm.update(readOnly.record.id) { it.copy(maxRisk = null) }.maxRisk)
+        assertNull(store.saved.first { it.id == readOnly.record.id }.maxRisk)
+    }
+
+    @Test
+    fun presetsDeclareTheirRiskCap() {
+        assertEquals(Scopes.PRESETS.keys, Scopes.PRESET_MAX_RISK.keys)
+        assertEquals(Risk.READ, Scopes.PRESET_MAX_RISK["Read-only"])
+        assertNull(Scopes.PRESET_MAX_RISK["Assistant"])
+        assertNull(Scopes.PRESET_MAX_RISK["Full control"])
     }
 
     @Test

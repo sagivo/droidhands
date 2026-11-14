@@ -11,7 +11,13 @@ data class PairingRequest(
     val displayCode: String,
     val remoteAddress: String?,
     val userAgent: String?,
-    /** Epoch millis after which the relay gives up. */
+    /**
+     * Epoch millis after which the relay gives up. In a request handed to [PairingHandler.onPairRequest]
+     * this is on the PHONE's clock (`System.currentTimeMillis()` in production): the relay's `expiresAt`
+     * (relay time) converted with the clock offset from the relay's `welcome.serverTime`, and at most
+     * 10 minutes from now. It is when the prompt is cancelled, so compare it with the local clock for
+     * countdowns and expiry checks.
+     */
     val expiresAt: Long,
 )
 

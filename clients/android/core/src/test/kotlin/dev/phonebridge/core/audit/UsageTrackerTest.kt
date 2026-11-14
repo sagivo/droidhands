@@ -43,14 +43,14 @@ class UsageTrackerTest {
         val errors = listOf(AuditOutcome.TOOL_ERROR, AuditOutcome.TIMEOUT, AuditOutcome.EXCEPTION, AuditOutcome.UNKNOWN_TOOL)
         val denied = listOf(
             AuditOutcome.DENIED_SCOPE, AuditOutcome.RATE_LIMITED, AuditOutcome.PAUSED, AuditOutcome.DENIED_BY_USER,
-            AuditOutcome.CONFIRM_TIMEOUT, AuditOutcome.DENIED_POLICY, AuditOutcome.DENIED_APP,
+            AuditOutcome.CONFIRM_TIMEOUT, AuditOutcome.DENIED_POLICY, AuditOutcome.DENIED_APP, AuditOutcome.CANCELLED,
         )
         (ok + errors + denied).forEach { t.record(entry(it)) }
         val usage = t.usage.value.getValue("tok1")
-        assertEquals(12, usage.totalCalls)
+        assertEquals(13, usage.totalCalls)
         assertEquals(1, usage.okCalls)
         assertEquals(4, usage.errorCalls)
-        assertEquals(7, usage.deniedCalls)
+        assertEquals(8, usage.deniedCalls)
         assertEquals(now, usage.lastCallAt)
         // Every outcome is classified somewhere (or deliberately ignored).
         AuditOutcome.entries.forEach { UsageCounting.category(it) }

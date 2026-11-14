@@ -280,6 +280,47 @@ class McpAdvancedControlsTest {
     }
 
     @Test
+    fun readOnlyCapHidesAndRefusesEverythingThatActs() = runTest {
+        // The "Read-only" preset: device/apps scopes are granted, but their ACTION tools must not run.
+        val readOnly = tokens.issue(
+            "Summarizer", Scopes.PRESET_READ_ONLY, ConfirmPolicy.SENSITIVE, null,
+            maxRisk = Scopes.PRESET_MAX_RISK.getValue("Read-only"),
+        )
+        // A tool rule cannot lift the cap.
+        tokens.update(readOnly.record.id) { it.copy(toolRules = mapOf("app_open" to ToolRule.ALLOW)) }
+        val s = server()
+        val list = s.handle(TransportRequest("Bearer ${readOnly.plaintext}", """{"jsonrpc":"2.0","id":1,"method":"tools/list"}""", "relay"))
+        val names = Json.parseToJsonElement(list.body!!).jsonObject["result"]!!.jsonObject["tools"]!!.jsonArray
+            .map { it.jsonObject["name"]!!.jsonPrimitive.content }
+        assertEquals(listOf("bridge_capabilities", "device_status", "sms_list"), names)
+
+        val refused = s.call(readOnly, "app_open", """{"package":"com.maps"}""")
+        assertTrue(refused.isError())
+        assertTrue(refused.text().contains("limited it to read-only tools"), refused.text())
+        assertEquals(AuditOutcome.DENIED_POLICY, lastAudit().outcome)
+        assertEquals(0, sideEffects.get())
+        assertEquals(0, prompts.size)
+        assertFalse(s.call(readOnly, "device_status").isError())
+
+        val payload = Json.parseToJsonElement(s.call(readOnly, "bridge_capabilities").text()).jsonObject
+        assertEquals("READ", payload["token"]!!.jsonObject["max_risk"]!!.jsonPrimitive.content)
+        assertEquals(0, payload["token"]!!.jsonObject["tool_rules"]!!.jsonObject.size, "rules of hidden tools are not shown")
+        assertEquals(
+            listOf("bridge_capabilities", "device_status", "sms_list"),
+            payload["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content },
+        )
+
+        // Capped at ACTION: actions run, sending does not.
+        val noSending = tokens.issue("Helper", Scopes.ALL, ConfirmPolicy.SENSITIVE, null, maxRisk = Risk.ACTION)
+        assertFalse(s.call(noSending, "app_open", """{"package":"com.maps"}""").isError())
+        assertTrue(s.call(noSending, "sms_send").isError())
+        assertEquals(1, sideEffects.get())
+
+        val uncapped = Json.parseToJsonElement(s.call(issue(), "bridge_capabilities").text()).jsonObject
+        assertEquals(kotlinx.serialization.json.JsonNull, uncapped["token"]!!.jsonObject["max_risk"])
+    }
+
+    @Test
     fun blocklistSummaryCountsWithoutNaming() {
         val access = dev.phonebridge.core.tools.AppAccess(AppAccessMode.BLOCKLIST, setOf("com.secret.app", "com.other"), setOf("com.bank"))
         val summary = PolicySummary.appAccess(access)

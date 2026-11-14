@@ -19,6 +19,9 @@ import kotlin.coroutines.cancellation.CancellationException
  *   `{approved:false, reason:"busy"}` right away.
  * * The prompt is cancelled, and nothing is sent, on `pair_cancel`, at the request's `expiresAt`
  *   (relay time, see [relayNow]), or when the connection ends ([cancelAll]).
+ * * The handler gets [PairingRequest.expiresAt] on the phone's clock ([localNow]): the moment this
+ *   class cancels the prompt, so the platform's own countdowns and expiry checks agree with the relay
+ *   even when the phone's clock is off.
  * * An approved token that cannot be delivered (connection closed, or the prompt was cancelled as
  *   the user tapped Allow) is reported to [PairingHandler.onPairFinished] as abandoned, so the
  *   platform deletes a token no agent will ever receive.
@@ -27,17 +30,21 @@ import kotlin.coroutines.cancellation.CancellationException
  * @param send sends a text frame on this connection; false if it could not be queued.
  * @param launch starts a coroutine for this connection (null once the connection is stale).
  * @param relayNow the relay's clock (local clock corrected by the welcome's `serverTime`).
+ * @param localNow the phone's clock, the time base of the [PairingRequest.expiresAt] the handler gets.
  */
 internal class RelayPairings(
     private val handler: PairingHandler?,
     private val send: (String) -> Boolean,
     private val launch: (CoroutineStart, suspend CoroutineScope.() -> Unit) -> Job?,
     private val relayNow: () -> Long,
+    private val localNow: () -> Long = relayNow,
 ) {
     private val pending = ConcurrentHashMap<String, Job>()
 
     fun onRequest(frame: JsonObject) {
-        val request = RelayProtocol.pairingRequest(frame, relayNow()) ?: return
+        val relayTime = relayNow()
+        val localTime = localNow()
+        val request = RelayProtocol.pairingRequest(frame, relayTime) ?: return
         val id = request.id
         if (handler == null) {
             send(RelayProtocol.pairResponse(id, PairingDecision.Denied(REASON_BUSY)).toString())
@@ -48,10 +55,12 @@ internal class RelayPairings(
             send(RelayProtocol.pairResponse(id, PairingDecision.Denied(REASON_BUSY)).toString())
             return
         }
-        val remainingMs = (request.expiresAt - relayNow()).coerceAtMost(MAX_PROMPT_MS)
+        val remainingMs = (request.expiresAt - relayTime).coerceAtMost(MAX_PROMPT_MS)
         if (remainingMs <= 0) return // Already expired at the relay: it reports that itself.
+        // Relay time -> phone time: the handler compares expiresAt with the phone's own clock.
+        val local = request.copy(expiresAt = localTime + remainingMs)
 
-        val job = launch(CoroutineStart.LAZY) { prompt(handler, request, remainingMs) } ?: return
+        val job = launch(CoroutineStart.LAZY) { prompt(handler, local, remainingMs) } ?: return
         if (pending.putIfAbsent(id, job) != null) {
             job.cancel()
             return

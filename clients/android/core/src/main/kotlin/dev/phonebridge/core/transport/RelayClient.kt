@@ -65,14 +65,17 @@ data class DeviceHello(
  * * Tunneled requests run on [scope] with [Dispatchers.IO], because [handler] may block briefly.
  *   Responses go back on the connection the request came from; requests still running when that
  *   connection drops finish, but their responses are dropped (the relay has already failed them).
- *   [stop] cancels in-flight requests.
+ *   [stop] cancels in-flight requests, so their responses are dropped too. Cancelling a request does
+ *   not stop a tool call that already began: [dev.phonebridge.core.mcp.McpServer] runs each in a job
+ *   of its own and lets it finish (and audits it).
  * * Responses that would exceed the relay's 16 MiB frame limit are replaced by a 500 error.
  * * One-tap pairing (docs/PROTOCOL.md §5.3): `pair_request` frames go to [pairingHandler] and its
  *   decision is sent back as `pair_response`; prompts are cancelled (and nothing is sent) on
  *   `pair_cancel`, at the request's `expiresAt`, or when the connection drops; `pair_complete` and
  *   `pair_abandoned` reach [PairingHandler.onPairFinished]. Without a handler every request is
- *   answered `busy`. See [RelayPairings]. `expiresAt` is relay time: the clock offset is taken from
- *   the welcome's `serverTime`.
+ *   answered `busy`. See [RelayPairings]. The frame's `expiresAt` is relay time: the clock offset is
+ *   taken from the welcome's `serverTime` (relay clock minus [clock]), and the [PairingRequest] the
+ *   handler gets carries `expiresAt` converted to [clock]'s time base.
  * * The welcome's `connectUrl` (one-tap connector URL) is reported in [RelayStatus.Connected].
  *
  * Lifecycle: [start] while running (connecting, connected or waiting to retry) is a no-op; [stop]
@@ -183,6 +186,7 @@ class RelayClient(
             send = { text -> webSocket?.send(text) ?: false },
             launch = { start, block -> launchFor(gen, start, block) },
             relayNow = { clock() + clockOffsetMs },
+            localNow = clock,
         )
 
         override fun onOpen(webSocket: WebSocket, response: Response) {

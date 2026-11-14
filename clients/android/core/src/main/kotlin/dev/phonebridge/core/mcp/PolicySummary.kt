@@ -23,7 +23,8 @@ import kotlinx.serialization.json.putJsonObject
 internal object PolicySummary {
     /**
      * Adds `app_access`, `tool_rules` (rules of the tools in [inScopeTools], BLOCK included so the agent
-     * stops trying them), `active_hours` and `one_time_codes_hidden` for [ctx].
+     * stops trying them), `active_hours`, `one_time_codes_hidden` and `max_risk` (the risk cap's name, or
+     * null for none) for [ctx].
      */
     fun put(builder: JsonObjectBuilder, ctx: CallContext, inScopeTools: Set<String>) {
         builder.put("app_access", appAccess(ctx.appAccess))
@@ -32,6 +33,7 @@ internal object PolicySummary {
         }
         builder.put("active_hours", activeHours(ctx.activeHours))
         builder.put("one_time_codes_hidden", ctx.redactOneTimeCodes)
+        builder.put("max_risk", ctx.maxRisk?.name)
     }
 
     fun appAccess(access: AppAccess): JsonObject = buildJsonObject {

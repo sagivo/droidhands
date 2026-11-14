@@ -1,5 +1,6 @@
 package dev.phonebridge.core.auth
 
+import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.util.Encoding
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +44,8 @@ class TokenManager(
      * @param origin "manual" (created in the app) or "pairing" (one-tap pairing); non-blank.
      * @param clientHost for paired agents, the OAuth redirect host (blank = null).
      * @param appPolicy which apps the agent may see/operate.
+     * @param maxRisk highest tool risk the agent may use (null = no cap); see
+     *   [dev.phonebridge.core.tools.Scopes.PRESET_MAX_RISK] for the presets' values.
      * @throws IllegalArgumentException on invalid arguments; any exception from [TokenStore.save].
      */
     fun issue(
@@ -53,6 +56,7 @@ class TokenManager(
         origin: String = "manual",
         clientHost: String? = null,
         appPolicy: AppPolicy = AppPolicy(),
+        maxRisk: Risk? = null,
     ): IssuedToken {
         val trimmedName = name.trim()
         require(trimmedName.isNotEmpty()) { "Token name must not be blank" }
@@ -80,6 +84,7 @@ class TokenManager(
                 origin = trimmedOrigin,
                 clientHost = clientHost?.trim()?.takeIf { it.isNotEmpty() },
                 appPolicy = appPolicy.copy(packages = LinkedHashSet(appPolicy.packages)),
+                maxRisk = maxRisk,
             )
             commit(listOf(record) + current)
             return IssuedToken(record, TokenFormat.format(deviceId, record.id, secret))
@@ -130,7 +135,7 @@ class TokenManager(
 
     /**
      * Edits a token's mutable settings (name, scopes, confirmPolicy, expiresAt, appPolicy, toolRules,
-     * activeHours). [transform]'s changes to id/secretHash/createdAt/origin/lastUsedAt/revoked are
+     * activeHours, maxRisk). [transform]'s changes to id/secretHash/createdAt/origin/lastUsedAt/revoked are
      * ignored, and so are changes to clientHost (provenance, like origin). Persists; returns the
      * updated record (the stored one, without saving, when nothing changed).
      *

@@ -27,6 +27,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -104,7 +105,11 @@ class RelayPairingTest {
         fun nextFinished() = assertNotNull(finished.poll(10, TimeUnit.SECONDS), "expected onPairFinished")
     }
 
-    private fun connect(handler: PairingHandler?, serverTime: Long = System.currentTimeMillis()): Pair<RelayClient, Peer> {
+    private fun connect(
+        handler: PairingHandler?,
+        serverTime: Long = System.currentTimeMillis(),
+        clock: () -> Long = System::currentTimeMillis,
+    ): Pair<RelayClient, Peer> {
         val peer = Peer().also { server.enqueue(MockResponse().withWebSocketUpgrade(it)) }
         val client = RelayClient(
             relayBaseUrl = server.url("/").toString(),
@@ -113,6 +118,7 @@ class RelayPairingTest {
             handler = { TransportResponse(202, null) },
             scope = scope,
             pairingHandler = handler,
+            clock = clock,
         ).also { clients += it }
         client.start()
         assertEquals("hello", peer.next().type())
@@ -158,7 +164,24 @@ class RelayPairingTest {
         assertEquals("abcdefghijkl", response["tokenId"]!!.jsonPrimitive.content)
 
         val request = handler.requests.single()
-        assertEquals(PairingRequest("p_1", "Claude", "claude.ai", "K7Q2", "203.0.113.7", "Mozilla/5.0", expiresAt), request)
+        // expiresAt is converted to the phone's clock; here both clocks agree up to the welcome's transit time.
+        assertTrue(abs(request.expiresAt - expiresAt) < 2_000, "expiresAt ${request.expiresAt} vs $expiresAt")
+        assertEquals(PairingRequest("p_1", "Claude", "claude.ai", "K7Q2", "203.0.113.7", "Mozilla/5.0", expiresAt), request.copy(expiresAt = expiresAt))
+    }
+
+    @Test
+    fun handlerGetsExpiresAtOnThePhonesClock() {
+        // The phone's clock is 3 minutes ahead of the relay's: the relay's expiresAt would already be in the
+        // phone's past, so the platform would deny at once. The handler must get it on the phone's clock.
+        val skewMs = 180_000L
+        val handler = Handler { PairingDecision.Denied("denied") }
+        val (_, peer) = connect(handler, clock = { System.currentTimeMillis() + skewMs })
+        val relayExpiresAt = System.currentTimeMillis() + 60_000
+        peer.ws().send(pairRequest(expiresAt = relayExpiresAt))
+        assertEquals("denied", peer.nextFrame()["reason"]!!.jsonPrimitive.content)
+        val expected = relayExpiresAt + skewMs
+        val got = handler.requests.single().expiresAt
+        assertTrue(abs(got - expected) < 2_000, "expiresAt $got, expected about $expected")
     }
 
     @Test

@@ -22,6 +22,13 @@ enum class AuditOutcome {
 
     /** The tool touched an app the user blocked for this agent (app access / never-allow list). */
     DENIED_APP,
+
+    /**
+     * Stopped after it began: access was paused, the agent was revoked or removed (or its token expired), or
+     * the tool was taken away from it while the call was waiting or running. The detail says why and whether
+     * the tool had started (then the action may have partly completed).
+     */
+    CANCELLED,
 }
 
 @Serializable
