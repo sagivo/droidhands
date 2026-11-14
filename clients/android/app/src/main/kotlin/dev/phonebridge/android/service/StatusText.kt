@@ -80,6 +80,7 @@ object StatusText {
         AuditOutcome.DENIED_SCOPE -> "not allowed"
         AuditOutcome.DENIED_POLICY -> "blocked by rule"
         AuditOutcome.DENIED_APP -> "app blocked"
+        AuditOutcome.CANCELLED -> "stopped"
         AuditOutcome.RATE_LIMITED -> "rate limited"
         AuditOutcome.PAUSED -> "blocked: paused"
         AuditOutcome.DENIED_BY_USER -> "denied by you"

@@ -25,6 +25,7 @@ object AuditPresentation {
         AuditOutcome.DENIED_SCOPE,
         AuditOutcome.DENIED_POLICY,
         AuditOutcome.DENIED_APP,
+        AuditOutcome.CANCELLED,
         AuditOutcome.RATE_LIMITED,
         AuditOutcome.PAUSED,
         AuditOutcome.DENIED_BY_USER,
@@ -40,6 +41,7 @@ object AuditPresentation {
         AuditOutcome.DENIED_SCOPE -> "Not in scope"
         AuditOutcome.DENIED_POLICY -> "Blocked by rule"
         AuditOutcome.DENIED_APP -> "App blocked"
+        AuditOutcome.CANCELLED -> "Stopped"
         AuditOutcome.RATE_LIMITED -> "Rate limited"
         AuditOutcome.PAUSED -> "Paused"
         AuditOutcome.DENIED_BY_USER -> "Denied by you"
