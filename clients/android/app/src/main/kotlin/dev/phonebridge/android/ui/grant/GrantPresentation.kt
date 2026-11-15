@@ -25,7 +25,8 @@ object GrantPresentation {
 
     const val CHOSEN = "Only what I choose"
     const val CHOSEN_DESCRIPTION =
-        "Pick the apps and what it can do. Inside that it acts without asking you; anything else is refused."
+        "Pick the apps and what it can do. Inside that it acts without asking you; anything else is refused. " +
+            "Best for agents you don't fully trust."
 
     const val APPS_HEADER = "Apps"
     const val ALL_APPS = "All apps"

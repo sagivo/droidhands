@@ -23,13 +23,13 @@ import kotlinx.serialization.json.putJsonObject
 const val CAPABILITIES_TOOL_NAME = "bridge_capabilities"
 
 /**
- * The `bridge_capabilities` meta tool (scope "", Risk.READ): returns the calling token's name, scopes
- * and advanced controls (app access summary, per-tool rules, active hours, whether one-time codes are
- * hidden, risk cap; see [PolicySummary]), plus every tool visible to that token (in scope, not BLOCKed
+ * The `bridge_capabilities` meta tool (scope "", Risk.READ): returns the calling token's name, scopes,
+ * its grant in plain words (`access`, see [AccessSummary]) and advanced controls (app access summary,
+ * per-tool rules, active hours, whether one-time codes are hidden, risk cap; see [PolicySummary]), plus every tool visible to that token (in scope, not BLOCKed
  * and within its risk cap) with `available` and `unavailable_reason`, and [extraStatus] (platform status
  * such as accessibility/notification access/locked) merged in.
  *
- * Output: `{"token":{"name","scopes","app_access":{…},"tool_rules":{name:rule},"active_hours":{…},
+ * Output: `{"token":{"name","scopes","access":{…},"app_access":{…},"tool_rules":{name:rule},"active_hours":{…},
  * "one_time_codes_hidden","max_risk"},"status":{…extraStatus},"tools":[{"name","title","risk","scope","rule"?,
  * "available","unavailable_reason"?}]}`. [extraStatus] values may be strings, numbers, booleans,
  * null, lists/arrays, maps (nested) or [JsonElement]s; anything else is rendered with
@@ -42,7 +42,8 @@ fun capabilitiesTool(
     name = CAPABILITIES_TOOL_NAME,
     title = "PhoneBridge capabilities",
     description = "Describes what this PhoneBridge connection can do right now: the token's name and scopes, " +
-        "the limits the user set for this agent (which apps it may use, per-tool rules, active hours, whether one-time codes are hidden), " +
+        "the access the user gave this agent (what it may and may not do, which apps it may use, whether actions ask the user " +
+        "first, where the user can change it), per-tool rules, active hours, whether one-time codes are hidden, " +
         "the phone's status (for example whether accessibility or notification access is enabled, or the phone is locked), " +
         "and every tool this token can use with whether it is available now and why not. " +
         "Call it when unsure which tools work or after a tool reports it is unavailable.",
