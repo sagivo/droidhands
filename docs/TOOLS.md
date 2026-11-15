@@ -9,8 +9,15 @@ Every tool has:
   tools outside its scopes in `tools/list`.
 * **risk**: `READ` (no side effects), `ACTION` (local side effects, reversible), or `SENSITIVE`
   (acts on your behalf toward other people or the outside world, or is hard to undo).
-  The token's confirmation policy decides which risks need on-phone approval:
-  `NEVER`, `SENSITIVE` (default), or `ALL_ACTIONS`.
+  The token's confirmation policy decides which risks need on-phone approval: `NEVER` (what the
+  grant screen sets, so nothing inside the agent's access asks), `SENSITIVE` (the "Ask me before it
+  sends messages, calls or pays" switch), or `ALL_ACTIONS` (older agents only). See
+  [SECURITY.md](SECURITY.md#access-the-grant).
+* **Outside the agent's access** (a scope it wasn't given, an app it may not use): the tool is not in
+  `tools/list`, and a call is refused at once, never turned into a prompt. Missing scopes are a JSON-RPC
+  `-32602` error, apps an `isError` result; both name what is missing and where the user can allow it,
+  e.g. *"Claude isn't allowed to make or answer calls ('phone_call' needs that). The user can allow it in
+  PhoneBridge > Agents > Claude > Access."*
 * **confirm**: `pre` means the server asks for approval before running the tool, using a summary
   built from the raw arguments. `internal` means the tool first resolves its targets (for example
   the contact name to a number), then asks for approval with the *resolved* details before any
@@ -42,7 +49,7 @@ an optional leading `+`, and spacing or punctuation). USSD/MMI codes containing 
 
 | tool | scope | risk | args | notes |
 |---|---|---|---|---|
-| `bridge_capabilities` | *(none, always allowed)* | READ | – | The token's name and scopes, its `app_access` (mode, summary, allowed apps for allowlists, blocked-app **count** only), `tool_rules`, `active_hours`, `max_risk` (for example `READ` for Read-only agents, whose action tools
+| `bridge_capabilities` | *(none, always allowed)* | READ | – | The token's name and scopes, its `access` (the grant in plain words: `abilities`, `partly`, `not_allowed`, `asks_user_before` (`nothing`, `sensitive actions` or `every action`), `approvals`, `change_in`), its `app_access` (mode, summary, allowed apps for allowlists, blocked-app **count** only), `tool_rules`, `active_hours`, `max_risk` (for example `READ` for Read-only agents, whose action tools
 are hidden), and `one_time_codes_hidden`. Also each visible tool with its availability (for example a missing permission, accessibility off or stuck, or phone locked) and its `rule`. BLOCKed tools are omitted. Agents should call it when unsure. |
 
 ## Device — scope `device`
@@ -79,7 +86,8 @@ against the action's JSON Schema (unknown parameters are refused), then runs the
 named `<package>/<action id>`** (e.g. `com.spotify.music/play`) through the normal pipeline: that
 name's scope (usually `apps`), risk, per-tool rules, risk cap, active hours, rate limits, approval and
 audit entry (noting "via app_action_run"). `app_action_run`'s own scope, rule and risk cap must allow
-the call too. An `ASK` rule on `app_action_run` makes every app action ask first; an `ALLOW` rule on it
+the call too. Inside the agent's access an action runs without asking, unless its approval setting asks
+for its risk; an `ASK` rule on `app_action_run` makes every app action ask first; an `ALLOW` rule on it
 does not skip the approval an action needs. Actions whose recipe is a built-in tool (`tool` recipes) run
 exactly as that tool, e.g. `whatsapp_send`, with its rules and audit entry. Actions of unreviewed local plugins always need
 approval on the phone.
