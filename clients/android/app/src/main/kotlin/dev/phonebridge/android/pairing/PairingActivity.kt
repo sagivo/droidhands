@@ -17,13 +17,16 @@ import androidx.lifecycle.lifecycleScope
 import dev.phonebridge.android.confirm.ApprovalScreens
 import dev.phonebridge.android.confirm.applySecureWindow
 import dev.phonebridge.android.graph.BridgeGraph
+import dev.phonebridge.android.ui.Destination
+import dev.phonebridge.android.ui.GraphAdapters
+import dev.phonebridge.android.ui.MainActivity
 import dev.phonebridge.android.ui.theme.PhoneBridgeTheme
 import dev.phonebridge.core.transport.PairingRequest
 import kotlinx.coroutines.launch
 
 /**
  * Approve or deny a one-tap agent pairing (docs/PROTOCOL.md §5.3 step 7): client name, redirect
- * host, the code to compare with the browser, access level, confirmation policy and name.
+ * host, the code to compare with the browser, the agent's grant (docs/SECURITY.md "Access") and name.
  *
  * Like the action-approval screen it is not shown over the lock screen, Allow additionally asks
  * the keyguard to be dismissed first, and the window is hardened with [applySecureWindow] (no
@@ -32,7 +35,8 @@ import kotlinx.coroutines.launch
  * (decided elsewhere, cancelled by the relay, or expired).
  */
 class PairingActivity : ComponentActivity() {
-    private val coordinator by lazy { BridgeGraph.get(this).pairing }
+    private val graph by lazy { BridgeGraph.get(this) }
+    private val coordinator by lazy { graph.pairing }
 
     private var requestId by mutableStateOf<String?>(null)
     private var approving by mutableStateOf(false)
@@ -54,9 +58,13 @@ class PairingActivity : ComponentActivity() {
             return
         }
         applySecureWindow()
+        // For the grant's app picker.
+        graph.appDirectory.refresh()
         setContent {
             PhoneBridgeTheme {
                 val pending by coordinator.pendingPairings.collectAsStateWithLifecycle()
+                val apps by graph.appDirectory.apps.collectAsStateWithLifecycle()
+                val settings by graph.settings.state.collectAsStateWithLifecycle()
                 val current = requestId?.let { id -> pending.firstOrNull { it.id == id } }
                 if (current != null) shown = current
                 val request = current ?: shown?.takeIf { it.id == requestId }
@@ -67,11 +75,15 @@ class PairingActivity : ComponentActivity() {
                         request = request,
                         approving = approving,
                         error = error,
+                        apps = apps,
+                        neverAllow = GraphAdapters.neverAllowApps(settings),
                         onAllow = { choice -> allow(request.id, choice) },
                         onDeny = {
                             coordinator.deny(request.id)
                             finish()
                         },
+                        // The request stays open (notification, Home card) while the user edits the list.
+                        onChangeNeverAllow = { startActivity(MainActivity.intent(this, Destination.NEVER_ALLOW_ROUTE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
                     )
                 }
             }

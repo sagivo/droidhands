@@ -1,5 +1,6 @@
 package dev.phonebridge.android.pairing
 
+import dev.phonebridge.core.auth.GrantSettings
 import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.tools.Scopes
@@ -48,9 +49,9 @@ sealed interface PairingApproval {
  *   it (coroutine cancellation); the prompt is removed in every case. Malformed or already expired
  *   requests are refused without a prompt, and beyond [PairingRules.MAX_PENDING] open prompts the
  *   answer is "busy".
- * * [approve] issues the token (name, scopes, risk cap and confirmation policy chosen by the user,
- *   `origin = "pairing"`, `clientHost` = the redirect host) only while the request is open and the
- *   phone is unlocked. If the request ends while the token is being saved, the token is deleted
+ * * [approve] issues the token with the grant the user chose (its scopes, app access, risk cap and
+ *   confirmation policy, [dev.phonebridge.core.auth.GrantDraft.settings]; `origin = "pairing"`, `clientHost` =
+ *   the redirect host) in one save, only while the request is open and the phone is unlocked. If the request ends while the token is being saved, the token is deleted
  *   again, so no token exists that the relay never received.
  * * `pair_abandoned` ([onPairFinished] with completed = false) deletes the issued token if it is
  *   still unused. As a safety net for a lost `pair_complete`/`pair_abandoned` (e.g. the relay
@@ -145,12 +146,14 @@ class PairingCoordinator(
     suspend fun approve(id: String, choice: PairingChoice): PairingApproval {
         val entry = registry[id] ?: return PairingApproval.NoLongerPending
         if (isLocked()) return PairingApproval.Failed("Unlock your phone, then tap Allow again.")
-        val scopes = choice.scopes.filterTo(LinkedHashSet()) { it in Scopes.ALL }
-        if (scopes.isEmpty()) return PairingApproval.Failed("Choose what this agent may do.")
+        choice.grant.error?.let { return PairingApproval.Failed(it) }
+        val settings = choice.grant.settings()
+        val scopes = settings.scopes.filterTo(LinkedHashSet()) { it in Scopes.ALL }
+        if (scopes.isEmpty()) return PairingApproval.Failed("Choose at least one thing it can do.")
         if (!entry.tryBeginApproval()) return PairingApproval.Failed("Already connecting this agent…")
         return scope.async(io) {
             try {
-                issueFor(entry, choice.copy(scopes = scopes))
+                issueFor(entry, choice.name, settings.copy(scopes = scopes))
             } finally {
                 entry.endApproval()
             }
@@ -164,17 +167,20 @@ class PairingCoordinator(
     fun denyWithNonce(id: String, nonce: String): Boolean =
         registry.decideWithNonce(id, nonce, PairingDecision.Denied(PairingRules.DENIED))
 
-    private fun issueFor(entry: PendingPairing, choice: PairingChoice): PairingApproval {
+    private fun issueFor(entry: PendingPairing, name: String, grant: GrantSettings): PairingApproval {
         val request = entry.request
         if (entry.outcome != null || clock() >= request.expiresAt) return PairingApproval.NoLongerPending
+        // The whole grant (scopes, apps, approvals, cap) is saved with the token, so nobody ever holds it without it.
         val issued = try {
             tokens().issue(
-                name = PairingPresentation.tokenName(choice.name, request),
-                scopes = choice.scopes,
-                confirmPolicy = choice.policy,
+                name = PairingPresentation.tokenName(name, request),
+                scopes = grant.scopes,
+                confirmPolicy = grant.confirmPolicy,
                 ttlMillis = null,
                 origin = ORIGIN_PAIRING,
                 clientHost = request.redirectHost,
+                appPolicy = grant.appPolicy,
+                maxRisk = grant.maxRisk,
             )
         } catch (e: CancellationException) {
             throw e
@@ -182,19 +188,11 @@ class PairingCoordinator(
             log("Issuing the paired agent's token failed", e)
             return saveFailed(e)
         }
-        // Capped before the token is handed out, so nobody ever holds it without the cap.
-        val record = try {
-            choice.maxRisk?.let { cap -> tokens().update(issued.record.id) { it.copy(maxRisk = cap) } } ?: issued.record
-        } catch (e: Exception) {
-            log("Limiting the paired agent's token failed", e)
-            deleteNow(issued.record.id)
-            return saveFailed(e)
-        }
-        if (entry.decide(PairingDecision.Approved(issued.plaintext, record.id))) {
-            return PairingApproval.Connected(record)
+        if (entry.decide(PairingDecision.Approved(issued.plaintext, issued.record.id))) {
+            return PairingApproval.Connected(issued.record)
         }
         // The request ended while the token was being saved: nobody will ever receive it.
-        deleteNow(record.id)
+        deleteNow(issued.record.id)
         return PairingApproval.NoLongerPending
     }
 

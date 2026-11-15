@@ -9,13 +9,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,16 +22,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import dev.phonebridge.android.ui.apps.AppInfo
-import dev.phonebridge.android.ui.apps.AppSelection
 import dev.phonebridge.android.ui.components.Accents
-import dev.phonebridge.android.ui.components.AppsIcon
 import dev.phonebridge.android.ui.components.CardPadding
 import dev.phonebridge.android.ui.components.ChoiceChip
 import dev.phonebridge.android.ui.components.IconRowInset
@@ -41,82 +35,18 @@ import dev.phonebridge.android.ui.components.IconTile
 import dev.phonebridge.android.ui.components.ListDivider
 import dev.phonebridge.android.ui.components.ListRow
 import dev.phonebridge.android.ui.components.ListSection
-import dev.phonebridge.android.ui.components.Notice
-import dev.phonebridge.android.ui.components.NoticeKind
 import dev.phonebridge.android.ui.components.RowValue
 import dev.phonebridge.android.ui.components.SectionTitle
 import dev.phonebridge.android.ui.components.SwitchRow
 import dev.phonebridge.android.ui.components.TimePickerDialog
 import dev.phonebridge.android.ui.setup.SetupLogic
 import dev.phonebridge.core.auth.ActiveHours
-import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.ConfirmPolicy
-
-/** App access mode choices, in the order offered. */
-private val APP_MODES = listOf(
-    AppAccessMode.ALL to "All apps",
-    AppAccessMode.ALLOWLIST to "Only selected apps",
-    AppAccessMode.BLOCKLIST to "All apps except selected",
-)
-
-/**
- * "App access": which apps this agent may see and operate (screen, notifications, opening apps).
- * Apps on the global never-allow list stay blocked whatever is chosen here.
- */
-@Composable
-internal fun AppAccessSection(
-    draft: AgentDraft,
-    apps: List<AppInfo>?,
-    neverAllowCount: Int,
-    onChange: ((AgentDraft) -> AgentDraft) -> Unit,
-    onChooseApps: () -> Unit,
-) {
-    val policy = draft.appPolicy
-    val neverAllowNote = if (neverAllowCount > 0) {
-        " ${if (neverAllowCount == 1) "1 app is" else "$neverAllowCount apps are"} blocked for every agent " +
-            "(Settings > Security > Never-allow apps)."
-    } else {
-        ""
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ListSection(
-            title = "App access",
-            footer = "Which apps this agent may read and operate on screen, in notifications and when opening apps. " +
-                "Contacts, SMS and calendar are controlled by the capabilities above." + neverAllowNote,
-        ) {
-            Column(Modifier.selectableGroup()) {
-                APP_MODES.forEachIndexed { index, (mode, label) ->
-                    if (index > 0) ListDivider(ControlRowInset)
-                    ListRow(
-                        title = label,
-                        leading = { RadioButton(selected = policy.mode == mode, onClick = null) },
-                        modifier = Modifier.selectable(selected = policy.mode == mode, role = Role.RadioButton) {
-                            onChange { it.withAppMode(mode) }
-                        },
-                    )
-                }
-            }
-            if (policy.mode != AppAccessMode.ALL) {
-                val count = policy.packages.size
-                ListDivider()
-                ListRow(
-                    title = "Choose apps",
-                    subtitle = (if (policy.mode == AppAccessMode.ALLOWLIST) "Allowed: " else "Blocked: ") +
-                        if (apps == null) "$count ${if (count == 1) "app" else "apps"}" else AppSelection.summary(policy.packages, apps),
-                    leading = { IconTile(AppsIcon, Accents.Blue) },
-                    onClick = onChooseApps,
-                )
-            }
-        }
-        if (policy.mode != AppAccessMode.ALL) {
-            draft.appPolicyWarning?.let { Notice(it, kind = NoticeKind.WARNING) }
-        }
-    }
-}
 
 /** Explanation under the tool rules list. */
 internal const val TOOL_RULES_FOOTER =
-    "Override the approval setting for single tools: Allow never asks, Ask always asks, Block hides the tool from this agent."
+    "Exceptions for single tools: Block hides a tool from this agent, Ask makes it ask you first every time " +
+        "(even inside its access), Allow never asks."
 
 /**
  * First row of the per-tool rules list: the rules in force, and a toggle that shows or hides one

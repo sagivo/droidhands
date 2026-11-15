@@ -2,6 +2,7 @@ package dev.phonebridge.core.tools
 
 import dev.phonebridge.core.auth.AppAccessMode
 import dev.phonebridge.core.auth.AppPolicy
+import dev.phonebridge.core.auth.GrantText
 
 /**
  * Effective app access for one call: the token's AppPolicy combined with the global never-allow list
@@ -19,6 +20,8 @@ class AppAccess(
     packages: Set<String>,
     /** Global never-allow list (always blocked, whatever [mode] says). Includes the bridge app itself. */
     neverAllow: Set<String>,
+    /** The agent's name, for refusals ("Claude isn't allowed to use WhatsApp…"); blank = "this agent". */
+    val agentName: String = "",
 ) {
     /** Allowlisted (ALLOWLIST) or blocked (BLOCKLIST) packages from the token (a defensive copy). */
     val packages: Set<String> = packages.toSet()
@@ -41,12 +44,12 @@ class AppAccess(
 
     /**
      * Throws [AppBlockedException] (a [ToolException]) if [packageName] is not allowed. The message names
-     * the app ([label] or the package), says it was blocked by the user for this agent, and tells the
-     * agent not to work around it.
+     * the app ([label] or the package), says it is outside this agent's access (and where the user can
+     * allow it) or on the never-allow list, and tells the agent not to work around it.
      */
     fun require(packageName: String, label: String? = null) {
         if (isAllowed(packageName)) return
-        throw AppBlockedException(packageName, blockedMessage(packageName, label, globally = packageName in neverAllow))
+        throw AppBlockedException(packageName, blockedMessage(packageName, label, globally = packageName in neverAllow, agentName = agentName))
     }
 
     override fun toString(): String = "AppAccess(mode=$mode, packages=${packages.size}, neverAllow=${neverAllow.size})"
@@ -54,25 +57,13 @@ class AppAccess(
     companion object {
         val UNRESTRICTED = AppAccess(AppAccessMode.ALL, emptySet(), emptySet())
 
-        /** Combines a token's [policy] with the global [neverAllow] list. */
-        fun of(policy: AppPolicy, neverAllow: Set<String>): AppAccess = AppAccess(policy.mode, policy.packages, neverAllow)
+        /** Combines a token's [policy] with the global [neverAllow] list; [agentName] names the agent in refusals. */
+        fun of(policy: AppPolicy, neverAllow: Set<String>, agentName: String = ""): AppAccess =
+            AppAccess(policy.mode, policy.packages, neverAllow, agentName)
 
-        /** Agent-facing refusal text (pure; exposed for tests and tools that filter silently). */
-        fun blockedMessage(packageName: String, label: String?, globally: Boolean): String {
-            val name = label?.trim()?.takeIf { it.isNotEmpty() && it != packageName }?.let { "'$it' ($packageName)" } ?: "'$packageName'"
-            val where = if (globally) {
-                "The user blocked $name for this agent: it is on PhoneBridge's never-allow list, which applies to every agent."
-            } else {
-                "The user blocked $name for this agent in PhoneBridge's app-access settings."
-            }
-            val next = if (globally) {
-                "If the task needs this app, tell the user and let them do it themselves."
-            } else {
-                "If the task needs this app, ask the user to allow it for this agent in PhoneBridge (Agents > this agent > App access)."
-            }
-            return "$where Do not try to work around this (for example through other apps, links, intents, notifications or " +
-                "screen control). $next"
-        }
+        /** Agent-facing refusal text (pure; exposed for tests and tools that filter silently). See [GrantText.appNotAllowed]. */
+        fun blockedMessage(packageName: String, label: String?, globally: Boolean, agentName: String = ""): String =
+            GrantText.appNotAllowed(agentName, packageName, label, globally)
     }
 }
 

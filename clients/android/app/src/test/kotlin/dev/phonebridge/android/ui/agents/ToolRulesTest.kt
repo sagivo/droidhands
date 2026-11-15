@@ -60,11 +60,11 @@ class ToolRulesTest {
 
     @Test
     fun summaries() {
-        assertEquals("No rules: the approval setting decides", ToolRules.summary(emptyMap()))
+        assertEquals("No rules: its access decides", ToolRules.summary(emptyMap()))
         val rules = mapOf("a" to ToolRule.BLOCK, "b" to ToolRule.BLOCK, "c" to ToolRule.ASK, "d" to ToolRule.ALLOW, "e" to ToolRule.ALLOW)
         assertEquals("2 blocked · 1 always asks · 2 never ask", ToolRules.summary(rules))
         assertEquals("1 blocked", ToolRules.summary(rules, visibleTools = setOf("a", "zzz")))
-        assertEquals("No rules: the approval setting decides", ToolRules.summary(rules, visibleTools = emptySet()))
+        assertEquals("No rules: its access decides", ToolRules.summary(rules, visibleTools = emptySet()))
     }
 
     @Test

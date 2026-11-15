@@ -592,7 +592,7 @@ class AppActionToolsTest {
         val token = issue(appPolicy = AppPolicy(AppAccessMode.ALLOWLIST, setOf("com.whatsapp")))
         val result = call(token, "app_action_run", """{"app":"com.spotify.music","action":"play","params":{"query":"x"}}""")
         assertTrue(result.isError())
-        assertTrue("blocked 'Spotify' (com.spotify.music) for this agent" in result.texts()[0], result.texts()[0])
+        assertTrue("isn't allowed to use Spotify (com.spotify.music)" in result.texts()[0], result.texts()[0])
         assertEquals(AuditOutcome.DENIED_APP, lastAudit().outcome)
         assertEquals("app_action_run", lastAudit().tool)
         assertEquals("blocked app com.spotify.music", lastAudit().detail)

@@ -2,6 +2,7 @@ package dev.phonebridge.core.policy
 
 import dev.phonebridge.core.auth.ActiveHours
 import dev.phonebridge.core.auth.ConfirmPolicy
+import dev.phonebridge.core.auth.GrantText
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.ToolRule
 import dev.phonebridge.core.tools.Risk
@@ -91,8 +92,10 @@ class PolicyEngine(
      * [dev.phonebridge.core.tools.DispatchTool], whose resolved tool then goes through [evaluate].
      */
     fun precheck(token: TokenRecord, tool: Tool): PolicyDecision.Deny? {
-        if (token.toolRules[tool.name] == ToolRule.BLOCK) return PolicyDecision.Deny(blockedMessage(tool.name))
-        token.maxRisk?.let { cap -> if (exceedsMaxRisk(cap, tool.risk)) return PolicyDecision.Deny(aboveMaxRiskMessage(tool.name, cap)) }
+        if (token.toolRules[tool.name] == ToolRule.BLOCK) return PolicyDecision.Deny(blockedMessage(tool.name, token.name))
+        token.maxRisk?.let { cap ->
+            if (exceedsMaxRisk(cap, tool.risk)) return PolicyDecision.Deny(aboveMaxRiskMessage(tool.name, cap, token.name))
+        }
         token.activeHours?.let { hours -> outsideActiveHours(hours, clock())?.let { return it } }
         return null
     }
@@ -170,19 +173,17 @@ class PolicyEngine(
             "This agent's active hours in PhoneBridge are not a valid time window, so it may not act right now. " +
                 "Ask the user to fix or turn off this agent's active hours in the PhoneBridge app."
 
-        internal fun blockedMessage(toolName: String) =
-            "The tool '$toolName' is blocked for this agent by the user. Do not try to work around it (for example " +
-                "with other tools). If the task needs it, ask the user to change this agent's tool rules in the PhoneBridge app."
+        /** A BLOCK rule refused [toolName] for the agent [agentName]; see [GrantText.toolBlocked]. */
+        internal fun blockedMessage(toolName: String, agentName: String = "") = GrantText.toolBlocked(agentName, toolName)
 
-        internal fun aboveMaxRiskMessage(toolName: String, cap: Risk): String {
+        /** [toolName] is above [cap] (older tokens, e.g. the Read-only preset); see [GrantText.aboveRiskCap]. */
+        internal fun aboveMaxRiskMessage(toolName: String, cap: Risk, agentName: String = ""): String {
             val limit = when (cap) {
                 Risk.READ -> "read-only tools (it may look but not change anything on the phone)"
                 Risk.ACTION -> "tools that do not act toward other people (no sending, calling or other hard-to-undo actions)"
                 Risk.SENSITIVE -> "all tools"
             }
-            return "The tool '$toolName' is not available to this agent: the user limited it to $limit. Do not try to work " +
-                "around it (for example with other tools). If the task needs it, ask the user to change this agent's access " +
-                "level in the PhoneBridge app."
+            return GrantText.aboveRiskCap(agentName, toolName, limit)
         }
 
         internal fun outsideHoursMessage(hours: ActiveHours, nowMinute: Int) =

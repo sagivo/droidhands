@@ -101,18 +101,24 @@ object AppsPresentation {
     /** The risk chip: Read, Action or Sensitive, as on the tool rules. */
     fun riskLabel(risk: Risk): String = ToolRules.riskLabel(risk)
 
-    /** Whether the action asks the user first with the recommended approval setting ("Ask for sensitive actions"). */
-    fun needsApproval(action: ActionInfo): Boolean = action.unreviewed || action.risk == Risk.SENSITIVE
+    /**
+     * Whether the action asks the user first whatever the agent's access says: only actions of unreviewed local
+     * plugins. Everything else runs without asking for agents allowed to use the app (docs/SECURITY.md "Access").
+     */
+    fun needsApproval(action: ActionInfo): Boolean = action.unreviewed
 
     /** One line about approval and what really runs, or null when there is nothing to add. */
     fun approvalNote(action: ActionInfo): String? = when {
         action.unreviewed -> "Always asks you first: it comes from an unreviewed local plugin."
         action.builtInTool != null ->
-            "Runs the ${action.builtInTool} tool, so that tool's approval and rules apply too." +
-                if (action.risk == Risk.SENSITIVE) " Asks you first unless you changed that." else ""
-        action.risk == Risk.SENSITIVE -> "Asks you first, unless an agent's approval setting says otherwise."
+            "Runs the ${action.builtInTool} tool, so that tool's rules apply too." +
+                if (action.risk == Risk.SENSITIVE) " $ASKS_IF_SWITCH_ON" else ""
+        action.risk == Risk.SENSITIVE -> ASKS_IF_SWITCH_ON
         else -> null
     }
+
+    /** Sensitive actions ask only agents whose access has the "ask me before…" switch on. */
+    const val ASKS_IF_SWITCH_ON = "Sensitive: asks you first only for agents set to \"Ask me before it sends messages, calls or pays\"."
 
     /** "query (required): What to play". */
     fun paramText(p: ActionParamInfo): String =

@@ -53,7 +53,7 @@ app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
 * **Plugins**: one small YAML file per app in [`plugins/`](plugins), written by the community and
   reviewed in pull requests, adds the actions written for that app (deep links, intents and, if needed,
   screen recipes). They ship inside the app.
-* **Same security as any tool**: each action is checked, approved (by its risk), rate-limited and
+* **Same security as any tool**: each action is checked against the agent's access, rate-limited and
   audited as `<package>/<action>`; it is pinned to its app, and you can block an app or a single action
   for every agent or for one. The **Apps** tab shows every app and what agents can do in it.
 
@@ -67,14 +67,18 @@ app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
 The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
 * **One-tap pairing**: paste your connection URL into Claude.ai, Claude Code, ChatGPT or any MCP
-  client, check the 4-letter code on the phone, choose an access level, and tap **Allow**. The token
+  client, check the 4-letter code on the phone, give it access, and tap **Allow**. The token
   is minted on the phone (256-bit, stored only as a hash). Manual tokens are available too.
-* **Per-agent control**: access level (Read-only / Assistant / Full control, or custom scopes),
-  **which apps** it may see and operate, per-tool **Allow / Ask / Block** rules, **active hours**,
-  expiry, and instant **revoke**. A global never-allow list pre-selects banking, password-manager
-  and authenticator apps, and one-time codes are hidden from agents by default.
-* **On-phone approval** of sensitive actions (default). Approval shows the *resolved* recipient and
-  text, needs an unlocked phone, and auto-denies after 60 s.
+* **Access chosen once, no prompts after**: **Everything**, or **only what you choose**: which apps
+  and what it can do (read messages, use apps, send messages, calls…). Inside that the agent acts
+  without asking; anything else is refused and the agent is told where you can allow it. Change it
+  any time in *Agents › (agent) › Access*. A global never-allow list (banking, password-manager and
+  authenticator apps pre-selected) applies even to Everything, and one-time codes are hidden from
+  agents by default.
+* **Optional approvals**: "Ask me before it sends messages, calls or pays", or an *Ask* rule on any
+  tool. Approval shows the *resolved* recipient and text, needs an unlocked phone, and auto-denies
+  after 60 s. Per-tool **Allow / Ask / Block** rules, **active hours**, expiry and instant **revoke**
+  are per agent too.
 * Per-token rate limits, a full **audit log** with per-agent usage charts, and a global **pause**
   switch (in the app and in the notification).
 * A live **activity notification** while an agent works ("Claude Code is using your phone"), with

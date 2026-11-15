@@ -45,7 +45,7 @@ internal fun ActionRulesToggleRow(summary: String, available: Boolean, loading: 
     if (!available) {
         ListRow(
             title = "Not available for this agent",
-            subtitle = "It needs the Apps capability and an access level above Read-only (and no Block rule on app_action_run).",
+            subtitle = "Its access needs \"Use apps\" (and no read-only limit or Block rule on app_action_run).",
             leading = { IconTile(AppsIcon, Accents.Gray) },
         )
         return

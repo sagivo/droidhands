@@ -102,7 +102,7 @@ object ToolRules {
     /** "2 blocked · 1 always asks · 3 never ask", or "No rules" — counts only [visibleTools] if given. */
     fun summary(rules: Map<String, ToolRule>, visibleTools: Set<String>? = null): String {
         val counted = if (visibleTools == null) rules else rules.filterKeys { it in visibleTools }
-        if (counted.isEmpty()) return "No rules: the approval setting decides"
+        if (counted.isEmpty()) return "No rules: its access decides"
         val blocked = counted.count { it.value == ToolRule.BLOCK }
         val ask = counted.count { it.value == ToolRule.ASK }
         val allow = counted.count { it.value == ToolRule.ALLOW }

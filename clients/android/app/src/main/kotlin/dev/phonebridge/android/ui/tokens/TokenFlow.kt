@@ -17,6 +17,8 @@ fun TokenFlow(vm: TokensViewModel, main: MainViewModel) {
         TokenScreen.Editor -> TokenEditorScreen(
             draft = vm.draft,
             creating = vm.creating,
+            apps = vm.apps.collectAsStateWithLifecycle().value,
+            neverAllow = vm.neverAllowApps.collectAsStateWithLifecycle().value,
             onChange = vm::updateDraft,
             onCancel = vm::cancelCreate,
             onCreate = vm::create,

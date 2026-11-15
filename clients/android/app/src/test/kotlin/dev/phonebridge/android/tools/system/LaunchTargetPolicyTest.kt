@@ -71,7 +71,8 @@ class LaunchTargetPolicyTest {
         val decision = LaunchTargetPolicy.decide(resolver, listOf(bank, chrome), allowAllBut(bank, chrome))
         assertEquals(LaunchDecision.Blocked(listOf(bank, chrome)), decision)
         val e = assertThrows(ToolException::class.java) { LaunchTargetPolicy.requireLaunchable(decision, "this link") }
-        assertTrue(e.message!!.contains("blocked by the user for this agent"))
+        assertTrue(e.message!!.contains("This agent isn't allowed to use any app"))
+        assertTrue(e.message!!.contains("PhoneBridge > Agents > (this agent) > Access"))
         assertTrue(e.message!!.contains("work around"))
     }
 

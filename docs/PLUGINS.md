@@ -136,7 +136,7 @@ apps (`dev.phonebridge.fixture.*`), which test plugins target.
 | `title` | yes | Short imperative title, e.g. "Play music" (≤ 60 chars). |
 | `description` | yes | For the agent: what it does, what it does *not* do, and caveats (≤ 600 chars). |
 | `keywords` | no | Extra words for `app_actions_list(query=…)` search (at most 20, each ≤ 40 chars). |
-| `risk` | yes** | `read`, `action` (local, reversible: opens or plays something) or `sensitive` (reaches other people, spends money, or is hard to undo). Drives on-phone approval. See §9 for the floors the validator enforces. |
+| `risk` | yes** | `read`, `action` (local, reversible: opens or plays something) or `sensitive` (reaches other people, spends money, or is hard to undo). Decides which actions ask first for agents with "Ask me before it sends messages, calls or pays" on (inside an agent's access nothing else asks). See §9 for the floors the validator enforces. |
 | `scope` | no | The token scope required (default `apps`). Allowed: `apps`, `device`, `contacts.read`, `messages.read`, `messages.send`, `calls`, `notifications.read`, `calendar.read`, `calendar.write`, `location`, `screen.read`. |
 | `params` | no | Ordered map of parameter name to spec (§5). Names match `^[a-z][a-z0-9_]{0,39}$`, at most 10. |
 | `confirm` | no | Template for the approval prompt (≤ 300 chars), e.g. `Send "{{text}}" to {{contact}} on Telegram`. Defaults to `<App>: <title> (name=value, …)`. For local plugins the prompt also shows what the recipe will really do (e.g. the link it opens). |
@@ -393,8 +393,9 @@ At run time:
   list), its actions are hidden from that agent and refused.
 * **Policy applies per action.** Each action is checked as its own tool, named
   `<package>/<action id>` (e.g. `com.spotify.music/play`), against the agent's scopes, risk cap
-  and per-tool rules. It is approved according to its `risk`, rate-limited, and audited under that
-  name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
+  and per-tool rules. It runs without asking unless the agent's approval setting (the "Ask me before it
+  sends messages, calls or pays" switch, for `sensitive` actions) or an *Ask* rule says otherwise, is
+  rate-limited, and is audited under that name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
   Read-only agent can't run app actions). An *Ask* rule on `app_action_run` makes every app action ask
   first; an *Allow* rule on it never skips the approval an action needs, so the app doesn't offer it there.
   Parameters are checked, and the recipe rendered, before any approval prompt. In the app, these rules are set per agent under *Agents → (agent) → Advanced →

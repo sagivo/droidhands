@@ -250,7 +250,7 @@ private fun ActionRow(action: ActionInfo, appBlocked: Boolean) {
         val needsApproval = AppsPresentation.needsApproval(action)
         val flags = listOfNotNull(
             "Blocked for all agents".takeIf { appBlocked },
-            "Needs approval".takeIf { needsApproval },
+            "Always asks".takeIf { needsApproval },
             "Discovered".takeIf { action.discovered },
         )
         if (flags.isNotEmpty()) {

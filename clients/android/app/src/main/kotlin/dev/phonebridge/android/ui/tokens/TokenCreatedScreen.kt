@@ -50,6 +50,7 @@ import dev.phonebridge.android.ui.components.PrimaryButton
 import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.SecureWindowEffect
 import dev.phonebridge.android.ui.components.padded
+import dev.phonebridge.android.ui.grant.GrantPresentation
 import dev.phonebridge.android.ui.settings.RelayUrls
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.core.auth.IssuedToken
@@ -121,8 +122,7 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                         modifier = Modifier.semantics { heading() },
                     )
                     Text(
-                        "${TokenPresentation.scopeSummary(token.record.scopes, token.record.maxRisk)} · " +
-                            "${TokenPresentation.policyLabel(token.record.confirmPolicy)} · " +
+                        "${GrantPresentation.shortSummary(token.record)} · " +
                             TokenPresentation.expiryText(token.record.expiresAt, System.currentTimeMillis()),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -134,7 +134,7 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                 Notice(
                     title = "Copy it now: it's shown only once",
                     text = "PhoneBridge keeps only a hash of the token. If you lose it, revoke it and create a new one. " +
-                        "Treat it like a password: anyone holding it can use this phone within its scopes.",
+                        "Treat it like a password: anyone holding it can use this phone within its access.",
                     kind = NoticeKind.WARNING,
                 )
             }

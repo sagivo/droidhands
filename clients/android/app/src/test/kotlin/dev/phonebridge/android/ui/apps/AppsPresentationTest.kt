@@ -74,8 +74,9 @@ class AppsPresentationTest {
         assertNull(AppsPresentation.approvalNote(plain))
         assertFalse(AppsPresentation.needsApproval(plain))
         val sensitive = action("p.q", "order", risk = Risk.SENSITIVE)
-        assertTrue(AppsPresentation.needsApproval(sensitive))
-        assertTrue(AppsPresentation.approvalNote(sensitive)!!.startsWith("Asks you first"))
+        // Inside an agent's access nothing asks, unless the user turned on "Ask me before it sends messages, calls or pays".
+        assertFalse(AppsPresentation.needsApproval(sensitive))
+        assertEquals(AppsPresentation.ASKS_IF_SWITCH_ON, AppsPresentation.approvalNote(sensitive))
         val local = action("p.q", "x", unreviewed = true)
         assertTrue(AppsPresentation.needsApproval(local))
         assertTrue(AppsPresentation.approvalNote(local)!!.contains("unreviewed"))
