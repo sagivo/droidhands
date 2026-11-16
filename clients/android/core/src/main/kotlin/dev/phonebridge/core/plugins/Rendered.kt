@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonObject
 // Recipes after rendering with one call's parameters (RecipeRenderer): platform-neutral and ready to run.
 // Every rendered intent, link and step sequence is pinned to [packageName], the app's installed package.
 
-/** A rendered [AndroidRecipe]. */
+/** A rendered [Recipe]. */
 sealed interface RenderedRecipe
 
 /**

@@ -4,8 +4,19 @@ import dev.phonebridge.core.tools.AppAccess
 import dev.phonebridge.core.tools.CallContext
 import kotlinx.serialization.json.JsonObject
 
+/** The operating system a device runs. Picks each plugin action's recipe section (`android:` or `ios:`). */
+enum class DeviceOs {
+    ANDROID,
+    IOS,
+    ;
+
+    /** The plugin YAML key and the `platform` agents see, e.g. `ios`. */
+    val id: String get() = name.lowercase()
+}
+
 /** An installed app that can be launched, as the platform lists it. */
 data class InstalledApp(
+    /** Android package name, or iOS bundle identifier: the app's id everywhere (app access, rules, audit). */
     val packageName: String,
     /** The name users know it by, e.g. "Spotify". */
     val label: String,
@@ -47,10 +58,14 @@ data class ActionResult(val fields: JsonObject = JsonObject(emptyMap()), val not
 
 /**
  * What the platform provides for app actions (docs/PLUGINS.md). The Android app implements it with
- * PackageManager, its fuzzy app matcher and the accessibility service; core tests use a fake.
+ * PackageManager, its fuzzy app matcher and the accessibility service; the iOS host with the app inventory and the
+ * on-device runner (docs/IOS.md); core tests use a fake.
  * Implementations must be thread-safe.
  */
 interface AppActionsPlatform {
+    /** Which OS this is: plugin actions run with their recipe for it ([PluginAction.recipeFor]). */
+    val os: DeviceOs get() = DeviceOs.ANDROID
+
     /** Launchable apps installed now, PhoneBridge itself excluded. May be cached and refreshed on package changes. */
     suspend fun installedApps(): List<InstalledApp>
 
@@ -66,6 +81,15 @@ interface AppActionsPlatform {
      * recipes, ids as in §8 (`open`, `share_text`, `shortcut_<id>`, …). Empty if none or not installed.
      */
     suspend fun discoveredActions(packageName: String): List<PluginAction>
+
+    /**
+     * What [packageName] declares that is useful to know but is not an action PhoneBridge can start, shown to agents
+     * as `declares` in app_actions_list (null or empty: nothing). Keys are kinds and values are lists of short
+     * objects, e.g. iOS `app_intents` (`{id, title, phrases?, params?}`: only Siri, Spotlight and Shortcuts can run
+     * them, so they are done with phone use), `quick_actions` (Home Screen icon menu), `document_types`. Read from the
+     * installed app version, never from a list kept by PhoneBridge.
+     */
+    suspend fun declaredCapabilities(packageName: String): JsonObject? = null
 
     /** Null if [action] of [packageName] can run now, else why not (e.g. steps need accessibility). Fast, never blocks. */
     fun unavailableReason(packageName: String, action: PluginAction): String?

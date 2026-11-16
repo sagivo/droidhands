@@ -37,7 +37,7 @@ object PluginExamples {
     }
 
     /** Null when the example passes, else what went wrong. */
-    private fun runOne(plugin: AppPlugin, action: PluginAction, recipe: AndroidRecipe, example: PluginExample, renderer: RecipeRenderer): String? {
+    private fun runOne(plugin: AppPlugin, action: PluginAction, recipe: Recipe, example: PluginExample, renderer: RecipeRenderer): String? {
         val expect = example.expect
         val rendered = try {
             renderer.render(recipe, ParamValues.validate(action.params, example.params))
@@ -61,7 +61,7 @@ object PluginExamples {
         }
     }
 
-    private fun mismatchedKind(expected: String, recipe: AndroidRecipe) =
+    private fun mismatchedKind(expected: String, recipe: Recipe) =
         "expects $expected, but the action's recipe is ${recipe.kind}"
 
     private fun intent(actual: RenderedIntent, fields: JsonObject, renderer: RecipeRenderer): String? {

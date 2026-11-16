@@ -43,7 +43,7 @@ data class AppPlugin(
     val tested: List<TestedRecord> = emptyList(),
     /** Android packages this plugin applies to; the first installed one is used. */
     val androidPackages: List<String> = emptyList(),
-    /** Reserved for the iOS client (kept, not checked). */
+    /** iOS bundle ids this plugin applies to (`ios.bundle_ids`); the first installed one is used. */
     val iosBundleIds: List<String> = emptyList(),
     val actions: List<PluginAction>,
     val source: PluginSource = PluginSource.BUNDLED,
@@ -78,18 +78,26 @@ data class PluginAction(
     /** Null for the default by recipe (see [completesByDefault]). */
     val completes: Boolean? = null,
     /** Null: no Android recipe, the action is skipped on Android (§4). */
-    val android: AndroidRecipe? = null,
+    val android: Recipe? = null,
+    /** Null: no iOS recipe, the action is skipped on iOS (§4). Never an [IntentRecipe]. */
+    val ios: Recipe? = null,
     val examples: List<PluginExample> = emptyList(),
 ) {
     /** The scope a token needs for a non-[ToolRecipe] action. */
     val effectiveScope: String get() = scope ?: Scopes.APPS
 
     /** Whether the action finishes the task by itself (§4 `completes`). */
-    val completesTask: Boolean get() = completes ?: completesByDefault(android)
+    val completesTask: Boolean get() = completes ?: completesByDefault(android ?: ios)
+
+    /** The recipe that runs this action on [os], or null if it has none there (the action is skipped on that OS). */
+    fun recipeFor(os: DeviceOs): Recipe? = when (os) {
+        DeviceOs.ANDROID -> android
+        DeviceOs.IOS -> ios
+    }
 
     companion object {
         /** True for `tool` and `steps` recipes, false for `intent` and `url` (§4). */
-        fun completesByDefault(recipe: AndroidRecipe?): Boolean = recipe is ToolRecipe || recipe is StepsRecipe
+        fun completesByDefault(recipe: Recipe?): Boolean = recipe is ToolRecipe || recipe is StepsRecipe
     }
 }
 
@@ -133,8 +141,11 @@ data class ParamSpec(
     }
 }
 
-/** How an action runs on Android: exactly one recipe (§6). */
-sealed interface AndroidRecipe {
+/**
+ * How an action runs: exactly one recipe per OS section (§6). Android takes all four kinds; iOS takes `url`, `steps`
+ * and `tool` (there are no intents on iOS).
+ */
+sealed interface Recipe {
     /** The YAML key, e.g. `intent`. */
     val kind: String
 }
@@ -153,17 +164,17 @@ data class IntentRecipe(
     val className: String? = null,
     /** In declaration order; keys are literal. */
     val extras: Map<String, ExtraSpec> = emptyMap(),
-) : AndroidRecipe {
+) : Recipe {
     override val kind: String get() = "intent"
 }
 
 /** `url`: open a link in the app with ACTION_VIEW, pinned to its package (§6.3). [url] is a URL-context template. */
-data class UrlRecipe(val url: String) : AndroidRecipe {
+data class UrlRecipe(val url: String) : Recipe {
     override val kind: String get() = "url"
 }
 
 /** `steps`: a screen recipe confined to the app (§6.4). */
-data class StepsRecipe(val steps: List<Step>) : AndroidRecipe {
+data class StepsRecipe(val steps: List<Step>) : Recipe {
     override val kind: String get() = "steps"
 }
 
@@ -172,7 +183,7 @@ data class ToolRecipe(
     val name: String,
     /** Argument name to value; keys are literal. */
     val args: Map<String, ValueSpec> = emptyMap(),
-) : AndroidRecipe {
+) : Recipe {
     override val kind: String get() = "tool"
 }
 

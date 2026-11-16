@@ -19,7 +19,7 @@ import kotlinx.serialization.json.longOrNull
  */
 class RecipeRenderer(private val packageName: String) {
     /** Renders [recipe]. @throws ToolException if the result isn't allowed or a typed value doesn't convert. */
-    fun render(recipe: AndroidRecipe, values: JsonObject): RenderedRecipe = when (recipe) {
+    fun render(recipe: Recipe, values: JsonObject): RenderedRecipe = when (recipe) {
         is IntentRecipe -> intent(recipe, values)
         is UrlRecipe -> url(recipe.url, values)
         is StepsRecipe -> RenderedSteps(packageName, steps(recipe.steps, values))

@@ -303,7 +303,7 @@ internal class PluginParser(private val source: PluginSource) {
 
     // Recipes (§6)
 
-    private fun recipe(e: JsonElement, path: String): AndroidRecipe? {
+    private fun recipe(e: JsonElement, path: String): Recipe? {
         val o = e as? JsonObject ?: run {
             broken(path, "must be a map with one recipe: intent, url, steps or tool")
             return null
