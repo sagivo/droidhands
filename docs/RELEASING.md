@@ -5,9 +5,9 @@ then builds and uploads:
 
 | What | Where |
 |---|---|
-| Signed APK | GitHub Release `vX.Y.Z`: `DroidHands-X.Y.Z.apk` and the same file as `DroidHands.apk`, so `https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk` always serves the newest release (the in-app update check and the relay's `APK_URL` use it) |
+| Signed APK | GitHub Release `vX.Y.Z`: `DroidHands-X.Y.Z.apk` and the same file as `DroidHands.apk`, so `https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk` always serves the newest release (the in-app update check and the relay's `APK_URL` use it) |
 | Checksums | `SHA256SUMS` on the same release |
-| Relay image | `ghcr.io/<owner>/droidhands-relay:X.Y.Z` and `:latest` (amd64 and arm64) |
+| Relay image | `ghcr.io/sagivo/droidhands-relay:X.Y.Z` and `:latest` (amd64 and arm64) |
 
 The release runs the unit tests and plugin checks first. [`ci.yml`](../.github/workflows/ci.yml) runs
 the same tests, the debug build and the relay tests on every push and pull request, without secrets.
@@ -17,7 +17,7 @@ the same tests, the debug build and the relay tests on every push and pull reque
 1. **Create the signing key** on a trusted computer:
 
    ```sh
-   ./scripts/make-release-key.sh --repo <owner>/<repo>
+   ./scripts/make-release-key.sh --repo sagivo/droidhands
    ```
 
    It writes `~/.droidhands/droidhands-release.jks` and its password file (both readable only by

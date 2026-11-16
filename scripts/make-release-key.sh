@@ -14,7 +14,7 @@ set -euo pipefail
 
 OUT="$HOME/.droidhands/droidhands-release.jks"
 ALIAS="droidhands"
-REPO="<owner>/<repo>"
+REPO="sagivo/droidhands"
 
 usage() {
   cat <<EOF

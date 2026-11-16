@@ -5,6 +5,6 @@
 # that publishes its own builds can add its private advisory link here, e.g.:
 #   contact_links:
 #     - name: Report a security vulnerability
-#       url: https://github.com/<owner>/<repo>/security/advisories/new
+#       url: https://github.com/sagivo/droidhands/security/advisories/new
 #       about: Privately, so it can be fixed before it is public.
 blank_issues_enabled: true

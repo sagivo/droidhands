@@ -10,7 +10,7 @@ cp clients/android/app/build/outputs/apk/release/DroidHands-*.apk relay/public/d
 ```
 
 If the app is published on GitHub Releases, set `APK_URL` instead (for example
-`https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk`): the button then links
+`https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk`): the button then links
 there, and `/download/droidhands.apk` redirects to it.
 
 APK files are git-ignored. The Docker image copies this directory at build time; set `PUBLIC_DIR`

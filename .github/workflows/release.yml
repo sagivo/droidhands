@@ -1,9 +1,9 @@
 # Publishes a release when a version tag is pushed (git tag v1.2.3 && git push origin v1.2.3):
 #
 #   1. a signed APK on the GitHub Release, as DroidHands-1.2.3.apk and DroidHands.apk (so
-#      https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk always serves the
+#      https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk always serves the
 #      newest one), plus SHA256SUMS;
-#   2. the relay image ghcr.io/<owner>/droidhands-relay:1.2.3 and :latest.
+#   2. the relay image ghcr.io/sagivo/droidhands-relay:1.2.3 and :latest.
 #
 # Needs the signing secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS
 # and ANDROID_KEY_PASSWORD (scripts/make-release-key.sh prints the commands). Without them the

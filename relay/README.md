@@ -261,9 +261,9 @@ docker logs droidhands-relay    # shows the setup link
 The image is multi-stage (`node:22-alpine`), runs as the non-root `node` user, contains only
 production dependencies, keeps the relay secret in the `/data` volume (`DATA_DIR`), and has a
 `HEALTHCHECK` on `/healthz`. To offer the APK from `/setup`, set `APK_URL` (e.g.
-`https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk`), or copy the APK to
+`https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk`), or copy the APK to
 `relay/public/` before building, or mount a directory and set `PUBLIC_DIR`. Every release also
-publishes a ready-made image, `ghcr.io/<owner>/droidhands-relay:<version>` and `:latest`.
+publishes a ready-made image, `ghcr.io/sagivo/droidhands-relay:<version>` and `:latest`.
 
 **Caddy** (automatic HTTPS, WebSockets and `X-Forwarded-*` out of the box):
 
@@ -314,7 +314,7 @@ itself, so someone who installs the APK never sees a relay step (they can still 
 relay at any time). If you publish builds (the project's releases, or your fork's), you run that
 relay. It is the same relay as above; a few settings matter more because strangers' phones use it.
 
-**1. Deploy the image.** Each release pushes `ghcr.io/<owner>/droidhands-relay:<version>` and
+**1. Deploy the image.** Each release pushes `ghcr.io/sagivo/droidhands-relay:<version>` and
 `:latest` (see [docs/RELEASING.md](../docs/RELEASING.md)). New GHCR packages are private: make it
 public once (*your profile › Packages › droidhands-relay › Package settings › Change visibility*),
 or log the server in with `docker login ghcr.io`.
@@ -328,13 +328,13 @@ or log the server in with `docker login ghcr.io`.
     -p 127.0.0.1:8787:8787 -v droidhands-data:/data \
     -e PUBLIC_URL=https://relay.example.com -e TRUST_PROXY=true \
     -e MAX_DEVICES=1000 \
-    -e APK_URL=https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk \
-    ghcr.io/<owner>/droidhands-relay:latest
+    -e APK_URL=https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk \
+    ghcr.io/sagivo/droidhands-relay:latest
   ```
 
 * **Fly.io**: from `relay/`, `fly launch --copy-config --no-deploy --name <app>`, then
   `fly secrets set RELAY_SECRET="$(openssl rand -base64 32)"`, set `MAX_DEVICES` and `APK_URL` in
-  `fly.toml`'s `[env]`, and `fly deploy --ha=false --image ghcr.io/<owner>/droidhands-relay:<version>`.
+  `fly.toml`'s `[env]`, and `fly deploy --ha=false --image ghcr.io/sagivo/droidhands-relay:<version>`.
   Raise `[http_service.concurrency]` and the VM's memory together with `MAX_DEVICES`.
 
 **2. Settings for a shared relay.**
@@ -378,7 +378,7 @@ All settings are environment variables. Empty values mean "use the default".
 | `RELAY_SECRET` | *(unset)* | Key (at least 32 characters, used verbatim) that signs OAuth client ids. When unset, one is generated into `DATA_DIR/relay-secret`. Changing it disconnects every paired app at its next authorization (they re-pair). |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Where `relay-secret` is created (directory `0700`, file `0600`) when `RELAY_SECRET` is unset. If it cannot be written, the relay uses a temporary secret and logs a warning: apps paired then must reconnect after a restart. |
 | `PUBLIC_DIR` | `relay/public` | Directory served for `/download/droidhands.apk`. |
-| `APK_URL` | *(unset)* | Where the setup page's **Install DroidHands** button downloads the app, e.g. `https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk`. Wins over a file in `PUBLIC_DIR`; `/download/droidhands.apk` then redirects (`302`) to it. Absolute `http(s)` URL without credentials. |
+| `APK_URL` | *(unset)* | Where the setup page's **Install DroidHands** button downloads the app, e.g. `https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk`. Wins over a file in `PUBLIC_DIR`; `/download/droidhands.apk` then redirects (`302`) to it. Absolute `http(s)` URL without credentials. |
 | `MAX_DEVICES` | `1000` | Phones that may be connected at the same time. A new phone beyond it gets an `error` frame `relay_full` and close code `4013`, and retries with backoff. A phone that is already connected may always reconnect (its new connection replaces the old one). Ignored by the Cloudflare relay ([CLOUDFLARE.md](CLOUDFLARE.md#settings)). |
 | `SETUP_BANNER` | `true` | Print the setup link and QR code to stderr at startup. |
 | `ALLOW_TOKEN_IN_URL` | `false` | Also accept `POST /mcp/<token>` for MCP clients that cannot set headers. The relay moves the token into an `authorization` header before tunneling. URLs end up in client configs, proxy logs and browser history, so prefer OAuth or the header. |

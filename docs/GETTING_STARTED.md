@@ -128,7 +128,7 @@ PUBLIC_URL=https://relay.example.com RELAY_ACCESS_KEY=$(openssl rand -hex 16) np
 ```
 
 On startup it prints a **setup link and a QR code**. Each release also publishes a Docker image
-(`ghcr.io/<owner>/droidhands-relay`), and deploy configs are included for
+(`ghcr.io/sagivo/droidhands-relay`), and deploy configs are included for
 [Fly.io](../relay/fly.toml) and [Render](../relay/render.yaml), as is a
 [Dockerfile](../relay/Dockerfile). For TLS, put it behind Caddy
 (`caddy reverse-proxy --from relay.example.com --to :8787`). See [relay/README.md](../relay/README.md).
