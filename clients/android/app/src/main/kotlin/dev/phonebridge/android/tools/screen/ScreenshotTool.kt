@@ -78,14 +78,11 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
         throw e
     }
     val encoded = withContext(Dispatchers.Default) { encode(bitmap, maxDimension, png) }
+    ScreenSession.recordScreenshot(access.tokenId, encoded.geometry)
     val caption = buildString {
         append("Screenshot ${encoded.width}x${encoded.height} ${if (png) "png" else "jpeg"} of app=${app ?: "unknown"}")
         append(", screen ${encoded.sourceWidth}x${encoded.sourceHeight} px")
-        if (encoded.width != encoded.sourceWidth) {
-            append("; multiply image coordinates by ")
-            append(String.format(Locale.ROOT, "%.3f", encoded.sourceWidth.toDouble() / encoded.width))
-            append(" for ui_tap/ui_swipe")
-        }
+        append(". ").append(coordinateHint(encoded))
         append('.')
         if (DeviceState.isLocked(context)) append(" The phone is locked (lock screen shown).")
         if (encoded.mostlyBlack) {
@@ -102,7 +99,7 @@ internal fun screenScreenshotTool(context: Context): Tool = tool(
  * system screen that shows other apps' content ([SystemOverlays]). Pixels can't be filtered or masked the way
  * screen_read filters nodes.
  */
-private suspend fun requireShareable(context: Context, service: BridgeAccessibilityService, access: ScreenAccess) {
+internal suspend fun requireShareable(context: Context, service: BridgeAccessibilityService, access: ScreenAccess) {
     withContext(Dispatchers.IO) {
         val own = context.packageName
         if (!access.restricted && access.redactor == null && !ApprovalGuard.isActive) {
@@ -142,24 +139,46 @@ private const val CODE_VISIBLE =
         "from agents (a screenshot can't be masked). Use screen_read instead (codes appear as \"${OneTimeCodes.MASK}\"), or " +
         "ask the user to read the code on the phone if it is really needed."
 
-private class Encoded(
+internal class Encoded(
     val bytes: ByteArray,
     val width: Int,
     val height: Int,
     val sourceWidth: Int,
     val sourceHeight: Int,
     val mostlyBlack: Boolean,
-)
+) {
+    val geometry: ScreenshotGeometry get() = ScreenshotGeometry(width, height, sourceWidth, sourceHeight)
+}
 
-/** Scales, checks for an all-black frame, compresses. Recycles [source]. */
-private fun encode(source: Bitmap, maxDimension: Int, png: Boolean): Encoded {
+/** How to tap a point seen in the image [encoded]. */
+internal fun coordinateHint(encoded: Encoded): String = if (encoded.width == encoded.sourceWidth) {
+    "Image pixels are screen pixels for ui_tap/ui_swipe"
+} else {
+    "To tap a point of this image, pass its image x,y with space=screenshot to ui_tap/ui_swipe (or multiply by " +
+        String.format(Locale.ROOT, "%.3f", encoded.sourceWidth.toDouble() / encoded.width) + " for screen pixels)"
+}
+
+/**
+ * Scales, checks for an all-black frame (before [paint] draws on it), lets [paint] draw on the scaled image, compresses.
+ * Recycles [source].
+ */
+internal fun encode(source: Bitmap, maxDimension: Int, png: Boolean, paint: ((Bitmap) -> Unit)? = null): Encoded {
     val (w, h) = ScreenshotMath.scaledSize(source.width, source.height, maxDimension)
-    val scaled = if (w == source.width && h == source.height) source else Bitmap.createScaledBitmap(source, w, h, true)
+    var scaled = if (w == source.width && h == source.height) source else Bitmap.createScaledBitmap(source, w, h, true)
     try {
         val probe = Bitmap.createScaledBitmap(scaled, BLACK_PROBE_W, BLACK_PROBE_H, false)
         val pixels = IntArray(BLACK_PROBE_W * BLACK_PROBE_H)
         probe.getPixels(pixels, 0, BLACK_PROBE_W, 0, 0, BLACK_PROBE_W, BLACK_PROBE_H)
         if (probe !== scaled) probe.recycle()
+        if (paint != null) {
+            if (!scaled.isMutable) {
+                val copy = scaled.copy(Bitmap.Config.ARGB_8888, true)
+                    ?: throw ToolException("Not enough memory to process the screenshot. Retry with a smaller max_dimension.")
+                if (scaled !== source) scaled.recycle()
+                scaled = copy
+            }
+            paint(scaled)
+        }
         val out = ByteArrayOutputStream(if (png) w * h else w * h / 4)
         val format = if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
         if (!scaled.compress(format, if (png) 100 else ScreenshotMath.JPEG_QUALITY, out)) {

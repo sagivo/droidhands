@@ -27,6 +27,18 @@ object ScreenSession {
     /** The refs of the calling agent. */
     fun refs(access: ScreenAccess): RefRegistry = refs(access.tokenId)
 
+    private val screenshots = object : LinkedHashMap<String, ScreenshotGeometry>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ScreenshotGeometry>?): Boolean = size > MAX_AGENTS
+    }
+
+    /** Remembers the size of the screenshot just sent to the agent with [tokenId] (for `space=screenshot` points). */
+    fun recordScreenshot(tokenId: String, geometry: ScreenshotGeometry) {
+        synchronized(screenshots) { screenshots[tokenId] = geometry }
+    }
+
+    /** The calling agent's last screenshot, or null if it has taken none. */
+    fun lastScreenshot(access: ScreenAccess): ScreenshotGeometry? = synchronized(screenshots) { screenshots[access.tokenId] }
+
     /** A ref resolved against the live UI: [node] keeps the captured ancestors, [fresh] has current state. */
     class Live(val ref: String, val node: UiNode, val fresh: UiNode)
 

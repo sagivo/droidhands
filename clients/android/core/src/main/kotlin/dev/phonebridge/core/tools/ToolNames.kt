@@ -35,7 +35,7 @@ object ToolNames {
         // Location
         "location_get",
         // Screen
-        "screen_read", "screen_find", "screen_screenshot", "ui_wait", "ui_tap", "ui_type", "ui_scroll", "ui_swipe",
+        "screen_observe", "screen_read", "screen_find", "screen_screenshot", "ui_wait", "ui_tap", "ui_type", "ui_scroll", "ui_swipe",
         "ui_global_action",
     )
 

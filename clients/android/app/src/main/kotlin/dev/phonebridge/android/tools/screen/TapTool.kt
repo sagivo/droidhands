@@ -27,19 +27,22 @@ internal fun uiTapTool(context: Context): Tool = tool(
     name = "ui_tap",
     title = "Tap on screen",
     description = "Taps on the phone's screen, in any app. Target, in order of preference: ref (n12 from " +
-        "screen_read/screen_find; clicks it or its clickable container), text (visible text or content description, " +
-        "case-insensitive: exact match beats starts-with beats contains; if several elements match equally you get " +
-        "the candidates with refs), or x+y screen pixels. long_press=true touches and holds. Returns a short " +
-        "confirmation and the foreground app; call screen_read to see the result. If the phone is locked, the user is " +
+        "screen_observe/screen_read/screen_find; clicks it or its clickable container), text (visible text or content " +
+        "description, case-insensitive: exact match beats starts-with beats contains; if several elements match equally " +
+        "you get the candidates with refs), or a point x+y: screen pixels, or pixels of your last screenshot with " +
+        "space=screenshot. long_press=true touches and holds. Returns what changed on screen and the foreground app " +
+        "(observe=true adds a new screen_observe). If the phone is locked, the user is " +
         "asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent. ${UiAutomation.APPROVAL_PAUSE}",
     scope = Scopes.SCREEN_CONTROL,
     risk = Risk.ACTION,
     schema = objectSchema {
         string("ref", "Element ref from screen_read/screen_find, e.g. n12")
         string("text", "Visible text or content description of the element")
-        integer("x", "Screen x in pixels (with y)", minimum = 0)
-        integer("y", "Screen y in pixels (with x)", minimum = 0)
+        integer("x", "x of the point (with y)", minimum = 0)
+        integer("y", "y of the point (with x)", minimum = 0)
+        string("space", "What x,y are measured in (default screen)", enum = PointSpace.NAMES)
         boolean("long_press", "Touch and hold instead of a tap")
+        boolean("observe", UiAutomation.OBSERVE_ARG)
     },
     timeoutMs = 30_000 + UiAutomation.UNLOCK_WAIT_MS,
     unavailable = { UiAutomation.actionUnavailableReason(context) },
@@ -48,7 +51,8 @@ internal fun uiTapTool(context: Context): Tool = tool(
         when {
             args.optString("ref") != null -> "$verb element ${args.optString("ref")} on screen"
             args.optString("text") != null -> "$verb \"${args.optString("text")}\" on screen"
-            else -> "$verb the screen at (${args.optInt("x")},${args.optInt("y")})"
+            else -> "$verb the screen at (${args.optInt("x")},${args.optInt("y")})" +
+                if (args.optString("space")?.lowercase() == "screenshot") " of the screenshot" else ""
         }
     },
 ) { args, ctx ->
@@ -58,24 +62,57 @@ internal fun uiTapTool(context: Context): Tool = tool(
     val y = args.optInt("y")
     val longPress = args.optBool("long_press") ?: false
     if (ref == null && text == null && (x == null || y == null)) {
-        throw ToolException("Pass ref (from screen_read), text, or both x and y.")
+        throw ToolException("Pass ref (from screen_observe or screen_read), text, or both x and y.")
     }
+    val space = PointSpace.parse(args.optString("space"))
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
     val action = if (text != null) "tap \"${TextNorm.truncate(text, 40)}\" on the screen" else "tap on the screen"
     UiAutomation.awaitUsable(context, ctx, action)
-    UiAutomation.exclusive(access) {
+    val message = UiAutomation.exclusive(access) {
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
+        val before = UiAutomation.before(context, service, access)
         val message = when {
             ref != null -> {
                 val live = withContext(Dispatchers.IO) { ScreenSession.resolve(ref, access) }
                 tapNode(context, service, access, live, longPress)
             }
             text != null -> tapText(context, service, access, text, longPress)
-            else -> tapPoint(context, service, access, x!!, y!!, longPress)
+            else -> {
+                val (sx, sy) = PointSpace.toScreen(space, x!!, y!!, service, access)
+                tapPoint(context, service, access, sx, sy, longPress)
+            }
         }
-        ToolResult.text(UiAutomation.report(service, access, message))
+        UiAutomation.report(service, access, message, before = before)
+    }
+    UiAutomation.result(context, ctx, args.optBool("observe") ?: false, message)
+}
+
+/** What the x,y of ui_tap and ui_swipe are measured in. */
+internal enum class PointSpace {
+    SCREEN, SCREENSHOT;
+
+    companion object {
+        val NAMES = entries.map { it.name.lowercase() }
+
+        fun parse(raw: String?): PointSpace = when (raw?.trim()?.lowercase()) {
+            null, "", "screen" -> SCREEN
+            "screenshot", "image" -> SCREENSHOT
+            else -> throw ToolException("space must be 'screen' (screen pixels) or 'screenshot' (pixels of your last screenshot).")
+        }
+
+        /** Screen pixels of ([x], [y]) in [space]: for screenshots, through the calling agent's last one. */
+        fun toScreen(space: PointSpace, x: Int, y: Int, service: BridgeAccessibilityService, access: ScreenAccess): Pair<Int, Int> {
+            if (space == SCREEN) return x to y
+            val shot = ScreenSession.lastScreenshot(access)
+                ?: throw ToolException("space=screenshot needs a screenshot first: call screen_observe or screen_screenshot.")
+            if (!shot.matches(service.screenBounds())) {
+                throw ToolException("The screen changed size since your last screenshot (rotated or folded). Call screen_observe again.")
+            }
+            return shot.toScreen(x, y)
+                ?: throw ToolException("Point ($x,$y) is outside your last screenshot (${shot.imageWidth}x${shot.imageHeight}).")
+        }
     }
 }
 

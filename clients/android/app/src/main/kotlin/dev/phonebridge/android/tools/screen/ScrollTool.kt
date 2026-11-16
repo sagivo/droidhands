@@ -11,6 +11,7 @@ import dev.phonebridge.core.tools.Tool
 import dev.phonebridge.core.tools.ToolException
 import dev.phonebridge.core.tools.ToolResult
 import dev.phonebridge.core.tools.objectSchema
+import dev.phonebridge.core.tools.optBool
 import dev.phonebridge.core.tools.optString
 import dev.phonebridge.core.tools.reqString
 import dev.phonebridge.core.tools.tool
@@ -24,7 +25,8 @@ internal fun uiScrollTool(context: Context): Tool = tool(
     description = "Scrolls a list or page in any app. direction is where you want to move in the content: 'down' " +
         "shows what is further down (like a mouse wheel), 'right' shows what is further right. Target: ref of a " +
         "[scrollable] element (or any element inside one), default the largest scrollable on screen. Says so " +
-        "when the end is reached. Refs of the scrolled content may change: call screen_read afterwards. If the phone is " +
+        "when the end is reached. Refs of the scrolled content may change: call screen_observe afterwards (or pass " +
+        "observe=true). If the phone is " +
         "locked, the user is asked to unlock it (up to 60 s). Refused in apps the user blocked for this agent. " +
         UiAutomation.APPROVAL_PAUSE,
     scope = Scopes.SCREEN_CONTROL,
@@ -32,6 +34,7 @@ internal fun uiScrollTool(context: Context): Tool = tool(
     schema = objectSchema {
         string("direction", "Where to move in the content", required = true, enum = ScrollDirection.entries.map { it.name.lowercase() })
         string("ref", "Ref of the scrollable element (default: the largest scrollable)")
+        boolean("observe", UiAutomation.OBSERVE_ARG)
     },
     timeoutMs = 30_000 + UiAutomation.UNLOCK_WAIT_MS,
     unavailable = { UiAutomation.actionUnavailableReason(context) },
@@ -42,12 +45,13 @@ internal fun uiScrollTool(context: Context): Tool = tool(
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
     UiAutomation.awaitUsable(context, ctx, "scroll on the screen")
-    UiAutomation.exclusive(access) {
+    val message = UiAutomation.exclusive(access) {
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
         val message = scroll(context, service, access, direction, args.optString("ref")?.trim())
-        ToolResult.text(UiAutomation.report(service, access, message))
+        UiAutomation.report(service, access, message)
     }
+    UiAutomation.result(context, ctx, args.optBool("observe") ?: false, message)
 }
 
 private suspend fun scroll(

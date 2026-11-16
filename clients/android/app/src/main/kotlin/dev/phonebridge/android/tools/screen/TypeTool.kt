@@ -40,6 +40,7 @@ internal fun uiTypeTool(context: Context): Tool = tool(
         string("ref", "Ref of the text field (default: the focused field)")
         boolean("append", "Add to the existing text instead of replacing it")
         boolean("submit", "Press the keyboard action key (IME enter) afterwards")
+        boolean("observe", UiAutomation.OBSERVE_ARG)
     },
     timeoutMs = 30_000 + UiAutomation.UNLOCK_WAIT_MS,
     unavailable = { UiAutomation.actionUnavailableReason(context) },
@@ -51,13 +52,16 @@ internal fun uiTypeTool(context: Context): Tool = tool(
     val service = UiAutomation.service()
     val access = ScreenAccess.of(context, ctx)
     UiAutomation.awaitUsable(context, ctx, "type text on the screen")
-    UiAutomation.exclusive(access) {
+    val message = UiAutomation.exclusive(access) {
         UiAutomation.requireUnlocked(context)
         UiAutomation.requireOperable(service, access)
         val field = withContext(Dispatchers.IO) { resolveField(context, service, access, args.optString("ref")?.trim()) }
+        // Submitting can change the screen (a search runs, a message goes out): report what it did.
+        val before = if (submit) UiAutomation.before(context, service, access) else null
         val typed = typeInto(context, access, field, text, append, submit)
-        ToolResult.text(UiAutomation.report(service, access, typed.message, settleFirst = false))
+        UiAutomation.report(service, access, typed.message, settleFirst = false, before = before)
     }
+    UiAutomation.result(context, ctx, args.optBool("observe") ?: false, message)
 }
 
 /** What [typeInto] did: [message] for the agent; [submitted] whether the keyboard action key was pressed (null: not asked). */
