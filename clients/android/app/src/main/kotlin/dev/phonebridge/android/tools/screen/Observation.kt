@@ -11,6 +11,7 @@ import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.access.ScreenshotException
 import dev.phonebridge.android.access.SerializeOptions
 import dev.phonebridge.android.access.TreeSerializer
+import dev.phonebridge.android.access.WindowKind
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.Risk
@@ -69,8 +70,10 @@ internal data class ObserveOptions(
  * screenshots refused while one is visible ([requireShareable]).
  */
 internal object Observation {
-    private const val SETTLE_ATTEMPTS = 4
+    private const val SETTLE_ATTEMPTS = 6
     private const val SETTLE_DELAY_MS = 350L
+    private const val QUIET_MS = 300L
+    private const val IDLE_WAIT_MS = 2_000L
 
     suspend fun observe(context: Context, ctx: CallContext, options: ObserveOptions): List<ToolContent> {
         val service = UiAutomation.service()
@@ -114,6 +117,7 @@ internal object Observation {
                     append("):")
                     for ((ref, mark) in listing.marks) {
                         append('\n').append(TreeSerializer.formatNode(mark.node, ref, MAX_ELEMENT_TEXT))
+                        ScreenMarks.innerText(mark.node)?.let { append(" contains \"").append(it.replace("\"", "'")).append('"') }
                     }
                     if (listing.marks.size >= options.maxElements) append("\n... more elements not listed (raise max_elements, or elements=all)")
                 }
@@ -172,21 +176,29 @@ internal object Observation {
     }
 
     /**
-     * A capture of what the agent may see; right after an app switch the new window often has no content yet, so it
-     * waits briefly and captures again (as screen_read does).
+     * A capture of what the agent may see, once the screen has settled. Agents observe right after acting, often while
+     * an app is still starting (splash screen) or a new screen is sliding in; a capture then would report an empty or
+     * near-empty screen as if that were the app. So it first waits for the accessibility events to go quiet, then
+     * captures again (up to [SETTLE_ATTEMPTS] times) while the screen still looks like it is loading ([loading]).
      */
     private suspend fun captureSettled(context: Context, service: BridgeAccessibilityService, access: ScreenAccess, includeAll: Boolean): ScreenState {
+        BridgeAccessibilityService.awaitIdle(minDelayMs = 0, quietMs = QUIET_MS, maxMs = IDLE_WAIT_MS)
         var state = ScreenCapture.capture(context, service, access, includeAll)
         var attempt = 1
-        while (state.blockedForeground == null && state.screenOn && attempt < SETTLE_ATTEMPTS &&
-            (state.roots.none { root -> root.walk().any { it.visible && TreeSerializer.isInformative(it) } } || ScreenSettling.appWindowMissing(state))
-        ) {
+        while (state.blockedForeground == null && state.screenOn && !state.locked && attempt < SETTLE_ATTEMPTS && loading(state)) {
             delay(SETTLE_DELAY_MS)
             attempt++
             state = ScreenCapture.capture(context, service, access, includeAll)
         }
         return state
     }
+
+    /** Nothing readable yet, no app window yet (a starting window or a transition), or an app window that is still blank. */
+    private fun loading(state: ScreenState): Boolean =
+        state.roots.none { root -> root.walk().any { it.visible && TreeSerializer.isInformative(it) } } ||
+            ScreenSettling.appWindowMissing(state) ||
+            state.windows.none { it.kind == WindowKind.APPLICATION } ||
+            ScreenMarks.thinTree(state.windows)
 
     private const val MAX_ELEMENT_TEXT = 120
 }
@@ -232,7 +244,8 @@ internal fun screenObserveTool(context: Context): Tool = tool(
     title = "Look at the screen",
     description = "Phone use: shows what is on the phone's screen in any app and how to act on it, in one call. Returns a " +
         "screenshot with every actionable element boxed and numbered, plus those elements as lines " +
-        "`n12 Button \"Send\" [clickable] (x,y,w,h)` (bounds in screen pixels). Act with ui_tap ref=n12 / ui_type / ui_scroll, " +
+        "`n12 Button \"Send\" [clickable] (x,y,w,h)` (bounds in screen pixels; rows and cards add `contains \"…\"` with " +
+        "their texts). Act with ui_tap ref=n12 / ui_type / ui_scroll, " +
         "or tap any point of the image with ui_tap x,y space=screenshot. Refs are yours alone and are replaced by your next " +
         "screen_observe or screen_read. Every ui_* action reports what changed on screen; pass observe=true to get a new " +
         "screen_observe with it. When the screen blocks screenshots (banking apps, PhoneBridge approvals), the result says " +

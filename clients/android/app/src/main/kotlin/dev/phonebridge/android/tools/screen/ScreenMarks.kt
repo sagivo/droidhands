@@ -2,6 +2,7 @@ package dev.phonebridge.android.tools.screen
 
 import dev.phonebridge.android.access.Bounds
 import dev.phonebridge.android.access.NodeQueries
+import dev.phonebridge.android.access.TextNorm
 import dev.phonebridge.android.access.TreeSerializer
 import dev.phonebridge.android.access.UiNode
 import dev.phonebridge.android.access.WindowKind
@@ -59,6 +60,21 @@ object ScreenMarks {
         if (app.isEmpty()) return false
         val informative = app.sumOf { w -> w.root!!.walk().count { it.visible && TreeSerializer.isInformative(it) } }
         return informative < THIN_TREE_NODES
+    }
+
+    /**
+     * For an element without text or description of its own (a clickable row, a card): the texts inside it, so a
+     * text-only agent can tell such elements apart (`"carol@example.com | Offsite | Are you joining?"`). Null otherwise.
+     */
+    fun innerText(n: UiNode, maxParts: Int = 3, maxLength: Int = 120): String? {
+        if (!n.text.isNullOrBlank() || !n.description.isNullOrBlank()) return null
+        val parts = n.walk().drop(1).filter { it.visible }
+            .flatMap { sequenceOf(it.text, it.description) }
+            .mapNotNull { TextNorm.clean(it).replace('\n', ' ').trim().takeIf { t -> t.isNotEmpty() } }
+            .distinct()
+            .take(maxParts)
+            .toList()
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" | ")?.let { TextNorm.truncate(it, maxLength) }
     }
 
     /** The number drawn on the screenshot for [ref] (`n12` → `12`). */

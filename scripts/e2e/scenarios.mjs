@@ -4,6 +4,7 @@
 // App-action scenarios ("app actions: ..."): the local-plugin one pushes clients/android/fixtures/plugins/fakemail_test
 // with scripts/plugin-push.sh (debug build) and needs Settings > Developer > Local plugins on; it skips otherwise.
 // PB_BLOCKED_APP=<package> (an app blocked for this token) adds a check with that app; PhoneBridge itself is always used.
+// PB_APPROVE=manual: don't tap approval prompts with uiautomator (it suspends accessibility services while it runs).
 import { execFileSync } from 'node:child_process';
 import { McpClient, Runner, adb, shell, sleep, waitFor, fixtureEvents, assert, skip } from './lib.mjs';
 
@@ -238,6 +239,12 @@ const ui = (...a) => execFileSync('timeout', ['-k', '2', '60', 'python3', '-I', 
  */
 async function approveOnPhone(title) {
   shell('cmd statusbar expand-notifications');
+  // uiautomator suspends every accessibility service (PhoneBridge's too) while it reads the screen, which can make
+  // the approved action fail. PB_APPROVE=manual leaves the tap to a person (or a screenshot-and-tap helper).
+  if (process.env.PB_APPROVE === 'manual') {
+    console.log(`    → tap Allow on the phone ("${title}")`);
+    return;
+  }
   await sleep(1500);
   try {
     ui('tap', title);

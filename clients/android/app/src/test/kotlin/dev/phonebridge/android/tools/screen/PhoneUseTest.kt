@@ -64,6 +64,14 @@ class ScreenMarksTest {
     }
 
     @Test
+    fun `rows without their own text carry the texts inside them`() {
+        val row = group(label("carol@example.com"), label("Offsite"), label("Are you joining?"), label("Offsite"), clickable = true)
+        assertEquals("carol@example.com | Offsite | Are you joining?", ScreenMarks.innerText(row))
+        assertNull(ScreenMarks.innerText(button("Send")))
+        assertNull(ScreenMarks.innerText(group(clickable = true)))
+    }
+
+    @Test
     fun `tags are the ref numbers`() = assertEquals("12", ScreenMarks.tag("n12"))
 }
 
