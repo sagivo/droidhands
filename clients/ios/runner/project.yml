@@ -1,0 +1,61 @@
+# PhoneBridge iOS runner. Generate the Xcode project with `xcodegen generate` (scripts/ios-runner.sh does).
+name: PhoneBridgeRunner
+options:
+  deploymentTarget:
+    iOS: "16.4"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Bundle ids derive from this; scripts/ios-runner.sh makes it unique per signing team on devices.
+    PB_BUNDLE_ID_BASE: dev.phonebridge.runner
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+targets:
+  PhoneBridgeRunnerHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PB_BUNDLE_ID_BASE).host
+        PRODUCT_NAME: PhoneBridgeRunnerHost
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: PhoneBridge Runner
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: The PhoneBridge runner accepts connections from the PhoneBridge host on your Mac.
+  PhoneBridgeRunner:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Runner]
+    dependencies:
+      - target: PhoneBridgeRunnerHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(PB_BUNDLE_ID_BASE)
+        PRODUCT_NAME: PhoneBridgeRunner
+        TEST_TARGET_NAME: PhoneBridgeRunnerHost
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: The PhoneBridge runner accepts connections from the PhoneBridge host on your Mac.
+        SWIFT_OBJC_BRIDGING_HEADER: Runner/PhoneBridgeRunner-Bridging-Header.h
+        CLANG_ENABLE_OBJC_ARC: YES
+schemes:
+  PhoneBridgeRunner:
+    build:
+      targets:
+        PhoneBridgeRunnerHost: all
+        PhoneBridgeRunner: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      # The single test runs for hours; don't pile up a screenshot per XCUITest call in the result bundle.
+      captureScreenshotsAutomatically: false
+      deleteScreenshotsWhenEachTestSucceeds: true
+      targets:
+        - name: PhoneBridgeRunner
+          parallelizable: false
