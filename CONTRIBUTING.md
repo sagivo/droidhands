@@ -45,8 +45,11 @@ doesn't), `risk`, `params` and one recipe:
         expect: {url: "spotify:search:daft%20punk"}
 ```
 
-Prefer, in this order: a `tool` (reuse a built-in tool such as `whatsapp_send`), an `intent`, a `url` deep
-link, and only then `steps` (a screen recipe). Anything that sends, posts, pays, orders, books, calls or
+Prefer, in this order: a `tool` (reuse a built-in platform tool such as `sms_send` or `calendar_event_create`), an
+`intent`, a `url` deep link, and only then `steps` (a screen recipe). First check what PhoneBridge already discovers
+for the app (*Apps → (app)*): it reads the app's own links, intents and shortcuts, so a plugin is only worth adding
+for what discovery can't express. Plugin recipes are checked against the installed app version on every phone, so
+an outdated plugin hides itself instead of failing. Anything that sends, posts, pays, orders, books, calls or
 deletes must be `risk: sensitive`, so the user approves it on the phone; the checker enforces that.
 
 **3. Check it** on your computer (needs a JDK 17, no phone and no Android SDK):

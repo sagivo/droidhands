@@ -4,10 +4,12 @@ Let **your** AI agents (Claude, or any MCP client) operate **your** phone, secur
 
 > "Send a WhatsApp to Tania saying I'll be 10 minutes late."
 
-The agent calls `contacts_search("Tania")`, then
-`whatsapp_send(contact="Tania Cohen", message="I'll be 10 minutes late")`. Your phone shows
-*"Claude wants to: Send WhatsApp to Tania Cohen (+972 54-…): 'I'll be 10 minutes late'"* with
-**Allow / Deny**. On Allow, PhoneBridge opens the chat and taps Send.
+The agent calls `contacts_search("Tania")` (which also says she is on WhatsApp), opens her chat with the message
+typed in using one of WhatsApp's actions, then looks at the screen (`screen_observe`: a screenshot with every
+button numbered) and taps Send, checking that the message went out. It works the same way in any app on any
+phone: PhoneBridge doesn't hard-code apps or Android versions. It reads what each installed app declares, and
+for everything else the agent uses the screen like a person would ("phone use", like browser use). It only acts
+inside the access you granted when you connected it, and the live notification lets you watch it and press Stop.
 
 PhoneBridge is an Android app (iOS later) that exposes the phone's capabilities as an
 [MCP](https://modelcontextprotocol.io) server. Agents reach it through a small relay (the one the

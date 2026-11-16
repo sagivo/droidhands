@@ -12,7 +12,7 @@ group summary). The apps record what they observe, so a test can check what Phon
 
 | Module | Package / label | What it mimics |
 |---|---|---|
-| `:fixtures:fakewhatsapp` | `com.whatsapp` / "WhatsApp" | Chat deep links and the Send button (`whatsapp_send`, `whatsapp_open_chat`), message notifications with inline Reply and Mark as read (`notification_reply`, `notification_action`) |
+| `:fixtures:fakewhatsapp` | `com.whatsapp` / "WhatsApp" | Chat deep links declared in its manifest (WhatsApp's `draft_message`, discovered `open_link`) and the Send button (phone use: `screen_observe`, `ui_tap`), message notifications with inline Reply and Mark as read (`notification_reply`, `notification_action`) |
 | `:fixtures:fakemail` | `dev.phonebridge.fixture.mail` / "Fixture Mail" | Inbox, email screen and compose screen (`mailto:`, `ACTION_SEND`), plus email notifications with inline Reply (or Gmail-like Reply that opens the app) and Archive |
 
 Both apps use classic Android Views only (framework `Activity` and widgets, `androidx.core` for
@@ -111,7 +111,7 @@ message list is cleared, the header is updated and the entry is prefilled again.
 | launcher | Chats home; asks for POST_NOTIFICATIONS if not granted | `HOME_OPENED source=launcher`, `NOTIFICATION_PERMISSION granted` |
 
 ```sh
-# Open a chat with prefilled text (what whatsapp_send / whatsapp_open_chat do)
+# Open a chat with prefilled text (what draft_message / open_link do)
 adb shell "am start -a android.intent.action.VIEW -d 'https://api.whatsapp.com/send?phone=972541234567&text=Hello%20there' com.whatsapp"
 adb shell "am start -a android.intent.action.VIEW -d 'https://wa.me/972541234567?text=Hi' com.whatsapp"
 adb shell "am start -a android.intent.action.VIEW -d 'whatsapp://send?phone=972541234567&text=Hi'"
@@ -119,7 +119,7 @@ adb shell "am start -n com.whatsapp/.ConversationActivity -a android.intent.acti
 # Failure paths
 adb shell "am start -a android.intent.action.VIEW -d 'https://api.whatsapp.com/send?phone=15550000&text=Hi' com.whatsapp"   # not on WhatsApp
 adb shell "am start -a android.intent.action.VIEW -d 'https://api.whatsapp.com/send?text=Hi' com.whatsapp"                 # no phone -> Chats
-# Inspect the UI tree like PhoneBridge's screen_read would
+# Inspect the UI tree like PhoneBridge's screen_read / screen_observe would
 adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml
 ```
 

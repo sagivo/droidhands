@@ -77,8 +77,8 @@ may and may not do, and that actions inside the grant run without asking the use
   agents created before the grant screen that keep *Ask for sensitive actions* or *Ask for every action*.
 * **Unreviewed local plugins** (a developer option, off by default): their actions always ask, whatever
   the grant says, because nobody reviewed what they do (see "App plugins").
-* **"Unlock your phone to let <agent> …"**: Android does not let apps unlock the phone, so screen tools,
-  `whatsapp_send` and `email_send` wait for you to unlock. This is a platform requirement, not an approval:
+* **"Unlock your phone to let <agent> …"**: Android does not let apps unlock the phone, so screen tools
+  wait for you to unlock. This is a platform requirement, not an approval:
   unlocking doesn't approve anything, and the call is still limited by the grant.
 
 **Older tokens** keep exactly what they had (no migration). The editor shows them in the same terms: an
@@ -138,9 +138,10 @@ access is part of the grant, in **Agents > (agent) > Access**).
 
 **What "app access" covers.** App access governs the *app-facing* tools:
 
-* Screen reading and control: `screen_*` and `ui_*`. Refused while a blocked app is in the foreground. Windows of blocked apps are left out of `screen_read`. `screen_screenshot` is refused if any visible window belongs to a blocked app, or the system recents screen is showing while the token has app restrictions.
+* Screen reading and control: `screen_*` and `ui_*`. Refused while a blocked app is in the foreground. Windows of blocked apps are left out of `screen_observe` and `screen_read`, and no screenshot (marked or not) is taken while one is visible. `screen_screenshot` is refused if any visible window belongs to a blocked app, or the system recents screen is showing while the token has app restrictions.
 * Notifications: notifications from blocked apps are filtered out of `notifications_list`, and `notification_reply` / `notification_action` / `notification_dismiss` refuse them.
-* Opening apps: `app_open`, `url_open`, `intent_start`, and `whatsapp_*` / `email_send`. Refused when the target or the resolved handling app is blocked.
+* Opening apps: `app_open`, `url_open`, `intent_start`. Refused when the target or the resolved handling app is blocked.
+* Contacts: `contacts_search` lists the apps a contact is on (`apps`), leaving out apps blocked for the agent.
 * `apps_list` hides blocked apps.
 * App actions: `app_actions_list` never lists blocked apps, and `app_action_run` refuses them (see "App
   plugins" below).
@@ -228,7 +229,7 @@ refused with an `isError` result and are audit-logged.
 
 ## Known platform limits
 
-* Android doesn't let apps unlock the phone. Screen tools, `whatsapp_send` and `email_send` need it
+* Android doesn't let apps unlock the phone. Screen tools need it
   unlocked, so they post *"Unlock your phone to let <agent> <action>"* and continue as soon as you
   unlock (or fail after 60 s). This is a platform requirement, not an approval prompt. Notification
   replies work while locked.

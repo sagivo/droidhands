@@ -37,21 +37,73 @@ await step('contacts_search finds a Hebrew-script contact from Latin "Yossi"', a
   return r.text.slice(0, 160);
 });
 
-await step('USE CASE: send a WhatsApp message to "Tania"', async () => {
+// Phone use, the way an agent does it: no app-specific tool, only what the app declares plus the screen.
+/** The ref of the first actionable element in a screen_observe text whose line matches [re]. */
+const refOf = (obs, re) => obs.text.split('\n').find((l) => /^n\d+ /.test(l) && re.test(l))?.split(' ')[0];
+
+await step('USE CASE: send a WhatsApp message to "Tania" (discovered actions + phone use)', async () => {
+  const who = ok(await c.call('contacts_search', { query: 'Tania' }), 'contacts_search').json?.[0];
+  const phone = (who?.phones?.find((p) => p.normalized)?.normalized || '').replace('+', '');
+  assert(phone, `no number for Tania: ${JSON.stringify(who)}`);
+  const list = ok(await c.call('app_actions_list', { app: 'WhatsApp' }), 'app_actions_list');
+  const link = list.json?.actions?.find((a) => a.action === 'open_link');
+  assert(link && /wa\.me/.test(link.description), `open_link should list the links WhatsApp declares: ${list.text.slice(0, 600)}`);
   const t0 = Date.now();
-  const r = ok(await c.call('whatsapp_send', { contact: 'Tania', message: "I'll be 10 minutes late 🙏" }), 'whatsapp_send');
+  ok(await c.call('app_action_run', { app: 'WhatsApp', action: 'open_link', params: { url: `https://wa.me/${phone}?text=${encodeURIComponent("I'll be 10 minutes late 🙏")}` } }), 'open_link');
+  await waitFor(() => lastEvent(WA, 'CHAT_OPENED', t0), { what: 'fixture CHAT_OPENED event' });
+  const obs = ok(await c.call('screen_observe', {}), 'screen_observe');
+  assert(obs.images[0]?.data?.length > 1000, 'screen_observe returned no screenshot');
+  const send = refOf(obs, /send/i);
+  assert(send, `no Send element in:\n${obs.text.slice(0, 1200)}`);
+  const tap = ok(await c.call('ui_tap', { ref: send }), 'ui_tap Send');
+  assert(/Screen changed|did not visibly change/.test(tap.text), `no change report: ${tap.text}`);
   const ev = await waitFor(() => lastEvent(WA, 'SENT', t0), { what: 'fixture SENT event' });
-  assert(ev.phone === '972541234567', `sent to ${ev.phone}`);
-  assert(ev.text === "I'll be 10 minutes late 🙏", `text was ${ev.text}`);
-  return `${r.text}\n fixture recorded: ${JSON.stringify(ev)}`;
+  assert(ev.phone === phone && ev.text === "I'll be 10 minutes late 🙏", JSON.stringify(ev));
+  return `${tap.text}\n fixture recorded: ${JSON.stringify(ev)}`;
 });
 
-await step('whatsapp_send to a number not on WhatsApp fails clearly', async () => {
-  const r = await c.call('whatsapp_send', { to: '+1 555 0000', message: 'hi' });
-  assert(r.isError, 'expected an error');
-  assert(/isn.?t on WhatsApp|not on WhatsApp/i.test(r.text), r.text);
-  shell('input keyevent KEYCODE_BACK');
-  return r.text.slice(0, 200);
+await step('phone use: a number not on WhatsApp is visible on screen', async () => {
+  ok(await c.call('app_action_run', { app: 'WhatsApp', action: 'draft_message', params: { phone: '15550000', text: 'hi' } }), 'draft_message');
+  await sleep(1500);
+  const obs = ok(await c.call('screen_observe', { screenshot: false, elements: 'all' }), 'screen_observe');
+  assert(/isn.?t on WhatsApp/i.test(obs.text), obs.text.slice(0, 800));
+  const dismiss = ok(await c.call('ui_tap', { text: 'OK' }), 'ui_tap OK');
+  shell('input keyevent KEYCODE_HOME');
+  return dismiss.text.slice(0, 200);
+});
+
+await step('phone use: tap a point of the screenshot (space=screenshot)', async () => {
+  const t0 = Date.now();
+  ok(await c.call('app_action_run', { app: 'WhatsApp', action: 'open_link', params: { url: 'https://wa.me/972541234567?text=From%20pixels' } }), 'open_link');
+  await waitFor(() => lastEvent(WA, 'CHAT_OPENED', t0), { what: 'CHAT_OPENED' });
+  const obs = ok(await c.call('screen_observe', {}), 'screen_observe');
+  const m = /Screenshot (\d+)x(\d+) \(screen (\d+)x(\d+)/.exec(obs.text);
+  assert(m, obs.text.slice(0, 300));
+  const line = obs.text.split('\n').find((l) => /^n\d+ /.test(l) && /send/i.test(l));
+  const [x, y, w, h] = /\((\d+),(\d+),(\d+),(\d+)\)$/.exec(line).slice(1).map(Number);
+  const scale = Number(m[1]) / Number(m[3]);
+  const r = ok(await c.call('ui_tap', { x: Math.round((x + w / 2) * scale), y: Math.round((y + h / 2) * scale), space: 'screenshot', observe: true }), 'ui_tap');
+  assert(r.images.length === 1, 'observe=true should return a screenshot');
+  const ev = await waitFor(() => lastEvent(WA, 'SENT', t0), { what: 'SENT' });
+  assert(ev.text === 'From pixels', JSON.stringify(ev));
+  shell('input keyevent KEYCODE_HOME');
+  return r.text.split('\n').slice(0, 3).join(' | ');
+});
+
+await step('USE CASE: write and send an email (discovered compose_mailto + phone use)', async () => {
+  const list = ok(await c.call('app_actions_list', { app: 'Fixture Mail' }), 'app_actions_list');
+  assert(list.json?.actions?.some((a) => a.action === 'compose_mailto'), list.text.slice(0, 500));
+  const t0 = Date.now();
+  ok(await c.call('app_action_run', { app: 'Fixture Mail', action: 'compose_mailto', params: { to: 'dana@example.com', subject: 'Lunch', text: 'Free on Thursday?' } }), 'compose_mailto');
+  await sleep(1200);
+  const obs = ok(await c.call('screen_observe', {}), 'screen_observe');
+  const send = refOf(obs, /send/i);
+  assert(send, obs.text.slice(0, 1200));
+  ok(await c.call('ui_tap', { ref: send }), 'ui_tap Send');
+  const ev = await waitFor(() => lastEvent(MAIL, 'EMAIL_SENT', t0), { what: 'EMAIL_SENT' });
+  assert(ev.to.includes('dana@example.com') && ev.subject === 'Lunch' && /Thursday/.test(ev.body), JSON.stringify(ev));
+  shell('input keyevent KEYCODE_HOME');
+  return JSON.stringify(ev);
 });
 
 await step('USE CASE: reply to the latest WhatsApp message (notification inline reply)', async () => {
@@ -210,13 +262,12 @@ await step('app actions: apps_list and app_actions_list show what Fixture Mail c
   return JSON.stringify(entry);
 });
 
-await step('app actions: app_actions_list for WhatsApp shows the bundled plugin\'s send_message', async () => {
+await step('app actions: app_actions_list for WhatsApp shows the bundled plugin, checked against the installed app', async () => {
   const r = ok(await c.call('app_actions_list', { app: WA }), 'app_actions_list');
   if (r.json?.integration !== 'plugin') skip(`this build has no bundled WhatsApp plugin (integration: ${r.json?.integration})`);
-  const send = r.json.actions.find((a) => a.action === 'send_message');
-  assert(send, `no send_message in: ${r.json.actions.map((a) => a.action).join(', ')}`);
-  assert(send.params?.properties?.message, JSON.stringify(send.params));
-  return `${send.title}: ${JSON.stringify(send.params).slice(0, 200)}`;
+  const draft = r.json.actions.find((a) => a.action === 'draft_message');
+  assert(draft && draft.available !== false, `draft_message should be available: ${JSON.stringify(draft)}`);
+  return `${draft.title}: ${JSON.stringify(draft.params).slice(0, 200)}`;
 });
 
 await step('app actions: app_actions_list(query) finds which app can do something', async () => {
@@ -266,6 +317,34 @@ await step('app actions: a local plugin asks for approval (unreviewed) and sends
   assert(ev.to.includes('bob@example.com') && ev.subject === subject && ev.body === 'Sent by a local plugin', JSON.stringify(ev));
   shell('input keyevent KEYCODE_HOME');
   return `${r.text.slice(0, 300)}\n fixture recorded: ${JSON.stringify(ev)}`;
+});
+
+await step('app actions: a plugin link the installed app doesn\'t handle is unavailable, not attempted', async () => {
+  const list = ok(await c.call('app_actions_list', { app: MAIL }), 'app_actions_list');
+  if (list.json?.integration !== 'local') skip('needs the local fakemail_test plugin (see the scenario above)');
+  const stale = list.json.actions.find((a) => a.action === 'open_folder');
+  assert(stale?.available === false && /another version/.test(stale.unavailable_reason || ''), JSON.stringify(stale));
+  const run = await c.call('app_action_run', { app: MAIL, action: 'open_folder', params: { folder: 'inbox' } });
+  assert(run.isError && /can.t run right now/.test(run.text), run.text);
+  return stale.unavailable_reason;
+});
+
+await step('app actions: a recipe that fails on this app version is recorded (health)', async () => {
+  const list = ok(await c.call('app_actions_list', { app: MAIL }), 'app_actions_list');
+  if (list.json?.integration !== 'local') skip('needs the local fakemail_test plugin');
+  for (let i = 0; i < 2; i++) {
+    const pending = c.call('app_action_run', { app: MAIL, action: 'archive_all' });
+    await sleep(2500);
+    await approveOnPhone('wants to:');
+    const r = await pending;
+    assert(r.isError && /Step 2 of 2/.test(r.text), r.text);
+    if (i === 1) assert(/failed 2 times in a row/.test(r.text), r.text);
+  }
+  const after = ok(await c.call('app_actions_list', { app: MAIL }), 'app_actions_list');
+  const health = after.json.actions.find((a) => a.action === 'archive_all')?.health;
+  assert(health?.status === 'failing' && health.failures === 2, JSON.stringify(health));
+  shell('input keyevent KEYCODE_HOME');
+  return JSON.stringify(health);
 });
 
 await step('app actions: blocked apps are refused and never listed', async () => {

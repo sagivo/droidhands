@@ -14,12 +14,15 @@ Actions come from two places:
 1. **Plugins**: one small YAML file per app, written by the community and reviewed in pull requests.
    They live in [`plugins/<id>/plugin.yaml`](../plugins), ship inside the app, and are written for each app
    (deep links, intents and, if needed, step-by-step screen recipes).
-2. **Discovered actions**: PhoneBridge scans every installed app for the standard things Android apps
-   declare (sharing text, launcher shortcuts, App Actions capabilities, media search, web search, maps),
-   so even apps without a plugin get `open` plus whatever they support.
+2. **Discovered actions**: PhoneBridge reads what every installed app declares, from the installed version on this
+   phone: the links and intents in its own manifest (`open_link`, `compose_mailto`, …), its search, share and text
+   actions, launcher shortcuts and App Actions capabilities. Even apps without a plugin get `open` plus whatever
+   they support, and an app update changes the menu by itself.
 
-Anything else still works through the generic screen tools (`screen_read`, `ui_tap`, …). Plugins make
-the common tasks fast, reliable and safe to approve.
+Anything else works through phone use (`screen_observe`, `ui_tap`, …), which needs nothing app-specific. Plugins
+are hints on top: before a plugin action is offered, PhoneBridge checks that the installed app version still accepts
+its intent or link (§8.1), and it records which actions fail on which app version (§8.2), so a stale plugin turns
+itself off instead of failing over and over.
 
 **Adding an app takes one folder and no code.** See [CONTRIBUTING.md](../CONTRIBUTING.md) for the
 5-minute walkthrough. This document is the format reference. The format is platform-neutral: each
@@ -292,23 +295,25 @@ Recipes can't press Home, open the notification shade, or touch other apps or Ph
 ### 6.5 `tool`: use a built-in PhoneBridge tool
 
 ```yaml
-- id: send_message
-  title: Send a message
-  description: Sends a WhatsApp message to a contact or phone number.
+- id: send_sms
+  title: Send a text message
+  description: Sends an SMS to a contact or phone number.
   params:
     contact: {description: Contact name as saved on the phone}
     message: {description: Message text, required: true}
   android:
     tool:
-      name: whatsapp_send
+      name: sms_send
       args: {contact: "{{contact}}", message: "{{message}}"}
 ```
 
-The call runs exactly as if the agent had called `whatsapp_send` itself, with that tool's scope, risk,
-approval, rules and audit entry. This is how app-centric menus reuse the tested built-in tools
-(`whatsapp_send`, `email_send`, `sms_send`, `phone_call`, `calendar_event_create`, `alarm_set`, …).
-A BLOCK rule on the action's own name (`com.whatsapp/send_message`) refuses it too, and the audit entry
-notes it. `args` values are templates, numbers, booleans or lists of those. Recipes can't use
+The call runs exactly as if the agent had called `sms_send` itself, with that tool's scope, risk,
+approval, rules and audit entry. This is how app-centric menus reuse the platform's built-in tools
+(`sms_send`, `phone_call`, `calendar_event_create`, `alarm_set`, `url_open`, …). There are no built-in tools for
+particular third-party apps: their screens differ between versions and phones, so sending in such an app is
+an intent or link that opens the right screen (`completes: false`) plus phone use.
+A BLOCK rule on the action's own name (`com.google.android.apps.messaging/send_sms`) refuses it too, and the audit
+entry notes it. `args` values are templates, numbers, booleans or lists of those. Recipes can't use
 `intent_start`, the screen tools (`screen_*`, `ui_*`) or the tools that list or run actions
 (`bridge_capabilities`, `apps_list`, `app_actions_list`, `app_action_run`).
 
@@ -349,6 +354,9 @@ updated or removed.
 | `play_from_search` | the app handles `MEDIA_PLAY_FROM_SEARCH` | `query` | action |
 | `web_search` | the app handles `ACTION_WEB_SEARCH` | `query` | action |
 | `show_on_map` | the app handles `geo:` links | `query` | action |
+| `search` | the app handles `ACTION_SEARCH` (its own search screen) | `query` | action |
+| `open_link` | the app's manifest declares `ACTION_VIEW` filters with `DEFAULT` or `BROWSABLE` and a scheme | `url` | runs `url_open` pinned to the app (its risk, `action`) |
+| `compose_<scheme>` | the app's manifest declares `ACTION_SENDTO` for a scheme (`mailto`, `smsto`, …) | `to`, `text` (+ `subject` for `mailto`) | action (opens a filled-in compose screen; nothing is sent) |
 | `shortcut_<id>` | each static launcher shortcut whose target is exported and not a call action | none | action; `sensitive` when its id or label says it sends, pays, orders, calls or deletes (§9 word check) |
 | `<capability>` | each App Actions capability in the app's `shortcuts.xml` (e.g. `actions.intent.GET_THING` → `get_thing`), with its parameters | per capability | action; `sensitive` for messaging, calling, ordering, booking and payment capabilities |
 
@@ -359,10 +367,35 @@ named after their `android:key` (`messageText` → `message_text`); they reach t
 that key, or through its `<url-template>`, of which the RFC 6570 forms `{var}`, `{?a,b}` and `{&a}` are
 supported (a parameter left out gives an empty value there).
 
+**Read from the manifest.** Android has no public API that lists another app's intent filters, so PhoneBridge reads
+them from the app's own base APK (`AndroidManifest.xml`, compiled; APKs are world-readable and nothing in them is
+run), cached per app version. Only activities that Android says other apps may start count: exported, enabled and
+not guarded by a permission. `open_link`'s description lists the link forms the installed version declares
+(`https://open.spotify.com/*`, `spotify:*`, or "any http(s) web link" for browsers), so the agent can build a link
+from what it knows about the app; Android itself refuses links that version doesn't handle. `compose_<scheme>` passes
+the standard extras (`EXTRA_TEXT`, `EXTRA_SUBJECT`, and `sms_body` for SMS schemes). No app is named anywhere in
+this code: a new app, or a new version, is described by what it declares.
+
 When a plugin defines an action with the same id, the plugin's version wins. A plugin applies to the
 first of its `android.packages` that is installed; other installed packages it lists get discovered
 actions only. Discovered actions are not validated like plugins, but the run-time checks below (and
 the refusal of call actions and forbidden URL schemes) apply to them too.
+
+### 8.1 Checking recipes against the installed app
+
+Before an `intent` or `url` action is offered, PhoneBridge renders it with sample parameters (the first example that
+validates, else defaults and placeholders) and asks Android whether an exported activity of the installed app
+accepts it, without starting anything. If none does, `app_actions_list` shows the action with `available: false`
+and an `unavailable_reason` ("… has no screen that accepts this action's link (it was written for another version of
+the app) …"), and `app_action_run` refuses it before any approval prompt. The answer is cached per app version.
+
+### 8.2 Action health
+
+When an action runs but the app doesn't do what the recipe expects (no activity of this version takes the intent, or
+a screen recipe's step fails), PhoneBridge records it for that app version. `app_actions_list` then shows
+`health: {status, failures, last_error, note}` (`failed_last_time`, or `failing` after two in a row), and the error of
+a repeated failure says to use phone use instead. A success clears the record; an app update starts clean. Refusals
+(app access, a locked phone, Pause) are not failures. Records stay on the phone (`files/action-health.json`).
 
 ## 9. Security rules
 
@@ -373,7 +406,8 @@ The validator, at build time and when a local plugin is imported, rejects:
 * risk `read` for any `steps` recipe that taps, types, scrolls, starts an intent or opens a link, and for
   every `intent` and `url` recipe (opening an app is at least an `action`);
 * `risk` or `scope` on a `tool` recipe, or a `tool` name that doesn't exist (or is `intent_start`, a
-  `ui_*` / `screen_*` tool, or one of the tools that list or run actions);
+  `ui_*` / `screen_*` tool, or one of the tools that list or run actions). Discovered actions may use only one
+  tool recipe: `open_link`'s `url_open` with the app's own package pinned;
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,
   `type`, `categories`, `class` or extra keys;
 * URL templates whose scheme isn't literal;
