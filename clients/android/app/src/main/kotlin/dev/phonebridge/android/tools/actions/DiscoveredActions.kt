@@ -29,6 +29,8 @@ data class StandardHandlers(
     val webSearch: IntentHandler? = null,
     /** ACTION_VIEW of a `geo:` link. */
     val geo: IntentHandler? = null,
+    /** ACTION_SEARCH: the app's own search screen. */
+    val search: IntentHandler? = null,
 )
 
 /**
@@ -45,6 +47,7 @@ object DiscoveredActions {
     const val ACTION_SEND = "android.intent.action.SEND"
     const val ACTION_PROCESS_TEXT = "android.intent.action.PROCESS_TEXT"
     const val ACTION_WEB_SEARCH = "android.intent.action.WEB_SEARCH"
+    const val ACTION_SEARCH = "android.intent.action.SEARCH"
     const val ACTION_PLAY_FROM_SEARCH = "android.media.action.MEDIA_PLAY_FROM_SEARCH"
     const val CATEGORY_LAUNCHER = "android.intent.category.LAUNCHER"
     const val EXTRA_TEXT = "android.intent.extra.TEXT"
@@ -70,8 +73,9 @@ object DiscoveredActions {
 
     /**
      * Every discovered action of the app [packageName] (labelled [appLabel]): `open` when it has a
-     * [launcherClass], then [handlers]' actions, then [declared]'s capabilities and shortcuts whose target
-     * activity [isExported] says other apps may start.
+     * [launcherClass], then [handlers]' actions, then the actions of its manifest's intent filters ([manifest],
+     * see [DeclaredActions]), then [declared]'s capabilities and shortcuts whose target activity [isExported] says
+     * other apps may start.
      */
     fun build(
         appLabel: String,
@@ -79,6 +83,7 @@ object DiscoveredActions {
         launcherClass: String?,
         handlers: StandardHandlers,
         declared: ShortcutsDeclaration?,
+        manifest: DeclaredManifest? = null,
         isExported: (className: String) -> Boolean,
     ): List<PluginAction> {
         val out = LinkedHashMap<String, PluginAction>()
@@ -91,6 +96,8 @@ object DiscoveredActions {
         handlers.playFromSearch?.let { add(playFromSearch(appLabel, it)) }
         handlers.webSearch?.let { add(webSearch(appLabel, it)) }
         handlers.geo?.let { add(showOnMap(appLabel, it)) }
+        handlers.search?.let { add(searchInApp(appLabel, it)) }
+        manifest?.let { m -> DeclaredActions.build(appLabel, packageName, m, isExported).forEach(::add) }
         declared?.capabilities?.forEach { add(capability(appLabel, packageName, it, isExported)) }
         declared?.shortcuts?.forEach { add(shortcut(appLabel, packageName, it, isExported)) }
         return out.values.toList()
@@ -174,6 +181,18 @@ object DiscoveredActions {
         params = listOf(ParamSpec("query", "What to search for", required = true, maxLength = QUERY_MAX)),
         completes = false,
         android = IntentRecipe(action = ACTION_WEB_SEARCH, className = handler.className, extras = linkedMapOf(EXTRA_QUERY to template("query"))),
+    )
+
+    fun searchInApp(appLabel: String, handler: IntentHandler) = PluginAction(
+        id = "search",
+        title = "Search in the app",
+        description = "Opens $appLabel's own search with the query and shows its results (the app's search screen, " +
+            "not the web).",
+        keywords = listOf("search", "find", "look up", "look for"),
+        risk = Risk.ACTION,
+        params = listOf(ParamSpec("query", "What to search for", required = true, maxLength = QUERY_MAX)),
+        completes = false,
+        android = IntentRecipe(action = ACTION_SEARCH, className = handler.className, extras = linkedMapOf(EXTRA_QUERY to template("query"))),
     )
 
     fun showOnMap(appLabel: String, handler: IntentHandler) = PluginAction(

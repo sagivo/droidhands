@@ -43,9 +43,11 @@ private fun appActionsList(catalog: AppActionCatalog): Tool = tool(
     description = "Lists the ready-made actions you can run with app_action_run, with their parameters as JSON Schema. " +
         "Pass 'app' (the app's name, e.g. Spotify, or its package) for that app's actions, or 'query' (what you want to do, " +
         "e.g. \"play music\" or \"navigate home\") to search the actions of every installed app; both together search " +
-        "within the app. apps_list shows each app's action ids. Actions are faster and more reliable than the screen " +
-        "tools; use screen_read and ui_tap for anything not listed. Only actions this agent may run are listed, and apps " +
-        "the user blocked for this agent never appear.",
+        "within the app. apps_list shows each app's action ids. Actions come from what each installed app declares on this " +
+        "phone (plus community plugins checked against it), so they differ between phones and app versions. They are " +
+        "faster than phone use (screen_observe, ui_tap), which works for anything not listed; an action with " +
+        "available=false or a 'health' entry doesn't work on this phone right now, so use phone use for it. Only actions " +
+        "this agent may run are listed, and apps the user blocked for this agent never appear.",
     scope = Scopes.APPS,
     risk = Risk.READ,
     schema = objectSchema {
@@ -157,6 +159,17 @@ private fun JsonObjectBuilder.describe(catalog: AppActionCatalog, a: AppAction, 
         put("available", false)
         put("unavailable_reason", reason)
     }
+    catalog.health.status(a.app, a.action.id)?.let { record ->
+        put(
+            "health",
+            buildJsonObject {
+                put("status", if (record.failing) "failing" else "failed_last_time")
+                put("failures", record.failures)
+                put("last_error", record.lastError)
+                put("note", "Failed on ${a.app.label} ${catalog.health.versionLabel(a.app)} on this phone; prefer phone use (screen_observe) for this task.")
+            },
+        )
+    }
 }
 
 private fun withFooter(result: ToolResult, footer: List<String>): ToolResult =
@@ -175,7 +188,7 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
             "matching the action's parameters). app_actions_list shows the actions and their parameters; apps_list shows " +
             "each app's action ids. Each action is checked and approved like a tool of its own (named <package>/<action>), " +
             "so it may need the user's approval on the phone. Actions with completes=false open the right screen and " +
-            "leave the last step to you (screen_read, ui_tap) or the user. Apps the user blocked for this agent are refused."
+            "leave the last step to you (screen_observe, ui_tap) or the user. Apps the user blocked for this agent are refused."
     override val scope = Scopes.APPS
     override val risk = Risk.ACTION
     override val inputSchema: JsonObject = objectSchema {
@@ -241,7 +254,11 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
  * `<package>/<action id>`. Its scope and risk are the action's; actions of local plugins always need
  * approval ([Tool.alwaysConfirm]) and their prompt says "unreviewed plugin".
  */
-internal class AppActionTool(val target: AppAction, private val platform: AppActionsPlatform) : Tool {
+internal class AppActionTool(
+    val target: AppAction,
+    private val platform: AppActionsPlatform,
+    private val health: ActionHealth = ActionHealth(),
+) : Tool {
     private val action = target.action
     private val app = target.app
 
@@ -272,9 +289,14 @@ internal class AppActionTool(val target: AppAction, private val platform: AppAct
             platform.execute(ActionRequest(app, action, target.plugin, rendered, values), ctx)
         } catch (e: ToolException) {
             if (e is AppBlockedException || e is CallStoppedException) throw e
-            val note = ActionText.failureNote(target.plugin) ?: throw e
-            throw ToolException("${e.message.orEmpty().trimEnd()} $note")
+            val notes = listOfNotNull(
+                (e as? IntegrationException)?.let { health.failureNote(app, health.failed(app, action.id, it.message.orEmpty())) },
+                ActionText.failureNote(target.plugin),
+            )
+            if (notes.isEmpty()) throw e
+            throw ToolException((listOf(e.message.orEmpty().trimEnd()) + notes).joinToString(" "))
         }
+        health.succeeded(app, action.id)
         return ActionText.result(target, result)
     }
 }
@@ -380,7 +402,7 @@ internal object ActionText {
             "Local plugin that the PhoneBridge project has not reviewed: the user must approve each of its actions on the phone."
         plugin?.status == PluginStatus.EXPERIMENTAL ->
             "Community plugin, marked experimental: if an action fails or the result looks wrong, fall back to the screen tools " +
-                "(screen_read, ui_tap)."
+                "(screen_observe, ui_tap)."
         else -> null
     }
 
@@ -399,9 +421,9 @@ internal object ActionText {
         plugin == null -> null
         plugin.source == PluginSource.LOCAL ->
             "${plugin.name} support comes from a local plugin that has not been reviewed. If the result looks wrong, check with " +
-                "screen_read and fall back to the screen tools."
+                "screen_observe and fall back to the screen tools."
         plugin.status == PluginStatus.EXPERIMENTAL ->
-            "${plugin.name} support is an experimental community plugin. If the result looks wrong, check with screen_read and " +
+            "${plugin.name} support is an experimental community plugin. If the result looks wrong, check with screen_observe and " +
                 "fall back to the screen tools."
         else -> null
     }
@@ -421,7 +443,7 @@ internal object ActionText {
             put(
                 "next",
                 "${target.app.label} is open at the right place, but the task is not finished: someone still has to complete " +
-                    "it there. Use screen_read to see the screen and ui_tap to finish it, or ask the user to finish it on the phone.",
+                    "it there. Use screen_observe to see the screen and ui_tap to finish it, or ask the user to finish it on the phone.",
             )
         }
         resultNote(target.plugin)?.let { put("integration_note", it) }

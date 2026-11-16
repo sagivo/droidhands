@@ -55,6 +55,8 @@ class AppActionCatalog(
     private val plugins: () -> PluginCatalog,
     val platform: AppActionsPlatform,
     private val builtInTool: (String) -> Tool?,
+    /** How each action has fared on each installed app version (reported to agents, recorded by [AppActionTool]). */
+    val health: ActionHealth = ActionHealth(),
 ) {
     /** Launchable apps the agent may see under [access]. */
     suspend fun visibleApps(access: AppAccess): List<InstalledApp> = platform.installedApps().filter { access.isAllowed(it.packageName) }
@@ -120,12 +122,28 @@ class AppActionCatalog(
             emptyList() // A failing scan must not hide the plugin actions.
         }
         val extra = discovered
-            .filter { a -> PluginRules.ACTION_ID.matches(a.id) && a.risk != null && (a.android is IntentRecipe || a.android is UrlRecipe || a.android is StepsRecipe) }
+            .filter { a ->
+                PluginRules.ACTION_ID.matches(a.id) &&
+                    when (val recipe = a.android) {
+                        is IntentRecipe, is UrlRecipe, is StepsRecipe -> a.risk != null
+                        // Only one built-in tool: open_link opening links with url_open, pinned to this app.
+                        is ToolRecipe -> a.risk == null && isPinnedLinkOpener(recipe, app.packageName)
+                        null -> false
+                    }
+            }
             .distinctBy { it.id }
             .filter { it.id !in taken }
             .map { AppAction(app, it, null) }
         return fromPlugins + extra
     }
+
+    /**
+     * A discovered `tool` recipe is accepted only as `url_open` with the app's own package literally pinned (open_link,
+     * docs/PLUGINS.md §8): discovery must never reach other built-in tools.
+     */
+    private fun isPinnedLinkOpener(recipe: ToolRecipe, packageName: String): Boolean =
+        recipe.name == URL_OPEN && recipe.args.keys == setOf("url", "package") &&
+            recipe.args["package"] == ValueSpec.Template(packageName)
 
     /** One action of [app] by id (`play`, or the full `<package>/play`), or null. */
     suspend fun action(app: InstalledApp, id: String): AppAction? {
@@ -165,7 +183,7 @@ class AppActionCatalog(
      */
     fun toolFor(action: AppAction): Tool? {
         val recipe = action.action.android ?: return null
-        if (recipe !is ToolRecipe) return AppActionTool(action, platform)
+        if (recipe !is ToolRecipe) return AppActionTool(action, platform, health)
         if (ToolNames.recipeRefusal(recipe.name) != null) return null
         val tool = builtInTool(recipe.name) ?: return null
         if (tool is DispatchTool) return null
@@ -183,6 +201,8 @@ class AppActionCatalog(
     }
 
     companion object {
+        private const val URL_OPEN = "url_open"
+
         /** True if the token may call `app_action_run` at all (its scope, risk cap and tool rule). */
         fun mayRunActions(ctx: CallContext): Boolean =
             Scopes.allows(ctx.scopes, Scopes.APPS) && ctx.toolRules[ToolNames.APP_ACTION_RUN] != ToolRule.BLOCK &&

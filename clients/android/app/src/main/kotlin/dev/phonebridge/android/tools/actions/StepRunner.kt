@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import dev.phonebridge.core.plugins.IntegrationException
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -52,8 +53,11 @@ private class RecipeFailure(message: String) : ToolException(message)
 /** Another app is in front: never ignored, even for an optional step. */
 private class ConfinementFailure(message: String) : ToolException(message)
 
-/** The final, already-worded failure of a step (nested steps report theirs through their `if_present`). */
-private class StoppedAtStep(message: String) : ToolException(message)
+/**
+ * The final, already-worded failure of a step (nested steps report theirs through their `if_present`): the app didn't
+ * show what the recipe expects, which [dev.phonebridge.core.plugins.ActionHealth] records for this app version.
+ */
+private class StoppedAtStep(message: String) : IntegrationException(message)
 
 /**
  * Runs a screen recipe (docs/PLUGINS.md §6.4) with the screen tools' safety checks: the UI mutex
@@ -329,14 +333,14 @@ internal class StepRunner private constructor(
             ""
         } else {
             " $ran earlier ${if (ran == 1) "step" else "steps"} ran, so ${app.label} may be partway through the task: check with " +
-                "screen_read before retrying."
+                "screen_observe before retrying."
         }
         return head + progress
     }
 
     private fun timeUp(number: String, what: String) =
         "${app.label}'s screen recipe ran out of time (${PluginRules.STEPS_TIMEOUT_MS / 1000} s) before step $number of $total ($what). " +
-            "$ran steps ran: check the screen with screen_read."
+            "$ran steps ran: check the screen with screen_observe."
 
     private fun summary(): String = buildString {
         append("Ran $ran ${if (ran == 1) "step" else "steps"} in ${app.label}")

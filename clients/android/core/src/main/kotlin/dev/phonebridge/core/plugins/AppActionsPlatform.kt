@@ -12,6 +12,8 @@ data class InstalledApp(
     val versionName: String? = null,
     /** Preinstalled system app. */
     val system: Boolean = false,
+    /** The installed build (Android's versionCode); with [versionName], what [ActionHealth] keys records by. */
+    val versionCode: Long? = null,
 )
 
 /** Result of resolving an app name for an agent whose app access may hide some apps. */
@@ -70,7 +72,8 @@ interface AppActionsPlatform {
 
     /**
      * Runs [request] (an intent, link or steps recipe pinned to [ActionRequest.app]). Throw
-     * [dev.phonebridge.core.tools.ToolException] with an agent-facing message on failure, and
+     * [dev.phonebridge.core.tools.ToolException] with an agent-facing message on failure ([IntegrationException] when
+     * the app didn't do what the recipe expects, so [ActionHealth] records it), and
      * [dev.phonebridge.core.tools.AppBlockedException] if the app turns out to be blocked. Must call
      * [CallContext.ensureStillAllowed] after any wait and right before each side effect, and honour the
      * screen tools' safety checks for steps (docs/PLUGINS.md §6.4).
