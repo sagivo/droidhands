@@ -1,0 +1,44 @@
+---
+// The agent's live run log: one row per tool call, each with a spinner until its result arrives.
+interface Props {
+  run: [number, number];
+  log: { at: number; doneAt?: number; name: string; args: string; result: string }[];
+}
+const { run, log } = Astro.props;
+---
+
+<div data-at={run[0]} class="col-start-1 row-start-1 h-fit overflow-hidden rounded-2xl bg-slate-950 font-mono text-xs text-slate-300 ring-1 ring-slate-900">
+  <div class="flex items-center gap-2 border-b border-white/10 px-3.5 py-2 font-sans text-[11px] font-medium">
+    <span class="grid">
+      <span data-at={run[0]} data-until={run[1]} data-fx="fade" class="col-start-1 row-start-1 flex items-center gap-1.5 text-amber-300">
+        <svg viewBox="0 0 24 24" class="spin size-3" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.56"></path></svg>
+        Running on your phone
+      </span>
+      <span data-at={run[1]} data-fx="fade" class="col-start-1 row-start-1 text-emerald-400">✓ Done</span>
+    </span>
+  </div>
+  <div class="space-y-1.5 px-3.5 py-3">
+    {
+      log.map((line) => {
+        const doneAt = line.doneAt ?? line.at;
+        return (
+          <div data-at={line.at} class="flex items-center gap-2">
+            <span class="text-slate-600">▸</span>
+            <span class="min-w-0 truncate">
+              <span class="font-semibold text-brand-300">{line.name}</span>
+              <span class="text-slate-500">({line.args})</span>
+            </span>
+            <span class="ml-auto grid shrink-0">
+              {doneAt > line.at && (
+                <svg data-at={line.at} data-until={doneAt} data-fx="fade" viewBox="0 0 24 24" class="spin col-start-1 row-start-1 size-3 justify-self-end text-amber-300" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                  <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+                </svg>
+              )}
+              <span data-at={doneAt} data-fx="fade" class="result col-start-1 row-start-1 text-emerald-400">✓ {line.result}</span>
+            </span>
+          </div>
+        );
+      })
+    }
+  </div>
+</div>

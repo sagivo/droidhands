@@ -1,0 +1,397 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Icon from "../components/Icon.astro";
+import GitHubMark from "../components/GitHubMark.astro";
+import PhoneMockup from "../components/PhoneMockup.astro";
+import AppAccess from "../components/AppAccess.astro";
+import Demos from "../components/Demos.astro";
+import { GITHUB_URL, DOWNLOAD_URL, DOCS_URL, SECURITY_URL, TOOLS_URL } from "../site";
+
+const pillars = [
+  {
+    icon: "lock",
+    title: "Completely private",
+    body: "No accounts, no analytics, no cloud of ours. Your agent talks to your phone through a relay you host, or directly over USB, Wi-Fi or Tailscale.",
+  },
+  {
+    icon: "gift",
+    title: "Completely free",
+    body: "No subscription, no premium tier, no ads, no usage limits we sell back to you. Every feature is free for everyone.",
+  },
+  {
+    icon: "grid",
+    title: "You pick the apps",
+    body: "Choose exactly which apps each agent can see and use. Banking, password managers and authenticators are blocked from the start.",
+  },
+  {
+    icon: "code",
+    title: "Open source",
+    body: "The Android app, the relay and the protocol are all on GitHub. Read the code, audit it, build it yourself.",
+  },
+] as const;
+
+const controls = [
+  { icon: "sliders", title: "Access levels", body: "Read-only, Assistant or Full control, or pick scopes one by one." },
+  { icon: "hand", title: "Approve on your phone", body: "Sensitive actions wait for your tap, showing the real recipient and text." },
+  { icon: "eyeOff", title: "Codes stay hidden", body: "One-time passwords are hidden from agents by default." },
+  { icon: "clock", title: "Active hours & expiry", body: "Limit when an agent can act, and let access expire on its own." },
+  { icon: "log", title: "Full audit log", body: "Every call, every result, with per-agent usage charts." },
+  { icon: "pause", title: "Pause & revoke", body: "Stop everything from the notification. Revoke an agent in one tap." },
+] as const;
+
+const capabilities = [
+  { icon: "message", title: "Messages", body: "Send WhatsApp and SMS, read conversations, open chats." },
+  { icon: "bell", title: "Notifications", body: "Read every app's notifications and reply inline, even when locked." },
+  { icon: "users", title: "Contacts & calls", body: "Fuzzy contact search (Tania ≈ Tanya ≈ טניה), place calls, call log." },
+  { icon: "scan", title: "Any app", body: "Read the screen, tap, type, scroll and swipe: a fallback for everything else." },
+  { icon: "calendar", title: "Calendar & alarms", body: "List and create events, set alarms and timers." },
+  { icon: "smartphone", title: "Device", body: "Battery, volume, ringer, flashlight, media keys, clipboard, location." },
+] as const;
+
+const steps = [
+  {
+    title: "Install the app",
+    body: "Download PhoneBridge for Android. It walks you through each permission, one tap per step.",
+  },
+  {
+    title: "Paste one URL into your agent",
+    body: "Copy your connection URL from the app and add it as a connector in Claude, ChatGPT or any MCP client.",
+  },
+  {
+    title: "Tap Allow on your phone",
+    body: "Check the 4-letter code matches, choose an access level and which apps, and you're connected.",
+  },
+];
+
+const agents = ["Claude", "Claude Code", "ChatGPT", "Any MCP client"];
+
+const faqs = [
+  {
+    q: "Does my data go through your servers?",
+    a: "There are no PhoneBridge servers. Agents reach your phone through a small relay that you run yourself (one-click configs for Fly.io, Render and Docker are included), or directly over USB, your local network or Tailscale. The relay is only a tunnel: it can't create or check access tokens, and it keeps nothing from your phone.",
+  },
+  {
+    q: "Is it really free?",
+    a: "Yes. PhoneBridge is open source with no paid tier, no ads and no tracking. You only pay for your own relay hosting if you choose to put one on the internet, and many free hosting tiers are enough.",
+  },
+  {
+    q: "What stops an agent from doing something I don't want?",
+    a: "Your phone is the only authority. Each agent gets its own token, access level, app list and per-tool rules (Allow, Ask or Block). Sensitive actions show an approval prompt with the actual recipient and message, need an unlocked phone, and are denied automatically after 60 seconds.",
+  },
+  {
+    q: "Which phones are supported?",
+    a: "Android 11 and newer today. The core is platform-neutral, and iOS is planned.",
+  },
+  {
+    q: "Which AI agents work with it?",
+    a: "Anything that speaks MCP: Claude.ai, Claude Desktop, Claude Code, ChatGPT (developer mode connectors) and any client that supports Streamable HTTP servers with OAuth.",
+  },
+];
+---
+
+<Layout
+  title="PhoneBridge: let your AI use your phone, privately"
+  description="PhoneBridge lets Claude, ChatGPT or any MCP agent use your Android phone, only the apps you allow. Completely private, completely free, open source."
+>
+  <!-- Nav -->
+  <header class="sticky top-0 z-50 border-b border-slate-200/60 bg-white/80 backdrop-blur-lg">
+    <nav class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+      <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
+        <img src="/favicon.svg" alt="" class="size-8" />
+        PhoneBridge
+      </a>
+      <div class="hidden items-center gap-8 text-sm text-slate-600 md:flex">
+        <a href="#demo" class="hover:text-slate-900">Demo</a>
+        <a href="#privacy" class="hover:text-slate-900">Privacy</a>
+        <a href="#control" class="hover:text-slate-900">Control</a>
+        <a href="#how" class="hover:text-slate-900">How it works</a>
+        <a href="#faq" class="hover:text-slate-900">FAQ</a>
+      </div>
+      <a
+        href={GITHUB_URL}
+        class="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
+      >
+        <GitHubMark class="size-4" />
+        <span>Star</span>
+        <Icon name="star" class="size-3.5 fill-amber-400 text-amber-400" />
+      </a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="relative overflow-hidden">
+      <div class="absolute inset-0 -z-10 bg-[radial-gradient(60rem_40rem_at_70%_-10%,var(--color-brand-100),transparent_70%)]"></div>
+      <div
+        class="absolute inset-0 -z-10 bg-[linear-gradient(to_right,rgb(15_23_42/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(15_23_42/0.04)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"
+      >
+      </div>
+
+      <div class="mx-auto grid max-w-6xl items-center gap-16 px-5 pt-16 pb-24 lg:grid-cols-[1.1fr_1fr] lg:pt-24">
+        <div>
+          <a
+            href={GITHUB_URL}
+            class="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:ring-slate-300"
+          >
+            <span class="size-1.5 rounded-full bg-emerald-500"></span>
+            Free &amp; open source · Android
+            <Icon name="arrowRight" class="size-3" />
+          </a>
+
+          <h1 class="mt-6 text-5xl font-semibold tracking-tight text-balance text-slate-900 sm:text-6xl">
+            Let your AI use your phone.
+            <span class="block text-brand-600">On your terms.</span>
+          </h1>
+
+          <p class="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-slate-600">
+            PhoneBridge lets Claude, ChatGPT or any MCP agent send messages, read notifications and use your apps:
+            only the apps you choose, and only after you tap <strong class="font-semibold text-slate-900">Allow</strong>.
+          </p>
+
+          <ul class="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium text-slate-700">
+            <li class="flex items-center gap-1.5"><Icon name="check" class="size-4 text-emerald-600" />Completely private</li>
+            <li class="flex items-center gap-1.5"><Icon name="check" class="size-4 text-emerald-600" />Completely free</li>
+            <li class="flex items-center gap-1.5"><Icon name="check" class="size-4 text-emerald-600" />No account needed</li>
+          </ul>
+
+          <div class="mt-10 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={DOWNLOAD_URL}
+              class="inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-7 py-3.5 font-semibold text-white shadow-lg shadow-brand-600/25 transition hover:-translate-y-0.5 hover:bg-brand-700"
+            >
+              <Icon name="download" class="size-5" />
+              Download for Android
+            </a>
+            <a
+              href={GITHUB_URL}
+              class="inline-flex items-center justify-center gap-2 rounded-full bg-slate-900 px-7 py-3.5 font-semibold text-white transition hover:-translate-y-0.5 hover:bg-slate-800"
+            >
+              <GitHubMark class="size-5" />
+              Star on GitHub
+            </a>
+          </div>
+          <p class="mt-4 text-sm text-slate-500">Android 11+ · iOS planned</p>
+        </div>
+
+        <PhoneMockup />
+      </div>
+    </section>
+
+    <!-- Demo -->
+    <section id="demo" class="scroll-mt-16 px-5 pb-24">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-semibold text-brand-600">See it in action</p>
+        <h2 class="mt-2 text-4xl font-semibold tracking-tight text-balance">Ask once. Your phone does the rest.</h2>
+        <p class="mt-4 text-lg text-slate-600">
+          Set up a routine or ask for something on the spot. Your AI opens the apps, types, taps and sends, right on your
+          phone, while you get on with your day.
+        </p>
+      </div>
+      <div class="mt-12">
+        <Demos />
+      </div>
+      <p class="mx-auto mt-10 max-w-xl text-center text-sm text-slate-500">
+        Routines run on your AI agent's schedule. You choose, app by app, what it can do on its own and what should check
+        with you first.
+      </p>
+    </section>
+
+    <!-- Pillars -->
+    <section id="privacy" class="scroll-mt-16 border-y border-slate-100 bg-slate-50/60 py-24">
+      <div class="mx-auto max-w-6xl px-5">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="text-sm font-semibold text-brand-600">Built different</p>
+          <h2 class="mt-2 text-4xl font-semibold tracking-tight text-balance">Your phone stays yours</h2>
+          <p class="mt-4 text-lg text-slate-600">
+            Giving an AI your phone is a big deal. PhoneBridge is built so you never have to trust anyone but yourself.
+          </p>
+        </div>
+
+        <div class="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {
+            pillars.map((p) => (
+              <div class="group rounded-3xl bg-white p-7 ring-1 ring-slate-200/70 transition hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-900/5">
+                <span class="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white">
+                  <Icon name={p.icon} class="size-6" />
+                </span>
+                <h3 class="mt-6 text-lg font-semibold">{p.title}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-slate-600">{p.body}</p>
+              </div>
+            ))
+          }
+        </div>
+
+        <div class="mx-auto mt-14 max-w-4xl rounded-3xl bg-slate-900 p-6 sm:p-8">
+          <div class="flex flex-col items-center gap-4 text-center font-mono text-xs text-slate-300 sm:flex-row sm:justify-between sm:text-sm">
+            <span class="rounded-xl bg-white/5 px-4 py-2.5 ring-1 ring-white/10">AI agent</span>
+            <span class="flex items-center gap-2 text-slate-500"><span class="hidden sm:inline">──</span>HTTPS<span>──▶</span></span>
+            <span class="rounded-xl bg-brand-600/20 px-4 py-2.5 text-brand-200 ring-1 ring-brand-400/30">your relay</span>
+            <span class="flex items-center gap-2 text-slate-500"><span>◀──</span>WebSocket<span class="hidden sm:inline">──</span></span>
+            <span class="rounded-xl bg-white/5 px-4 py-2.5 ring-1 ring-white/10">your phone</span>
+          </div>
+          <p class="mt-5 text-center text-sm text-slate-400">
+            The relay is a tunnel you host. It can't create or verify tokens. Those are minted on your phone and stored only as a hash.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Control -->
+    <section id="control" class="scroll-mt-16 py-24">
+      <div class="mx-auto grid max-w-6xl items-center gap-16 px-5 lg:grid-cols-2">
+        <div>
+          <p class="text-sm font-semibold text-brand-600">You're in control</p>
+          <h2 class="mt-2 text-4xl font-semibold tracking-tight text-balance">You decide which apps your AI can touch</h2>
+          <p class="mt-4 text-lg text-slate-600">
+            Give each agent its own set of apps. WhatsApp and your calendar, yes. Your bank, never. Change it any
+            time; revoking takes one tap.
+          </p>
+          <dl class="mt-10 grid gap-6 sm:grid-cols-2">
+            {
+              controls.map((c) => (
+                <div class="flex gap-3">
+                  <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-600">
+                    <Icon name={c.icon} class="size-4" />
+                  </span>
+                  <div>
+                    <dt class="text-sm font-semibold">{c.title}</dt>
+                    <dd class="mt-1 text-sm text-slate-600">{c.body}</dd>
+                  </div>
+                </div>
+              ))
+            }
+          </dl>
+          <a href={SECURITY_URL} class="mt-10 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700">
+            Read the security model <Icon name="arrowRight" class="size-4" />
+          </a>
+        </div>
+        <AppAccess />
+      </div>
+    </section>
+
+    <!-- Capabilities -->
+    <section class="bg-slate-950 py-24 text-white">
+      <div class="mx-auto max-w-6xl px-5">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="text-sm font-semibold text-brand-300">About 40 tools</p>
+          <h2 class="mt-2 text-4xl font-semibold tracking-tight text-balance">Everything your phone can do</h2>
+          <p class="mt-4 text-lg text-slate-400">
+            “Text Tania I'll be late.” “What did the school WhatsApp group say?” “Call mom.” Your agent figures out the rest.
+          </p>
+        </div>
+        <div class="mt-16 grid gap-px overflow-hidden rounded-3xl bg-white/10 ring-1 ring-white/10 sm:grid-cols-2 lg:grid-cols-3">
+          {
+            capabilities.map((c) => (
+              <div class="bg-slate-950 p-8 transition hover:bg-slate-900">
+                <Icon name={c.icon} class="size-6 text-brand-300" />
+                <h3 class="mt-5 font-semibold">{c.title}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-slate-400">{c.body}</p>
+              </div>
+            ))
+          }
+        </div>
+        <div class="mt-12 flex flex-wrap items-center justify-center gap-3">
+          <span class="text-sm text-slate-500">Works with</span>
+          {agents.map((a) => <span class="rounded-full bg-white/5 px-4 py-1.5 text-sm font-medium text-slate-200 ring-1 ring-white/10">{a}</span>)}
+        </div>
+        <p class="mt-8 text-center">
+          <a href={TOOLS_URL} class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-300 hover:text-brand-200">
+            See all tools <Icon name="arrowRight" class="size-4" />
+          </a>
+        </p>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how" class="scroll-mt-16 py-24">
+      <div class="mx-auto max-w-6xl px-5">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="text-sm font-semibold text-brand-600">Setup in minutes</p>
+          <h2 class="mt-2 text-4xl font-semibold tracking-tight text-balance">Three steps. No account.</h2>
+        </div>
+        <ol class="mt-16 grid gap-8 md:grid-cols-3">
+          {
+            steps.map((s, i) => (
+              <li class="relative rounded-3xl bg-slate-50 p-8 ring-1 ring-slate-100">
+                <span class="grid size-10 place-items-center rounded-full bg-brand-600 font-semibold text-white">{i + 1}</span>
+                <h3 class="mt-6 text-lg font-semibold">{s.title}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-slate-600">{s.body}</p>
+              </li>
+            ))
+          }
+        </ol>
+        <p class="mx-auto mt-10 max-w-2xl text-center text-sm text-slate-500">
+          To reach your phone from anywhere (even over LTE), run the tiny relay on your own server: one-click configs
+          for Fly.io, Render and Docker are included. On USB, Wi-Fi or Tailscale you can skip it.
+          <a href={DOCS_URL} class="font-semibold text-brand-600 hover:text-brand-700">Getting started guide →</a>
+        </p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="scroll-mt-16 border-t border-slate-100 bg-slate-50/60 py-24">
+      <div class="mx-auto max-w-3xl px-5">
+        <h2 class="text-center text-4xl font-semibold tracking-tight">Questions</h2>
+        <div class="mt-12 divide-y divide-slate-200 rounded-3xl bg-white px-6 ring-1 ring-slate-200/70">
+          {
+            faqs.map((f) => (
+              <details class="group py-5">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold [&::-webkit-details-marker]:hidden">
+                  {f.q}
+                  <span class="grid size-7 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-500 transition group-open:rotate-45">
+                    <svg viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </span>
+                </summary>
+                <p class="mt-3 pr-10 text-sm leading-relaxed text-slate-600">{f.a}</p>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="px-5 py-24">
+      <div class="relative mx-auto max-w-5xl overflow-hidden rounded-[2.5rem] bg-brand-600 px-6 py-20 text-center text-white">
+        <div class="absolute inset-0 bg-[radial-gradient(40rem_20rem_at_50%_-20%,rgb(255_255_255/0.25),transparent)]"></div>
+        <div class="relative">
+          <h2 class="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">Give your AI a phone.<br />Keep the keys.</h2>
+          <p class="mx-auto mt-5 max-w-xl text-lg text-brand-100">Private, free and open source. Download it, or help us grow with a star.</p>
+          <div class="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
+            <a
+              href={DOWNLOAD_URL}
+              class="inline-flex items-center justify-center gap-2 rounded-full bg-white px-7 py-3.5 font-semibold text-brand-700 shadow-lg transition hover:-translate-y-0.5"
+            >
+              <Icon name="download" class="size-5" />
+              Download for Android
+            </a>
+            <a
+              href={GITHUB_URL}
+              class="inline-flex items-center justify-center gap-2 rounded-full bg-white/10 px-7 py-3.5 font-semibold text-white ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:bg-white/15"
+            >
+              <Icon name="star" class="size-5" />
+              Star on GitHub
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-100">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-10 text-sm text-slate-500 sm:flex-row">
+      <div class="flex items-center gap-2.5">
+        <img src="/favicon.svg" alt="" class="size-6" />
+        <span>PhoneBridge · open source</span>
+      </div>
+      <p>No cookies, no trackers. Not on this site either.</p>
+      <div class="flex gap-6">
+        <a href={DOCS_URL} class="hover:text-slate-900">Docs</a>
+        <a href={SECURITY_URL} class="hover:text-slate-900">Security</a>
+        <a href={GITHUB_URL} class="hover:text-slate-900">GitHub</a>
+      </div>
+    </div>
+  </footer>
+</Layout>

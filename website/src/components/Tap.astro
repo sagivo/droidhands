@@ -1,0 +1,9 @@
+---
+// A finger-tap ripple shown at step `at`. The parent must be positioned (relative/absolute).
+interface Props {
+  at: number;
+}
+const { at } = Astro.props;
+---
+
+<span data-at={at} data-until={at + 1} data-fx="tap" class="pointer-events-none absolute top-1/2 left-1/2 z-10 size-10 rounded-full bg-brand-400/45 ring-4 ring-brand-300/50"></span>
