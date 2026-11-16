@@ -13,7 +13,7 @@ actions:
     title: Add a new contact
     description: >-
       Opens the contacts app's "new contact" form filled in with the details given. Nothing is saved until the
-      user (or you, with screen_read and ui_tap) taps Save; the user may also be asked which account to save it
+      user (or you, with screen_observe and ui_tap) taps Save; the user may also be asked which account to save it
       to. The app may warn if the contact already exists. To look contacts up, use the contacts_search tool.
     keywords: [contact, new, save, number, address book, person, phonebook]
     risk: action

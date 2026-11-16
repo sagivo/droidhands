@@ -180,6 +180,66 @@ class PluginExamplesTest {
     }
 
     @Test
+    fun iosExamplesRenderTheIosRecipeForTheFirstBundleId() {
+        val yaml = plugin(
+            """
+            - id: search
+              title: Search
+              description: Searches in the app.
+              risk: action
+              params:
+                query: {description: Query, required: true}
+              android:
+                steps:
+                  - launch: true
+                  - type: {into: {id: search_src_text}, text: "{{query}}", submit: true}
+              ios:
+                steps:
+                  - launch: true
+                  - type: {into: {id: SearchField}, text: "{{query}}", submit: true}
+              examples:
+                - params: {query: daft punk}
+                  expect:
+                    steps:
+                      - launch: true
+                      - type: {into: {id: search_src_text}, text: daft punk, submit: true}
+                - os: ios
+                  params: {query: daft punk}
+                  expect:
+                    steps:
+                      - launch: true
+                      - type: {into: {id: SearchField}, text: daft punk, submit: true}
+                - os: ios
+                  params: {}
+                  expect: {error: query}
+            """,
+        ).replace("actions:", "ios:\n  bundle_ids: [com.demo.ios, com.demo.ipad]\nactions:")
+        assertPasses(yaml)
+        // The expected steps are read with the iOS rules too.
+        val back = yaml.lines().last { "type: {into: {id: SearchField}, text: daft punk" in it }
+        assertFails(yaml.replace(back, back.substringBefore("-") + "- back: true"), "expect.steps")
+        assertFails(yaml.replace("{id: SearchField}, text: daft punk", "{id: Search}, text: daft punk"), "actions[0].examples[1]: steps[1]: expected")
+        val url = plugin(
+            """
+            - id: open_chat
+              title: Open a chat
+              description: Opens a chat.
+              risk: action
+              params:
+                phone: {description: Number, required: true}
+              ios:
+                url: "demo://send?phone={{phone}}"
+              examples:
+                - os: ios
+                  params: {phone: "+1 555"}
+                  expect: {url: "demo://send?phone=%2B1%20555"}
+            """,
+        ).replace("actions:", "ios:\n  bundle_ids: [com.demo.ios]\nactions:")
+        assertPasses(url)
+        assertFails(url.replace("expect: {url: \"demo://send?phone=%2B1%20555\"}", "expect: {intent: {action: x}}"), "expects intent, but the action's recipe is url")
+    }
+
+    @Test
     fun examplesRunOnlyWhenEverythingElseIsValid() {
         // A broken example next to a validation problem: only the validation problem is reported.
         val yaml = intentExample("{text: hi}", "intent: {package: com.demo.lite}").replace("risk: action", "risk: action\n    scope: calls")

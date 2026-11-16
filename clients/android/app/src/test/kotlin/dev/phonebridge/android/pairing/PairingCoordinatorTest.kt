@@ -1,12 +1,16 @@
 package dev.phonebridge.android.pairing
 
+import dev.phonebridge.core.auth.Ability
+import dev.phonebridge.core.auth.AppAccessMode
+import dev.phonebridge.core.auth.AppPolicy
 import dev.phonebridge.core.auth.ConfirmPolicy
 import dev.phonebridge.core.auth.DeviceIdentity
+import dev.phonebridge.core.auth.GrantDraft
+import dev.phonebridge.core.auth.GrantMode
 import dev.phonebridge.core.auth.InMemoryTokenStore
 import dev.phonebridge.core.auth.TokenManager
 import dev.phonebridge.core.auth.TokenRecord
 import dev.phonebridge.core.auth.TokenStore
-import dev.phonebridge.core.tools.Risk
 import dev.phonebridge.core.tools.Scopes
 import dev.phonebridge.core.transport.PairingDecision
 import dev.phonebridge.core.transport.PairingRequest
@@ -76,7 +80,16 @@ class PairingCoordinatorTest {
             scope.async { coordinator.onPairRequest(request) }
     }
 
-    private val assistant = PairingChoice(name = "Claude", scopes = Scopes.PRESET_ASSISTANT)
+    private val assistant = PairingChoice(name = "Claude")
+
+    /** "Only what I choose": send messages and use apps, WhatsApp only, asking before sensitive actions. */
+    private val chosen = PairingChoice(
+        name = " Laptop Claude ",
+        grant = GrantDraft.forNewAgent().withMode(GrantMode.CHOSEN).copy(scopes = emptySet())
+            .toggle(Ability.SEND_MESSAGES).toggle(Ability.USE_APPS)
+            .withAppMode(AppAccessMode.ALLOWLIST).toggleApp("com.whatsapp")
+            .withAsk(true),
+    )
 
     /** Approves a fresh request with [choice]; returns the token the relay received. */
     private suspend fun TestScope.paired(f: Fixture, id: String = "p_abc123", choice: PairingChoice = assistant): PairingDecision.Approved {
@@ -94,12 +107,14 @@ class PairingCoordinatorTest {
         assertEquals(listOf("p_abc123"), f.prompts.shown)
         assertEquals(listOf("p_abc123"), f.coordinator.pendingPairings.value.map { it.id })
 
-        val choice = PairingChoice(name = " Laptop Claude ", scopes = Scopes.PRESET_READ_ONLY, policy = ConfirmPolicy.ALL_ACTIONS)
-        val result = f.coordinator.approve("p_abc123", choice)
+        val result = f.coordinator.approve("p_abc123", chosen)
         val connected = result as PairingApproval.Connected
         assertEquals("Laptop Claude", connected.token.name)
-        assertEquals(Scopes.PRESET_READ_ONLY, connected.token.scopes)
-        assertEquals(ConfirmPolicy.ALL_ACTIONS, connected.token.confirmPolicy)
+        assertEquals(setOf(Scopes.MESSAGES_SEND, Scopes.NOTIFICATIONS_ACT, Scopes.APPS, Scopes.SCREEN_CONTROL), connected.token.scopes)
+        assertEquals(AppPolicy(AppAccessMode.ALLOWLIST, setOf("com.whatsapp")), connected.token.appPolicy)
+        assertEquals(ConfirmPolicy.SENSITIVE, connected.token.confirmPolicy)
+        assertNull(connected.token.maxRisk)
+        assertTrue("the grant never creates tool rules", connected.token.toolRules.isEmpty())
 
         val answer = decision.await() as PairingDecision.Approved
         assertEquals(connected.token.id, answer.tokenId)
@@ -207,7 +222,9 @@ class PairingCoordinatorTest {
         val f = Fixture(this)
         val decision = f.request(this)
         runCurrent()
-        assertTrue(f.coordinator.approve("p_abc123", assistant.copy(scopes = setOf("root"))) is PairingApproval.Failed)
+        val nothing = assistant.copy(grant = assistant.grant.withMode(GrantMode.CHOSEN).copy(scopes = setOf("root")))
+        val failed = f.coordinator.approve("p_abc123", nothing) as PairingApproval.Failed
+        assertEquals("Choose at least one thing it can do.", failed.message)
         assertTrue(f.tokens.tokens.value.isEmpty())
         decision.cancel()
     }
@@ -263,39 +280,38 @@ class PairingCoordinatorTest {
     }
 
     @Test
-    fun readOnlyLevelIssuesATokenCappedAtRead() = runTest {
-        val f = Fixture(this)
-        val decision = f.request(this)
-        runCurrent()
-        val readOnly = PairingChoice.of("Claude", PairingPresentation.level("Read-only"))
-        assertEquals(Risk.READ, readOnly.maxRisk)
-        val connected = f.coordinator.approve("p_abc123", readOnly) as PairingApproval.Connected
-        assertEquals(Risk.READ, connected.token.maxRisk)
-        assertEquals(Scopes.PRESET_READ_ONLY, connected.token.scopes)
-        val answer = decision.await() as PairingDecision.Approved
-        assertEquals(connected.token.id, answer.tokenId)
-        assertEquals("the stored token is capped too", Risk.READ, f.tokens.tokens.value.single().maxRisk)
-    }
-
-    @Test
-    fun uncappedLevelsIssueUncappedTokens() = runTest {
+    fun everythingIsTheDefaultAndNeverAsks() = runTest {
         val f = Fixture(this)
         val answer = paired(f, choice = PairingChoice.defaults(pairingRequest()))
-        assertNull(f.tokens.tokens.value.single { it.id == answer.tokenId }.maxRisk)
-        assertNull(PairingChoice.of("Claude", PairingPresentation.level("Full control")).maxRisk)
+        val token = f.tokens.tokens.value.single { it.id == answer.tokenId }
+        assertEquals(Scopes.ALL, token.scopes)
+        assertEquals(AppPolicy(), token.appPolicy)
+        assertEquals(ConfirmPolicy.NEVER, token.confirmPolicy)
+        assertNull(token.maxRisk)
+        assertEquals("pairing", token.origin)
     }
 
     @Test
-    fun failingToCapTheTokenDeletesItAndHandsNothingOut() = runTest {
+    fun theGrantIsSavedWithTheTokenInOneWrite() = runTest {
         val f = Fixture(this)
         val decision = f.request(this)
         runCurrent()
         var saves = 0
-        f.store.onSave = { if (++saves == 2) throw java.io.IOException("disk full") }
-        val readOnly = PairingChoice.of("Claude", PairingPresentation.level("Read-only"))
-        assertTrue(f.coordinator.approve("p_abc123", readOnly) is PairingApproval.Failed)
+        f.store.onSave = { saves++ }
+        assertTrue(f.coordinator.approve("p_abc123", chosen) is PairingApproval.Connected)
+        assertEquals("nobody ever holds the token without its app limits", 1, saves)
+        decision.await()
+    }
+
+    @Test
+    fun failingToSaveHandsNothingOut() = runTest {
+        val f = Fixture(this)
+        val decision = f.request(this)
+        runCurrent()
+        f.store.onSave = { throw java.io.IOException("disk full") }
+        assertTrue(f.coordinator.approve("p_abc123", chosen) is PairingApproval.Failed)
         f.store.onSave = null
-        assertTrue("an uncapped token must not survive", f.tokens.tokens.value.isEmpty())
+        assertTrue(f.tokens.tokens.value.isEmpty())
         assertNotNull("still pending: the user can try again", f.coordinator.pending("p_abc123"))
         decision.cancel()
     }

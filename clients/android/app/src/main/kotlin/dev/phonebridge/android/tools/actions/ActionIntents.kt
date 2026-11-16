@@ -11,6 +11,7 @@ import dev.phonebridge.android.tools.system.LaunchGate
 import dev.phonebridge.android.tools.system.queryIntentActivitiesCompat
 import dev.phonebridge.android.tools.system.resolveActivityCompat
 import dev.phonebridge.core.plugins.ExtraValue
+import dev.phonebridge.core.plugins.IntegrationException
 import dev.phonebridge.core.tools.CallContext
 import dev.phonebridge.core.tools.ToolException
 import kotlinx.coroutines.Dispatchers
@@ -53,15 +54,25 @@ internal object ActionIntents {
             intent.component = ComponentName(plan.packageName, info.activityInfo.name)
             return intent to info
         }
-        throw ToolException(
+        throw IntegrationException(
             if (plan.retryWithoutBrowsable) {
                 "$appLabel can't open this link on this phone (maybe its app version doesn't support it), so nothing was " +
-                    "opened. App actions never open links in another app; use the screen tools instead."
+                    "opened. App actions never open links in another app; use phone use (screen_observe, ui_tap) instead."
             } else {
                 "$appLabel has no screen for this action on this phone (maybe its app version doesn't support it), so " +
-                    "nothing was opened. Use the screen tools instead."
+                    "nothing was opened. Use phone use (screen_observe, ui_tap) instead."
             },
         )
+    }
+
+    /** Whether an exported activity of [plan]'s package accepts it (as [start] would find it). Blocking IPC. */
+    fun canStart(pm: PackageManager, plan: IntentPlan): Boolean {
+        val attempts = if (plan.retryWithoutBrowsable) {
+            listOf(plan, plan.copy(categories = plan.categories - IntentPlans.CATEGORY_BROWSABLE))
+        } else {
+            listOf(plan)
+        }
+        return attempts.distinct().any { resolveInPackage(pm, toIntent(it), it) != null }
     }
 
     /** The exported activity of the plan's package that should run [intent], or null if none can. */

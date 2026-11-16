@@ -38,7 +38,7 @@ internal object GraphAdapters {
 
     fun pendingPairings(graph: BridgeGraph): StateFlow<List<PairingRequest>> = graph.pairing.pendingPairings
 
-    /** Opens the Allow/Deny pairing screen (access level is chosen there). */
+    /** Opens the Allow/Deny pairing screen (the agent's access is chosen there). */
     fun openPairingApproval(graph: BridgeGraph, context: Context, id: String) {
         context.startActivity(PairingActivity.intent(context, id).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }

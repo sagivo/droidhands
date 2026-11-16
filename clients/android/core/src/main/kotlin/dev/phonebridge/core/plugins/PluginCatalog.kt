@@ -65,34 +65,37 @@ object PluginLoader {
 class PluginCatalogLoad(val catalog: PluginCatalog, val errors: List<String>)
 
 /**
- * The plugins available on this device, by id and by Android package (docs/PLUGINS.md). Immutable and
- * thread-safe; [merge] and [with] return new catalogs.
+ * The plugins available on this device, by id and by app id: Android package or iOS bundle id (docs/PLUGINS.md).
+ * Immutable and thread-safe; [merge] and [with] return new catalogs.
  *
- * Invariant: plugins that share a package never share an action id, so every `<package>/<action>` has
+ * Invariant: plugins that share a package (or bundle id) never share an action id, so every `<package>/<action>` has
  * one meaning. A local plugin with the id of a bundled one replaces it.
  */
 class PluginCatalog private constructor(val plugins: List<AppPlugin>) {
     private val byId: Map<String, AppPlugin> = plugins.associateBy { it.id }
-    private val byPackage: Map<String, List<AppPlugin>> = buildMap<String, MutableList<AppPlugin>> {
-        for (p in plugins) for (pkg in p.androidPackages) getOrPut(pkg) { ArrayList() }.add(p)
+    private val byAppId: Map<DeviceOs, Map<String, List<AppPlugin>>> = DeviceOs.entries.associateWith { os ->
+        buildMap<String, MutableList<AppPlugin>> {
+            for (p in plugins) for (id in p.appIds(os)) getOrPut(id) { ArrayList() }.add(p)
+        }
     }
 
     fun plugin(id: String): AppPlugin? = byId[id]
 
-    /** Plugins that apply to [packageName], in catalog order. */
-    fun pluginsFor(packageName: String): List<AppPlugin> = byPackage[packageName].orEmpty()
+    /** Plugins that apply to [packageName] (on iOS, a bundle id) on [os], in catalog order. */
+    fun pluginsFor(packageName: String, os: DeviceOs = DeviceOs.ANDROID): List<AppPlugin> =
+        byAppId.getValue(os)[packageName].orEmpty()
 
-    /** Every package some plugin applies to. */
-    val packages: Set<String> get() = byPackage.keys
+    /** Every Android package some plugin applies to. */
+    val packages: Set<String> get() = byAppId.getValue(DeviceOs.ANDROID).keys
 
     /**
      * Why [plugin] can't join this catalog (empty if it can): it has an action id that another plugin
-     * (with a different id) already uses for one of the same packages.
+     * (with a different id) already uses for one of the same packages or bundle ids.
      */
     fun conflicts(plugin: AppPlugin): List<String> {
         val problems = ArrayList<String>()
-        for (pkg in plugin.androidPackages) {
-            for (other in pluginsFor(pkg)) {
+        for (os in DeviceOs.entries) for (pkg in plugin.appIds(os)) {
+            for (other in pluginsFor(pkg, os)) {
                 if (other.id == plugin.id) continue
                 val clash = plugin.actions.map { it.id }.intersect(other.actions.map { it.id }.toSet())
                 if (clash.isNotEmpty()) {

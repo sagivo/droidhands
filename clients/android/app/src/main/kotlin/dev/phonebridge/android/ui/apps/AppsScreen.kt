@@ -44,8 +44,8 @@ fun AppsScreen(vm: AppsViewModel, onOpenApp: (String) -> Unit) {
     val sections = remember(apps, blocked, query) { apps?.let { AppsPresentation.sections(it, blocked, query) } }
     val summary = remember(apps, blocked) {
         apps?.let {
-            AppsPresentation.summary(it, blocked) + " Agents pick an app and one of its actions; each action is checked and " +
-                "approved like any other request."
+            AppsPresentation.summary(it, blocked) + " Agents pick an app and one of its actions; each action follows the " +
+                "access you gave the agent."
         }
     }
 

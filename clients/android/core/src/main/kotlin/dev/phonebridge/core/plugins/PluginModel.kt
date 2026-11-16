@@ -43,11 +43,17 @@ data class AppPlugin(
     val tested: List<TestedRecord> = emptyList(),
     /** Android packages this plugin applies to; the first installed one is used. */
     val androidPackages: List<String> = emptyList(),
-    /** Reserved for the iOS client (kept, not checked). */
+    /** iOS bundle ids this plugin applies to (`ios.bundle_ids`); the first installed one is used. */
     val iosBundleIds: List<String> = emptyList(),
     val actions: List<PluginAction>,
     val source: PluginSource = PluginSource.BUNDLED,
-)
+) {
+    /** The app ids this plugin applies to on [os]: [androidPackages] or [iosBundleIds]. */
+    fun appIds(os: DeviceOs): List<String> = when (os) {
+        DeviceOs.ANDROID -> androidPackages
+        DeviceOs.IOS -> iosBundleIds
+    }
+}
 
 /** Someone ran every action of a plugin on a device (§3 `tested`). */
 data class TestedRecord(
@@ -55,6 +61,8 @@ data class TestedRecord(
     val android: String? = null,
     val date: String? = null,
     val by: String? = null,
+    /** The iOS version, for records from an iPhone. */
+    val ios: String? = null,
 )
 
 /**
@@ -78,18 +86,29 @@ data class PluginAction(
     /** Null for the default by recipe (see [completesByDefault]). */
     val completes: Boolean? = null,
     /** Null: no Android recipe, the action is skipped on Android (§4). */
-    val android: AndroidRecipe? = null,
+    val android: Recipe? = null,
+    /** Null: no iOS recipe, the action is skipped on iOS (§4). Never an [IntentRecipe]. */
+    val ios: Recipe? = null,
     val examples: List<PluginExample> = emptyList(),
 ) {
     /** The scope a token needs for a non-[ToolRecipe] action. */
     val effectiveScope: String get() = scope ?: Scopes.APPS
 
-    /** Whether the action finishes the task by itself (§4 `completes`). */
-    val completesTask: Boolean get() = completes ?: completesByDefault(android)
+    /** Whether the action finishes the task by itself (§4 `completes`), by its Android recipe if it has one. */
+    val completesTask: Boolean get() = completes ?: completesByDefault(android ?: ios)
+
+    /** Whether the action finishes the task by itself when it runs on [os] (§4 `completes`). */
+    fun completesOn(os: DeviceOs): Boolean = completes ?: completesByDefault(recipeFor(os))
+
+    /** The recipe that runs this action on [os], or null if it has none there (the action is skipped on that OS). */
+    fun recipeFor(os: DeviceOs): Recipe? = when (os) {
+        DeviceOs.ANDROID -> android
+        DeviceOs.IOS -> ios
+    }
 
     companion object {
         /** True for `tool` and `steps` recipes, false for `intent` and `url` (§4). */
-        fun completesByDefault(recipe: AndroidRecipe?): Boolean = recipe is ToolRecipe || recipe is StepsRecipe
+        fun completesByDefault(recipe: Recipe?): Boolean = recipe is ToolRecipe || recipe is StepsRecipe
     }
 }
 
@@ -133,8 +152,11 @@ data class ParamSpec(
     }
 }
 
-/** How an action runs on Android: exactly one recipe (§6). */
-sealed interface AndroidRecipe {
+/**
+ * How an action runs: exactly one recipe per OS section (§6). Android takes all four kinds; iOS takes `url`, `steps`
+ * and `tool` (there are no intents on iOS).
+ */
+sealed interface Recipe {
     /** The YAML key, e.g. `intent`. */
     val kind: String
 }
@@ -153,17 +175,20 @@ data class IntentRecipe(
     val className: String? = null,
     /** In declaration order; keys are literal. */
     val extras: Map<String, ExtraSpec> = emptyMap(),
-) : AndroidRecipe {
+) : Recipe {
     override val kind: String get() = "intent"
 }
 
-/** `url`: open a link in the app with ACTION_VIEW, pinned to its package (§6.3). [url] is a URL-context template. */
-data class UrlRecipe(val url: String) : AndroidRecipe {
+/**
+ * `url`: open a link in the app (§6.3, §6.6): on Android with ACTION_VIEW pinned to its package, on iOS only when the
+ * installed app declares the link's scheme. [url] is a URL-context template.
+ */
+data class UrlRecipe(val url: String) : Recipe {
     override val kind: String get() = "url"
 }
 
 /** `steps`: a screen recipe confined to the app (§6.4). */
-data class StepsRecipe(val steps: List<Step>) : AndroidRecipe {
+data class StepsRecipe(val steps: List<Step>) : Recipe {
     override val kind: String get() = "steps"
 }
 
@@ -172,7 +197,7 @@ data class ToolRecipe(
     val name: String,
     /** Argument name to value; keys are literal. */
     val args: Map<String, ValueSpec> = emptyMap(),
-) : AndroidRecipe {
+) : Recipe {
     override val kind: String get() = "tool"
 }
 
@@ -221,7 +246,7 @@ sealed interface StepAction {
     /** Like the `url` recipe; [url] is a URL-context template. */
     data class OpenUrl(val url: String) : StepAction
 
-    /** Like the `intent` recipe. */
+    /** Like the `intent` recipe. Android only. */
     data class StartIntent(val intent: IntentRecipe) : StepAction
 
     data class WaitFor(val selector: Selector) : StepAction
@@ -245,6 +270,7 @@ sealed interface StepAction {
         }
     }
 
+    /** Presses Back. Android only: iOS has no Back button. */
     data object Back : StepAction
 
     /** Waits [ms] (at most [MAX_MS]). */
@@ -273,8 +299,9 @@ enum class ScrollDirection {
 
 /**
  * Matches screen elements in the plugin's app (§6.4). Text matches ignore case. [text], [textContains],
- * [desc], [descContains] and [textOrDesc] are templates in a recipe and rendered values after rendering;
- * [id] is short (`search_src_text`) in a recipe and full (`com.spotify.music:id/search_src_text`) after.
+ * [desc], [descContains] and [textOrDesc] are templates in a recipe and rendered values after rendering.
+ * On Android [id] is short (`search_src_text`) in a recipe and full (`com.spotify.music:id/search_src_text`) after;
+ * on iOS it is an accessibility identifier, the same before and after (§6.6).
  */
 data class Selector(
     val id: String? = null,
@@ -282,7 +309,7 @@ data class Selector(
     val textContains: String? = null,
     val desc: String? = null,
     val descContains: String? = null,
-    /** Simple class name, e.g. `EditText`. */
+    /** Simple class name, e.g. `EditText`; on iOS the element type, e.g. `Button`. */
     val className: String? = null,
     val clickable: Boolean? = null,
     /** Picks the nth match. */
@@ -291,12 +318,15 @@ data class Selector(
     val textOrDesc: String? = null,
 )
 
-/** A test case run without a phone (§7). [params] go through validation and rendering; [expect] is compared. */
-data class PluginExample(val params: JsonObject, val expect: ExampleExpectation)
+/**
+ * A test case run without a phone (§7). [params] go through validation and rendering of the action's recipe for [os]
+ * (`os: ios` in YAML; Android by default); [expect] is compared.
+ */
+data class PluginExample(val params: JsonObject, val expect: ExampleExpectation, val os: DeviceOs = DeviceOs.ANDROID)
 
 /** What an example expects (§7): exactly one of these. */
 sealed interface ExampleExpectation {
-    /** Only the listed keys of `{action, package, data, type, categories, class, extras}` are compared. */
+    /** Only the listed keys of `{action, package, data, type, categories, class, extras}` are compared. Android only. */
     data class Intent(val fields: JsonObject) : ExampleExpectation
 
     data class Url(val url: String) : ExampleExpectation

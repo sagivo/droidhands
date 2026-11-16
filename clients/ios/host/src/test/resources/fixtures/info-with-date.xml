@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.example.notes</string>
+	<key>CFBundleName</key>
+	<string>Notes &amp; More</string>
+	<key>BuildDate</key>
+	<date>2026-01-02T03:04:05Z</date>
+	<key>Blob</key>
+	<data>
+	aGVsbG8=
+	</data>
+	<key>Count</key>
+	<integer>42</integer>
+	<key>Ratio</key>
+	<real>0.5</real>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>notes</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

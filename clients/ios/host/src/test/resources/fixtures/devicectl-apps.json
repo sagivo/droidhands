@@ -1,0 +1,18 @@
+{
+  "info": { "arguments": ["devicectl", "device", "info", "apps"], "commandType": "devicectl.device.info.apps", "jsonVersion": 2, "outcome": "success", "version": "397.21" },
+  "result": {
+    "apps": [
+      { "appClip": false, "builtByDeveloper": false, "bundleIdentifier": "com.spotify.client", "bundleVersion": "8.9.0.575", "defaultApp": false, "hidden": false, "internalApp": false, "name": "Spotify", "removable": true, "url": "file:///private/var/containers/Bundle/Application/3333/Spotify.app/", "version": "8.9.0" },
+      { "appClip": false, "builtByDeveloper": false, "bundleIdentifier": "com.apple.mobilesafari", "bundleVersion": "8619", "defaultApp": true, "hidden": false, "internalApp": false, "name": "Safari", "removable": false, "url": "file:///Applications/MobileSafari.app/", "version": "18.0" },
+      { "bundleIdentifier": "com.apple.hidden.service", "hidden": true, "name": "Hidden", "removable": false },
+      { "name": "no bundle id" }
+    ],
+    "defaultAppsIncluded": true,
+    "deviceIdentifier": "00008110-000A1B2C3D4E5F60",
+    "hiddenAppsIncluded": false,
+    "internalAppsIncluded": false,
+    "matchingBundleIdentifier": null,
+    "matchingName": null,
+    "removableAppsIncluded": true
+  }
+}

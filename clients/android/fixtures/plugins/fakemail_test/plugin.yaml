@@ -52,3 +52,33 @@ actions:
               fail: Fixture Mail did not go back to its inbox after Send, so the email may not have been sent.
       - params: {to: bob@example.com, subject: Hi}
         expect: {error: body}
+
+  # A link the fixture app doesn't declare: PhoneBridge must report it unavailable instead of trying it.
+  - id: open_folder
+    title: Open a folder
+    description: Opens a mail folder through a web link the app does not handle. For E2E tests of recipe checks only.
+    risk: action
+    params:
+      folder: {description: Folder name, required: true, max_length: 50}
+    android:
+      url: "https://mail.example.invalid/folders/{{folder}}"
+    examples:
+      - params: {folder: inbox}
+        expect: {url: "https://mail.example.invalid/folders/inbox"}
+
+  # A screen recipe whose element doesn't exist: each run fails, and PhoneBridge records it (action health).
+  - id: archive_all
+    title: Archive everything
+    description: Taps a button the app doesn't have. For E2E tests of action health only.
+    risk: action
+    android:
+      steps:
+        - launch: {fresh: true}
+        - tap: {id: archive_all_button, timeout_ms: 1500}
+    examples:
+      - params: {}
+        expect:
+          steps:
+            - launch: {fresh: true}
+            - tap: {id: archive_all_button, timeout_ms: 1500}
+

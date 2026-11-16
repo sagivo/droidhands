@@ -1,7 +1,7 @@
 package dev.phonebridge.android.tools.comms
 
 import dev.phonebridge.android.tools.support.PhoneEntry
-import dev.phonebridge.android.tools.support.WhatsAppEntry
+import dev.phonebridge.android.tools.support.ContactAppEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -57,21 +57,24 @@ class ContactRankingTest {
     }
 
     @Test
-    fun whatsappRows() {
-        assertEquals(
-            WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp"),
-            WhatsAppRows.entry("972541234567@s.whatsapp.net", WhatsAppRows.MIMETYPE, "com.whatsapp"),
+    fun appRowsAreReadForAnyInstalledApp() {
+        val rows = listOf(
+            ContactAppRows.Row("com.chat", "vnd.android.cursor.item/vnd.com.chat.profile", "Chat", "Message +1 555 123 4567"),
+            ContactAppRows.Row("com.chat", "vnd.android.cursor.item/vnd.com.chat.call", "Chat", "Voice call +1 555 123 4567"),
+            ContactAppRows.Row("com.chat", "vnd.android.cursor.item/vnd.com.chat.profile", "Chat", "Message +1 555 123 4567"),
+            ContactAppRows.Row("org.talk", "vnd.android.cursor.item/vnd.org.talk", "Talk", null),
+            // Standard kinds and accounts that aren't installed apps (Google sync, OEM local storage) are not app entries.
+            ContactAppRows.Row("com.chat", "vnd.android.cursor.item/phone_v2", "2", "+1 555 123 4567"),
+            ContactAppRows.Row("com.google", "vnd.android.cursor.item/vnd.googleplus.profile", null, "Profile"),
+            ContactAppRows.Row(null, "vnd.android.cursor.item/vnd.x", null, "x"),
         )
+        val apps = ContactAppRows.entries(rows, isApp = { it != "com.google" }, label = { if (it == "com.chat") "Chat" else null })
         assertEquals(
-            WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp.w4b"),
-            WhatsAppRows.entry("972541234567@s.whatsapp.net", WhatsAppRows.BUSINESS_MIMETYPE, null),
+            listOf(
+                ContactAppEntry("com.chat", "Chat", listOf("Message +1 555 123 4567", "Voice call +1 555 123 4567")),
+                ContactAppEntry("org.talk", null, listOf("Talk")),
+            ),
+            apps,
         )
-        // Account type wins over the mimetype; a bare number gets the user domain.
-        assertEquals("com.whatsapp.w4b", WhatsAppRows.entry("972541234567", WhatsAppRows.MIMETYPE, "com.whatsapp.w4b")!!.packageName)
-        assertEquals("972541234567@s.whatsapp.net", WhatsAppRows.entry("972541234567@c.us", null, null)!!.jid)
-        assertNull(WhatsAppRows.entry("120363025246125486@g.us", WhatsAppRows.MIMETYPE, null)) // group
-        assertNull(WhatsAppRows.entry("abc@s.whatsapp.net", WhatsAppRows.MIMETYPE, null))
-        assertNull(WhatsAppRows.entry("", WhatsAppRows.MIMETYPE, null))
-        assertNull(WhatsAppRows.entry(null, WhatsAppRows.MIMETYPE, null))
     }
 }

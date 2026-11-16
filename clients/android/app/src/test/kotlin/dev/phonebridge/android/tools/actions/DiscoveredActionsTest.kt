@@ -47,7 +47,7 @@ class DiscoveredActionsTest {
             webSearch = IntentHandler("$pkg.WebSearch"),
             geo = IntentHandler("$pkg.Map"),
         )
-        val actions = DiscoveredActions.build("Mail", pkg, "$pkg.Main", handlers, null, isExported)
+        val actions = DiscoveredActions.build("Mail", pkg, "$pkg.Main", handlers, null, isExported = isExported)
         assertEquals(listOf("open", "share_text", "process_text", "play_from_search", "web_search", "show_on_map"), actions.map { it.id })
         assertTrue(actions.all { PluginRules.ACTION_ID.matches(it.id) && it.risk == Risk.ACTION && it.android is IntentRecipe })
 
@@ -85,7 +85,7 @@ class DiscoveredActionsTest {
 
     @Test
     fun noLauncherNoOpen() {
-        assertTrue(DiscoveredActions.build("Mail", pkg, null, StandardHandlers(), null, isExported).isEmpty())
+        assertTrue(DiscoveredActions.build("Mail", pkg, null, StandardHandlers(), null, isExported = isExported).isEmpty())
     }
 
     @Test
@@ -240,7 +240,7 @@ class DiscoveredActionsTest {
             shortcuts = listOf(shortcut(id = "compose"), shortcut(id = "compose", label = "Duplicate")),
             capabilities = listOf(DeclaredCapability("actions.intent.OPEN", listOf(DeclaredIntent(targetClass = "$pkg.Settings")))),
         )
-        val actions = DiscoveredActions.build("Mail", pkg, "$pkg.Main", StandardHandlers(), declared, isExported)
+        val actions = DiscoveredActions.build("Mail", pkg, "$pkg.Main", StandardHandlers(), declared, isExported = isExported)
         assertEquals(listOf("open", "shortcut_compose"), actions.map { it.id })
         assertEquals("Open the app", actions[0].title)
         assertEquals("Compose", actions[1].title)

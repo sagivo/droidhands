@@ -1,11 +1,13 @@
 package dev.phonebridge.android.pairing
 
+import dev.phonebridge.core.auth.AppPolicy
 import dev.phonebridge.core.auth.ConfirmPolicy
-import dev.phonebridge.core.tools.Risk
+import dev.phonebridge.core.auth.GrantDraft
+import dev.phonebridge.core.auth.GrantMode
+import dev.phonebridge.core.auth.GrantSettings
 import dev.phonebridge.core.tools.Scopes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -13,39 +15,16 @@ class PairingPresentationTest {
     private val request = PairingRules.sanitize(pairingRequest())
 
     @Test
-    fun accessLevelsAreThePresetsWithAssistantRecommended() {
-        assertEquals(listOf("Read-only", "Assistant", "Full control"), PairingPresentation.ACCESS_LEVELS.map { it.name })
-        assertEquals(Scopes.PRESETS.values.toList(), PairingPresentation.ACCESS_LEVELS.map { it.scopes })
-        assertEquals(listOf("Assistant"), PairingPresentation.ACCESS_LEVELS.filter { it.recommended }.map { it.name })
-        PairingPresentation.ACCESS_LEVELS.forEach { assertTrue(it.name, it.description.isNotBlank() && it.description.length < 120) }
-    }
-
-    @Test
-    fun readOnlyIsCappedAtReadAndTheChoiceCarriesTheCap() {
-        assertEquals(Scopes.PRESETS.keys.map { Scopes.PRESET_MAX_RISK[it] }, PairingPresentation.ACCESS_LEVELS.map { it.maxRisk })
-        assertEquals(Risk.READ, PairingPresentation.level("Read-only").maxRisk)
-        PairingPresentation.ACCESS_LEVELS.forEach { level ->
-            val choice = PairingChoice.of("Claude", level, ConfirmPolicy.ALL_ACTIONS)
-            assertEquals(PairingChoice("Claude", level.scopes, ConfirmPolicy.ALL_ACTIONS, level.maxRisk), choice)
-        }
-        assertNull(PairingChoice.defaults(request).maxRisk)
-    }
-
-    @Test
-    fun unknownLevelFallsBackToTheRecommendedOne() {
-        assertEquals("Assistant", PairingPresentation.level("Root").name)
-        assertEquals(Scopes.PRESET_FULL, PairingPresentation.level("Full control").scopes)
-    }
-
-    @Test
-    fun defaultsAreAssistantAskingForSensitiveActions() {
+    fun defaultsAreEverythingWithoutPrompts() {
         val choice = PairingChoice.defaults(request)
         assertEquals("Claude", choice.name)
-        assertEquals(Scopes.PRESET_ASSISTANT, choice.scopes)
-        assertEquals(ConfirmPolicy.SENSITIVE, choice.policy)
-        assertEquals(ConfirmPolicy.SENSITIVE, PairingPresentation.POLICIES.first())
-        assertEquals(ConfirmPolicy.entries.toSet(), PairingPresentation.POLICIES.toSet())
+        assertEquals(GrantMode.EVERYTHING, choice.grant.mode)
+        assertEquals(GrantSettings(Scopes.ALL, AppPolicy(), ConfirmPolicy.NEVER, null), choice.grant.settings())
+        assertTrue(choice.grant.toolRulesUntouched())
     }
+
+    /** The grant screen never creates per-tool rules: [GrantDraft] has no field for them. */
+    private fun GrantDraft.toolRulesUntouched() = GrantDraft::class.java.declaredFields.none { it.name.contains("rule", ignoreCase = true) }
 
     @Test
     fun notificationShowsClientHostAndCode() {

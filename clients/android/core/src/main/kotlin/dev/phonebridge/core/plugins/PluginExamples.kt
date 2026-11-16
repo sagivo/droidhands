@@ -10,8 +10,9 @@ import kotlinx.serialization.json.booleanOrNull
 
 /**
  * Runs a plugin's examples (docs/PLUGINS.md §7) without a phone: each example's params go through
- * [ParamValues.validate] and [RecipeRenderer] for the first of `android.packages`, and the result is compared
- * with `expect`. Pure.
+ * [ParamValues.validate] and [RecipeRenderer] for the example's OS (the action's `android` recipe rendered for the
+ * first of `android.packages`, or with `os: ios` its `ios` recipe for the first of `ios.bundle_ids`), and the result
+ * is compared with `expect`. Pure.
  *
  * Comparison: `url` is the full rendered URL. `intent` compares only the listed keys; within `extras`, only
  * the listed extras, where `null` means the extra must be absent, and values must match in type (`5` is an
@@ -23,12 +24,15 @@ import kotlinx.serialization.json.booleanOrNull
 object PluginExamples {
     /** Problems with [plugin]'s examples (empty when all pass). */
     fun run(plugin: AppPlugin): List<PluginProblem> {
-        val packageName = plugin.androidPackages.firstOrNull() ?: return emptyList()
-        val renderer = RecipeRenderer(packageName)
+        // Examples without a recipe or app id for their OS are the validator's to report.
+        val renderers = DeviceOs.entries.mapNotNull { os ->
+            plugin.appIds(os).firstOrNull()?.let { os to RecipeRenderer(it, os) }
+        }.toMap()
         val problems = ArrayList<PluginProblem>()
         plugin.actions.forEachIndexed { a, action ->
-            val recipe = action.android ?: return@forEachIndexed
             action.examples.forEachIndexed { e, example ->
+                val recipe = action.recipeFor(example.os) ?: return@forEachIndexed
+                val renderer = renderers[example.os] ?: return@forEachIndexed
                 val path = "actions[$a].examples[$e]"
                 runOne(plugin, action, recipe, example, renderer)?.let { problems += PluginProblem(path, it) }
             }
@@ -37,7 +41,7 @@ object PluginExamples {
     }
 
     /** Null when the example passes, else what went wrong. */
-    private fun runOne(plugin: AppPlugin, action: PluginAction, recipe: AndroidRecipe, example: PluginExample, renderer: RecipeRenderer): String? {
+    private fun runOne(plugin: AppPlugin, action: PluginAction, recipe: Recipe, example: PluginExample, renderer: RecipeRenderer): String? {
         val expect = example.expect
         val rendered = try {
             renderer.render(recipe, ParamValues.validate(action.params, example.params))
@@ -57,11 +61,12 @@ object PluginExamples {
             }
             is ExampleExpectation.Intent -> intent(rendered as? RenderedIntent ?: return mismatchedKind("intent", recipe), expect.fields, renderer)
             is ExampleExpectation.Tool -> tool(rendered as? RenderedToolCall ?: return mismatchedKind("tool", recipe), expect.fields)
-            is ExampleExpectation.Steps -> steps(plugin, rendered as? RenderedSteps ?: return mismatchedKind("steps", recipe), expect.steps, renderer)
+            is ExampleExpectation.Steps ->
+                steps(plugin, rendered as? RenderedSteps ?: return mismatchedKind("steps", recipe), expect.steps, renderer, example.os)
         }
     }
 
-    private fun mismatchedKind(expected: String, recipe: AndroidRecipe) =
+    private fun mismatchedKind(expected: String, recipe: Recipe) =
         "expects $expected, but the action's recipe is ${recipe.kind}"
 
     private fun intent(actual: RenderedIntent, fields: JsonObject, renderer: RecipeRenderer): String? {
@@ -159,11 +164,11 @@ object PluginExamples {
         else -> false
     }
 
-    private fun steps(plugin: AppPlugin, actual: RenderedSteps, want: List<JsonElement>, renderer: RecipeRenderer): String? {
+    private fun steps(plugin: AppPlugin, actual: RenderedSteps, want: List<JsonElement>, renderer: RecipeRenderer, os: DeviceOs): String? {
         // The expected steps are written in recipe syntax; read them literally (no placeholders) and render
         // them with no parameters, which only expands short ids and fills defaults.
         val parser = PluginParser(plugin.source)
-        val expected = parser.literalSteps(JsonArray(want), "expect.steps") ?: return "expect.steps: ${parser.problems.joinToString("; ")}"
+        val expected = parser.literalSteps(JsonArray(want), "expect.steps", os) ?: return "expect.steps: ${parser.problems.joinToString("; ")}"
         val rendered = try {
             renderer.steps(expected, JsonObject(emptyMap()))
         } catch (e: ToolException) {

@@ -84,7 +84,8 @@ class ScreenAccess private constructor(
         }
 
         private fun blockedText(label: String) =
-            "$label is blocked for this agent by the user. Don't try to reach it another way; ask the user if it is needed."
+            "This agent isn't allowed to use $label. Don't try to reach it another way. If it is needed, tell the user: they " +
+                "can allow it in PhoneBridge > Agents > (this agent) > Access."
 
         /** Why screenshots are refused while [overlay] shows, for agents with app restrictions. */
         fun overlayRefusal(overlay: SystemOverlay): String {

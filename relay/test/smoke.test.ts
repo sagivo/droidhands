@@ -37,7 +37,7 @@ function fakeMcp(expectedAuth: string) {
         return reply({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'PhoneBridge', version: '0.1.0' } });
       case 'tools/list':
         return message.params?.cursor === 'page2'
-          ? reply({ tools: [{ name: 'whatsapp_send' }] })
+          ? reply({ tools: [{ name: 'screen_observe' }] })
           : reply({ tools: [{ name: 'contacts_search' }, { name: 'device_status' }], nextCursor: 'page2' });
       default:
         return { status: 200, body: JSON.stringify({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'nope' } }) };
@@ -55,7 +55,7 @@ test('smoke script: initialize + tools/list through the relay', async (t) => {
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /initialize: ok \(server: PhoneBridge 0\.1\.0, protocol 2025-06-18\)/);
   assert.match(result.stdout, /tools\/list: 3 tool\(s\)/);
-  for (const name of ['contacts_search', 'device_status', 'whatsapp_send']) assert.match(result.stdout, new RegExp(`- ${name}`));
+  for (const name of ['contacts_search', 'device_status', 'screen_observe']) assert.match(result.stdout, new RegExp(`- ${name}`));
   assert.ok(!result.stdout.includes(token) && !result.stderr.includes(token), 'token is never printed');
 });
 

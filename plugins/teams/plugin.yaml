@@ -14,7 +14,7 @@ actions:
     description: >-
       Opens a Teams chat with one or more people by their work email addresses (an existing chat, or a new one in
       draft state), optionally with a message typed into the compose box. Nothing is sent: the user (or you,
-      with screen_read and ui_tap) must tap Send. Some Teams versions for Android show "can't navigate to the
+      with screen_observe and ui_tap) must tap Send. Some Teams versions for Android show "can't navigate to the
       destination" for this link; then use the screen tools.
     keywords: [chat, message, dm, colleague, coworker, draft, compose, work]
     risk: action

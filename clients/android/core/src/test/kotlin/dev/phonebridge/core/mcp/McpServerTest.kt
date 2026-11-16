@@ -361,14 +361,16 @@ class McpServerTest {
         assertEquals("phonebridge", info["name"]!!.jsonPrimitive.content)
         assertEquals("0.1.0", info["version"]!!.jsonPrimitive.content)
         assertEquals("PhoneBridge", info["title"]!!.jsonPrimitive.content)
-        assertEquals("Use contacts_search first.", result["instructions"]!!.jsonPrimitive.content)
+        val instructions = result["instructions"]!!.jsonPrimitive.content
+        assertTrue(instructions.startsWith("Use contacts_search first.\n\nYour access on this phone"), instructions)
         assertEquals(0, audit.entries.value.size, "initialize is not audited")
     }
 
     @Test
     fun initializeOmitsNullFields() = runTest {
         val result = server(instructions = null, info = ServerInfo("pb", "1")).post(issue(), rpc("initialize", "{}")).obj().result()
-        assertNull(result["instructions"])
+        // Without server instructions, the agent still learns its access.
+        assertTrue(result["instructions"]!!.jsonPrimitive.content.startsWith("Your access on this phone"))
         assertNull(result["serverInfo"]!!.jsonObject["title"])
     }
 
@@ -469,7 +471,7 @@ class McpServerTest {
 
         val outOfScope = s.post(t, call("app_poke")).obj()
         assertEquals(-32602, outOfScope.errorCode())
-        assertTrue(outOfScope["error"]!!.jsonObject["message"]!!.jsonPrimitive.content.contains("'apps' scope"))
+        assertTrue(outOfScope["error"]!!.jsonObject["message"]!!.jsonPrimitive.content.contains("isn't allowed to use apps (open them, run their actions, tap and type) ('app_poke' needs that)"))
         assertEquals(AuditOutcome.DENIED_SCOPE, lastAudit().outcome)
         assertEquals("app_poke", lastAudit().tool)
         assertEquals(0, sideEffects.get())

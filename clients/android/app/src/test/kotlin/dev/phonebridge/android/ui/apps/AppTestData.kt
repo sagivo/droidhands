@@ -98,7 +98,7 @@ internal object AppTestData {
               message: {description: Message text, required: true}
             android:
               tool:
-                name: whatsapp_send
+                name: sms_send
                 args: {contact: "{{contact}}", message: "{{message}}"}
           - id: missing_tool
             title: Make a video call
@@ -131,7 +131,7 @@ internal object AppTestData {
         val local = PluginLoader.load(notesLocalYaml, PluginSource.LOCAL).plugin!!
         val merged = bundled.catalog.merge(listOf(local)).catalog
         val whatsappSend: Tool = tool(
-            name = "whatsapp_send", title = "Send WhatsApp message", description = "Sends.", scope = Scopes.MESSAGES_SEND, risk = Risk.SENSITIVE,
+            name = "sms_send", title = "Send WhatsApp message", description = "Sends.", scope = Scopes.MESSAGES_SEND, risk = Risk.SENSITIVE,
         ) { _, _ -> ToolResult.text("sent") }
         return AppActionCatalog({ merged }, platform, builtInTool = { name -> whatsappSend.takeIf { it.name == name } })
     }

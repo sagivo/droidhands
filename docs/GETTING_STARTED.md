@@ -68,22 +68,36 @@ In PhoneBridge, tap **Connect an AI agent** and copy **your connection URL**
 | Any other MCP client | Add a Streamable-HTTP server with that URL (OAuth sign-in) |
 
 Your browser opens a page saying **"Approve on your phone"** with a 4-letter code. On the
-phone, check that the code matches, choose an access level (**Read-only**, **Assistant**
-or **Full control**), and tap **Allow**. That's it.
+phone, check that the code matches and choose what the agent gets (**Give Claude access**):
+
+* **Everything**: every app and everything PhoneBridge can do, without asking you first.
+* **Only what I choose**: *All apps* or just the apps you pick, and what it can do (read messages
+  and notifications, read contacts and calendar, location, see the screen, use apps, send messages,
+  make calls, change the calendar, device settings, and an advanced option for developers).
+
+Optionally turn on **Ask me before it sends messages, calls or pays**. Then tap **Allow**. That's
+it: from now on the agent acts inside what you gave it without asking, and anything else is
+refused. Apps on your never-allow list (banking and password apps are pre-selected) stay blocked
+even with Everything. For an agent you don't fully trust, pick **Only what I choose**.
 
 Now ask your agent: *"Send a WhatsApp to Tania saying I'm running 10 minutes late."*
 
 ## Day to day
 
-* **Approvals.** Sensitive actions (sending messages, calls, replies) pop up on the phone with
-  the resolved recipient and text. Approving needs an unlocked phone. With no answer in 60 s,
-  the action is denied.
+* **No prompts.** Inside the access you gave it, an agent just acts. While it works, a
+  notification says which agent and what it is doing ("Sending WhatsApp to Tania Cohen"), with
+  **Stop** and **Pause all**. Requests outside its access are refused, and the agent is told what
+  to ask you to allow.
+* **Approvals, if you want them.** With *Ask me before it sends messages, calls or pays* on (or an
+  *Ask* rule on a tool), those actions pop up on the phone with the resolved recipient and text.
+  Approving needs an unlocked phone; with no answer in 60 s, the action is denied.
 * **Locked phone.** Screen-based actions such as WhatsApp sending show "Unlock your phone to let
   Claude …" and continue as soon as you unlock. Replies to notifications work while locked.
 * **Agents.** Each connected agent shows when it was last active, its calls today, a 14-day
-  usage chart and its most-used tools. You can change its access level, choose which apps it may
-  touch, set per-tool Allow / Ask / Block rules (also for single app actions, grouped by app) and
-  active hours, or **Revoke** it. Revoking takes effect immediately.
+  usage chart and its most-used tools. **Access** opens the same screen as at pairing, so you can
+  change its apps and what it can do (it applies to its next request). Under *Advanced* you can set
+  per-tool Allow / Ask / Block rules (also for single app actions, grouped by app), active hours and
+  expiry, or **Revoke** it. Revoking takes effect immediately.
 * **Apps.** Every app on the phone with what agents can do in it: *Integration* (a community
   plugin), *Local plugin* or *Basic* (what PhoneBridge found by itself), each action with its risk.
   Tap an app for **Block for all agents**, **Request a better integration**, or **Create plugin

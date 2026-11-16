@@ -44,7 +44,7 @@ class RefRegistryTest {
         refs.newSnapshot { register -> assertEquals("n4", register(b)) }
         assertEquals(1, refs.size)
         val stale = assertThrows(ToolException::class.java) { refs.lookup("n1") }.message!!
-        assertTrue(stale, stale.contains("not from your latest screen_read") && stale.contains("Call screen_read again"))
+        assertTrue(stale, stale.contains("not from your latest screen_observe/screen_read") && stale.contains("Call screen_observe again"))
         assertSame(b, refs.lookup("n4").node)
     }
 
@@ -72,10 +72,10 @@ class RefRegistryTest {
     @Test
     fun `lookup errors guide the agent`() {
         val refs = RefRegistry()
-        assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n1") }.message!!.contains("screen_read"))
+        assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n1") }.message!!.contains("screen_observe"))
         refs.register(button("A"))
         refs.register(button("B"))
-        assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n9") }.message!!.contains("not from your latest screen_read"))
+        assertTrue(assertThrows(ToolException::class.java) { refs.lookup("n9") }.message!!.contains("not from your latest screen_observe"))
         assertTrue(assertThrows(ToolException::class.java) { refs.lookup("send") }.message!!.contains("not a valid element ref"))
         // A read that listed nothing still counts as the latest snapshot.
         val empty = RefRegistry()

@@ -90,8 +90,8 @@ internal object SetupChecks {
         return SetupItem(
             id = group.id,
             title = group.title,
-            description = group.rationale + " Without it, approvals time out and sensitive actions are denied.",
-            unlocks = "Allow/Deny prompts · Bridge status notification",
+            description = group.rationale + " Without it you won't see when an agent is working, and any approval you asked for times out and is denied.",
+            unlocks = "Agent activity · Allow/Deny prompts you asked for · Bridge status notification",
             essential = true,
             status = status,
             permissions = if (runtime && !granted) group.permissions else emptyList(),

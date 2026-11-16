@@ -7,6 +7,8 @@ homepage: https://www.google.com/maps
 status: experimental
 android:
   packages: [com.google.android.apps.maps]
+ios:
+  bundle_ids: [com.google.Maps]
 
 actions:
   # Replaces the discovered show_on_map action (same geo: intent) with a better description.
@@ -30,6 +32,8 @@ actions:
       intent:
         action: android.intent.action.VIEW
         data: "geo:0,0?q={{query}}"
+    ios:
+      url: "comgooglemaps://?q={{query}}"
     examples:
       - params: {query: "1st & Pike, Seattle"}
         expect:
@@ -40,6 +44,9 @@ actions:
       - params: {query: "48.8584,2.2945"}
         expect:
           intent: {data: "geo:0,0?q=48.8584%2C2.2945"}
+      - os: ios
+        params: {query: "1st & Pike, Seattle"}
+        expect: {url: "comgooglemaps://?q=1st%20%26%20Pike%2C%20Seattle"}
       - params: {}
         expect: {error: query}
 
@@ -102,9 +109,14 @@ actions:
     confirm: Show {{mode}} directions to "{{destination}}" in Google Maps
     android:
       url: "https://www.google.com/maps/dir/?api=1&destination={{destination}}&travelmode={{mode}}"
+    ios:
+      url: "comgooglemaps://?daddr={{destination}}&directionsmode={{mode}}"
     examples:
       - params: {destination: Eiffel Tower}
         expect: {url: "https://www.google.com/maps/dir/?api=1&destination=Eiffel%20Tower&travelmode=driving"}
+      - os: ios
+        params: {destination: "Central Station, Amsterdam", mode: transit}
+        expect: {url: "comgooglemaps://?daddr=Central%20Station%2C%20Amsterdam&directionsmode=transit"}
       - params: {destination: "Central Station, Amsterdam", mode: transit}
         expect: {url: "https://www.google.com/maps/dir/?api=1&destination=Central%20Station%2C%20Amsterdam&travelmode=transit"}
       - params: {}
@@ -133,8 +145,13 @@ actions:
     confirm: Show {{mode}} directions from "{{origin}}" to "{{destination}}" in Google Maps
     android:
       url: "https://www.google.com/maps/dir/?api=1&origin={{origin}}&destination={{destination}}&travelmode={{mode}}"
+    ios:
+      url: "comgooglemaps://?saddr={{origin}}&daddr={{destination}}&directionsmode={{mode}}"
     examples:
       - params: {origin: Brandenburg Gate, destination: Alexanderplatz, mode: walking}
         expect: {url: "https://www.google.com/maps/dir/?api=1&origin=Brandenburg%20Gate&destination=Alexanderplatz&travelmode=walking"}
+      - os: ios
+        params: {origin: Brandenburg Gate, destination: Alexanderplatz, mode: walking}
+        expect: {url: "comgooglemaps://?saddr=Brandenburg%20Gate&daddr=Alexanderplatz&directionsmode=walking"}
       - params: {destination: Alexanderplatz}
         expect: {error: origin}

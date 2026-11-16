@@ -10,6 +10,7 @@ import dev.phonebridge.android.BuildConfig
 import dev.phonebridge.android.access.BridgeAccessibilityService
 import dev.phonebridge.android.confirm.NotificationConfirmationProvider
 import dev.phonebridge.android.live.AgentActivityTracker
+import dev.phonebridge.android.notify.AppLabels
 import dev.phonebridge.android.notify.BridgeNotificationListener
 import dev.phonebridge.android.pairing.PairingCoordinator
 import dev.phonebridge.android.pairing.PairingNotifications
@@ -45,7 +46,9 @@ import dev.phonebridge.core.mcp.McpServer
 import dev.phonebridge.core.mcp.ServerInfo
 import dev.phonebridge.core.mcp.capabilitiesTool
 import dev.phonebridge.core.oauth.LocalOAuth
+import dev.phonebridge.core.plugins.ActionHealth
 import dev.phonebridge.core.plugins.AppActionCatalog
+import dev.phonebridge.core.plugins.FileActionHealthStore
 import dev.phonebridge.core.plugins.PluginSource
 import dev.phonebridge.core.policy.GlobalSecurity
 import dev.phonebridge.core.policy.PolicyEngine
@@ -126,7 +129,12 @@ class BridgeGraph private constructor(val app: Application) {
 
     /** Every installed app's actions (plugins plus what apps declare): behind apps_list, app_actions_list and app_action_run. */
     val appActions: AppActionCatalog by lazy {
-        AppActionCatalog(plugins::catalog, actionsPlatform, builtInTool = { name -> registry.get(name) })
+        AppActionCatalog(
+            plugins::catalog,
+            actionsPlatform,
+            builtInTool = { name -> registry.get(name) },
+            health = ActionHealth(FileActionHealthStore(File(app.filesDir, ACTION_HEALTH_FILE))),
+        )
     }
 
     /**
@@ -189,6 +197,8 @@ class BridgeGraph private constructor(val app: Application) {
             confirmationTimeoutMs = NotificationConfirmationProvider.DEFAULT_TIMEOUT_MS,
             globalSecurity = ::globalSecurity,
             activity = agentActivity,
+            // Names the agent's allowed apps in its access summary (initialize instructions).
+            appLabel = { pkg -> AppLabels.of(app, pkg) },
         )
     }
 
@@ -506,6 +516,7 @@ class BridgeGraph private constructor(val app: Application) {
     companion object {
         private const val TAG = "PhoneBridge/Graph"
         private const val TOKENS_FILE = "tokens.json"
+        private const val ACTION_HEALTH_FILE = "action-health.json"
         private const val AUDIT_FILE = "audit.jsonl"
         private const val USAGE_FILE = "usage.json"
 

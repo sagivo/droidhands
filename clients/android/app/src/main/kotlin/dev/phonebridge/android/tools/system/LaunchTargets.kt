@@ -81,9 +81,9 @@ object LaunchTargetPolicy {
             "Android would ask which app should open $what, and PhoneBridge could not check those apps against this agent's " +
                 "app access, so nothing was opened. Pass 'package' with the app to use (apps_list shows the apps you may use)."
         } else {
-            "Every app that can open $what (${list(handlers)}) is blocked by the user for this agent, so nothing was opened. " +
-                "Don't try to work around this. If it is needed, ask the user to allow one of these apps for this agent in " +
-                "PhoneBridge > Agents > (agent) > Advanced > App access."
+            "This agent isn't allowed to use any app that can open $what (${list(handlers)}), so nothing was opened. " +
+                "Don't try to work around this. If it is needed, tell the user: they can allow one of these apps in " +
+                "PhoneBridge > Agents > (this agent) > Access."
         }
 
     /** Agent-facing error for [LaunchDecision.Choose]. */

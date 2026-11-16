@@ -64,6 +64,7 @@ internal class AppScanner(context: Context) {
     private class Discovered(val key: Any, val actions: List<PluginAction>)
 
     private val declared = ConcurrentHashMap<String, Pair<VersionKey, ShortcutsDeclaration?>>()
+    private val manifests = ConcurrentHashMap<String, Pair<VersionKey, DeclaredManifest?>>()
     private val discovered = ConcurrentHashMap<String, Discovered>()
 
     /** The current scan, rebuilt first if packages changed or it is too old. */
@@ -73,6 +74,9 @@ internal class AppScanner(context: Context) {
             current?.takeIf(::isFresh) ?: build().also { current = it }
         }
     }
+
+    /** [packageName] in the last scan, without scanning (null before the first scan or if it isn't launchable). */
+    fun cachedApp(packageName: String): LaunchableApp? = current?.app(packageName)
 
     /** The discovered actions of [packageName] (empty if it is not a launchable app). */
     suspend fun actions(packageName: String): List<PluginAction> {
@@ -84,7 +88,8 @@ internal class AppScanner(context: Context) {
         discovered[packageName]?.takeIf { it.key == key }?.let { return it.actions }
         val actions = withContext(Dispatchers.IO) {
             val shortcuts = shortcuts(app, version)
-            DiscoveredActions.build(app.entry.label, packageName, app.launcher.name, handlers, shortcuts) { isExported(packageName, it) }
+            val manifest = manifest(app, version)
+            DiscoveredActions.build(app.entry.label, packageName, app.launcher.name, handlers, shortcuts, manifest) { isExported(packageName, it) }
         }
         discovered[packageName] = Discovered(key, actions)
         return actions
@@ -135,9 +140,10 @@ internal class AppScanner(context: Context) {
         val play = handlers(Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH))
         val web = handlers(Intent(Intent.ACTION_WEB_SEARCH))
         val geo = handlers(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=x")))
+        val search = handlers(Intent(Intent.ACTION_SEARCH))
         val handlers = apps.associate { app ->
             val pkg = app.entry.packageName
-            pkg to StandardHandlers(share[pkg], processText[pkg], play[pkg], web[pkg], geo[pkg])
+            pkg to StandardHandlers(share[pkg], processText[pkg], play[pkg], web[pkg], geo[pkg], search[pkg])
         }
         return AppScan(apps, handlers, sequence, SystemClock.elapsedRealtime())
     }
@@ -178,6 +184,15 @@ internal class AppScanner(context: Context) {
         }
     }
 
+    /** [app]'s manifest intent filters (cached by version), or null if its APK can't be read. */
+    private fun manifest(app: LaunchableApp, version: VersionKey): DeclaredManifest? {
+        val pkg = app.entry.packageName
+        manifests[pkg]?.takeIf { it.first == version }?.let { return it.second }
+        val parsed = ManifestReader.read(pm, app.launcher.applicationInfo)
+        manifests[pkg] = version to parsed
+        return parsed
+    }
+
     /** `@2131755203` (a compiled-XML resource reference) → its text, or null. */
     private fun resolve(resources: Resources, ref: String): String? {
         val id = ref.removePrefix("@").toIntOrNull()?.takeIf { it != 0 } ?: return null
@@ -198,12 +213,19 @@ internal class AppScanner(context: Context) {
             @Suppress("DEPRECATION")
             pm.getActivityInfo(component, 0)
         }
-        info.exported && info.packageName == packageName
+        info.exported && info.packageName == packageName && info.permission.let { it == null || hasPermission(it) } &&
+            when (pm.getComponentEnabledSetting(component)) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+                PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> info.isEnabled
+                else -> false
+            }
     } catch (e: PackageManager.NameNotFoundException) {
         false
     } catch (e: RuntimeException) {
         false
     }
+
+    private fun hasPermission(permission: String): Boolean = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
     companion object {
         /** A safety net for changes [PackageManager.getChangedPackages] doesn't report (e.g. components turned off). */

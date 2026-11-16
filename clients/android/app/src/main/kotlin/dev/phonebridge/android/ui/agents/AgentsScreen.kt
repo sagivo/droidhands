@@ -26,6 +26,8 @@ import dev.phonebridge.android.ui.components.ScreenScaffold
 import dev.phonebridge.android.ui.components.StatusPill
 import dev.phonebridge.android.ui.components.padded
 import dev.phonebridge.android.ui.components.rememberNow
+import dev.phonebridge.android.ui.grant.GrantApps
+import dev.phonebridge.android.ui.grant.GrantPresentation
 import dev.phonebridge.android.ui.theme.StatusColors
 import dev.phonebridge.android.ui.theme.statusColors
 import dev.phonebridge.android.ui.tokens.TokenPresentation
@@ -43,6 +45,8 @@ import java.time.ZoneId
 fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: () -> Unit) {
     val tokens by vm.tokens.collectAsStateWithLifecycle()
     val usage by vm.usage.collectAsStateWithLifecycle()
+    val appActions by vm.appActions.collectAsStateWithLifecycle()
+    val appLabels = remember(appActions) { GrantApps.labels(appActions) }
     val now by rememberNow()
     val sorted = remember(tokens, usage, now) { AgentPresentation.sorted(tokens, usage, now) }
     val today = remember(now) { Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate() }
@@ -62,13 +66,17 @@ fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: 
                 }
             } else {
                 item(key = "agents") {
-                    ListSection(footer = "Tap an agent to see what it did, change what it may do, or revoke it.") {
+                    ListSection(
+                        footer = "Each AI agent you connect appears here, with the access you gave it. Tap one to see what it did, " +
+                            "change its access, or revoke it.",
+                    ) {
                         sorted.forEach { record ->
                             AgentRow(
                                 record = record,
                                 usage = usage[record.id],
                                 now = now,
                                 callsToday = AgentPresentation.callsOn(usage[record.id], today),
+                                appLabels = appLabels,
                                 restrictions = AgentPresentation.restrictions(record) { Schedule.range(it, is24h) },
                                 colors = colors,
                                 onOpen = { onOpenAgent(record.id) },
@@ -90,8 +98,8 @@ fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: 
 }
 
 /**
- * One agent: monogram, name, "client · last active", then access level, today's calls and any
- * restrictions; its status as a pill.
+ * One agent: monogram, name, "client · last active", then its access (the grant's short summary), today's
+ * calls and any restrictions; its status as a pill.
  */
 @Composable
 private fun AgentRow(
@@ -99,6 +107,7 @@ private fun AgentRow(
     usage: TokenUsage?,
     now: Long,
     callsToday: Long,
+    appLabels: Map<String, String>,
     restrictions: List<String>,
     colors: StatusColors,
     onOpen: () -> Unit,
@@ -113,12 +122,11 @@ private fun AgentRow(
         AgentPresentation.clientLabel(record),
         AgentPresentation.lastActiveText(AgentPresentation.lastActive(record, usage), now),
     ).joinToString(" · ")
-    val details = (listOf(AccessLevel.of(record).label, AgentPresentation.callsTodayText(callsToday)) + restrictions)
-        .joinToString(" · ")
+    val details = (listOf(AgentPresentation.callsTodayText(callsToday)) + restrictions).joinToString(" · ")
     ListRow(
         title = record.name,
-        subtitle = "$identity\n$details",
-        subtitleMaxLines = 3,
+        subtitle = "$identity\n${GrantPresentation.shortSummary(record, appLabels)}\n$details",
+        subtitleMaxLines = 4,
         leading = { Monogram(record.name, size = MONOGRAM_SIZE) },
         trailing = { StatusPill(AgentPresentation.stateLabel(state), color, dot = state == TokenState.ACTIVE) },
         showChevron = true,

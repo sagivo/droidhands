@@ -47,8 +47,9 @@ class PolicyRulesTest {
     fun blockDeniesWithAClearMessage() {
         val decision = assertIs<PolicyDecision.Deny>(engine().evaluate(token(mapOf("sms_send" to ToolRule.BLOCK)), sensitive))
         assertFalse(decision.rateLimited)
-        assertTrue(decision.reason.contains("'sms_send' is blocked for this agent by the user"), decision.reason)
-        assertTrue(decision.reason.contains("Do not try to work around it"), decision.reason)
+        assertTrue(decision.reason.contains("The user blocked the tool 'sms_send' for Claude"), decision.reason)
+        assertTrue(decision.reason.contains("PhoneBridge > Agents > Claude > Tool rules"), decision.reason)
+        assertTrue(decision.reason.contains("Do not try to work around this"), decision.reason)
         // Other tools are unaffected.
         assertEquals(PolicyDecision.Allow, engine().evaluate(token(mapOf("sms_send" to ToolRule.BLOCK)), read))
     }

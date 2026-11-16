@@ -70,6 +70,32 @@ class PluginCatalogTest {
     }
 
     @Test
+    fun iosBundleIdsAreIndexedApartFromAndroidPackages() {
+        fun withIos(id: String, packages: String, bundleIds: String, vararg actions: String) =
+            yaml(id, packages, *actions).replace("actions:\n", "ios:\n  bundle_ids: [$bundleIds]\nactions:\n")
+                .replace(Regex("(    android: \\{url: \"https://x/(\\w+)\"\\}\n)"), "$1    ios: {url: \"demo://$2\"}\n")
+        val load = PluginCatalog.load(
+            listOf(
+                PluginFile("plugins/spotify/plugin.yaml", withIos("spotify", "com.spotify.music", "com.spotify.client", "play")),
+                // The same id as another plugin's Android package: only clashes on the same OS count.
+                PluginFile("plugins/odd/plugin.yaml", withIos("odd", "com.spotify.client", "com.odd.ios", "play")),
+            ),
+        )
+        assertEquals(emptyList(), load.errors)
+        val catalog = load.catalog
+        assertEquals(listOf("spotify"), catalog.pluginsFor("com.spotify.client", DeviceOs.IOS).map { it.id })
+        assertEquals(listOf("odd"), catalog.pluginsFor("com.spotify.client").map { it.id })
+        assertEquals(emptyList(), catalog.pluginsFor("com.spotify.music", DeviceOs.IOS))
+        assertEquals(setOf("com.spotify.music", "com.spotify.client"), catalog.packages)
+        // Plugins sharing a bundle id may not share an action id.
+        val clash = PluginLoader.load(withIos("my_spotify", "com.my.spotify", "com.spotify.client", "play"), source = PluginSource.LOCAL).plugin!!
+        assertEquals(
+            listOf("my_spotify: actions play clash with plugin 'spotify' for com.spotify.client; rename them or merge the plugins"),
+            catalog.conflicts(clash),
+        )
+    }
+
+    @Test
     fun duplicateIdsAreReported() {
         val load = PluginCatalog.load(listOf(file("spotify", "com.a", "x"), PluginFile("plugins/spotify/../spotify/plugin.yaml", yaml("spotify", "com.b", "y"))))
         assertEquals(1, load.catalog.plugins.size)

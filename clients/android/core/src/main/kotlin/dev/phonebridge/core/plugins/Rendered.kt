@@ -3,9 +3,10 @@ package dev.phonebridge.core.plugins
 import kotlinx.serialization.json.JsonObject
 
 // Recipes after rendering with one call's parameters (RecipeRenderer): platform-neutral and ready to run.
-// Every rendered intent, link and step sequence is pinned to [packageName], the app's installed package.
+// Every rendered intent, link and step sequence is pinned to [packageName], the app's installed package (on iOS, its
+// bundle id).
 
-/** A rendered [AndroidRecipe]. */
+/** A rendered [Recipe]. */
 sealed interface RenderedRecipe
 
 /**
@@ -23,7 +24,11 @@ data class RenderedIntent(
     val extras: Map<String, ExtraValue> = emptyMap(),
 ) : RenderedRecipe
 
-/** An ACTION_VIEW link (with CATEGORY_BROWSABLE) that only [packageName] may open; no browser fallback (§6.3). */
+/**
+ * A link that only [packageName] may open; no browser fallback (§6.3). On Android an ACTION_VIEW (with
+ * CATEGORY_BROWSABLE) pinned to the package; on iOS [packageName] is the bundle id, and the platform opens the link only
+ * if that app declares its scheme (§6.6).
+ */
 data class RenderedUrl(val url: String, val packageName: String) : RenderedRecipe
 
 /** A screen recipe confined to [packageName] (§6.4). */
@@ -50,7 +55,7 @@ sealed interface ExtraValue {
 /** A rendered [Step]: [timeoutMs] is the effective timeout. */
 data class RenderedStep(val action: RenderedStepAction, val optional: Boolean = false, val timeoutMs: Long = Step.DEFAULT_TIMEOUT_MS)
 
-/** A rendered [StepAction]. Selectors carry rendered text and full view ids. */
+/** A rendered [StepAction]. Selectors carry rendered text and full view ids (iOS: accessibility identifiers as written). */
 sealed interface RenderedStepAction {
     data class Launch(val fresh: Boolean = false) : RenderedStepAction
 

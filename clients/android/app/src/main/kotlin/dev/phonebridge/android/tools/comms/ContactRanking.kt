@@ -1,7 +1,7 @@
 package dev.phonebridge.android.tools.comms
 
 import dev.phonebridge.android.tools.support.PhoneEntry
-import dev.phonebridge.android.tools.support.WhatsAppEntry
+import dev.phonebridge.android.tools.support.ContactAppEntry
 import kotlin.math.min
 
 /** Scores and ordering for contact search hits that are not name matches, plus row clean-up (pure). */
@@ -66,34 +66,44 @@ internal object ContactRanking {
     }
 }
 
-/** WhatsApp's rows in ContactsContract.Data (synced by the WhatsApp apps' contact adapters). */
-internal object WhatsAppRows {
-    const val PACKAGE = "com.whatsapp"
-    const val BUSINESS_PACKAGE = "com.whatsapp.w4b"
-    const val MIMETYPE = "vnd.android.cursor.item/vnd.com.whatsapp.profile"
-    const val BUSINESS_MIMETYPE = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.profile"
-    val MIMETYPES = listOf(MIMETYPE, BUSINESS_MIMETYPE)
+/**
+ * Rows apps add to contacts (pure): a Data row of a raw contact whose account type is an installed app's package, with a
+ * mimetype that isn't one of Android's standard kinds, is that app's entry for the contact (the Contacts app shows them
+ * as "Message on …", "Voice call …"). Works for any app; nothing here names one.
+ */
+internal object ContactAppRows {
+    /** The provider's own data kinds (names, phones, emails…): never an app entry. */
+    val STANDARD_MIMETYPES: List<String> = listOf(
+        "vnd.android.cursor.item/name", "vnd.android.cursor.item/phone_v2", "vnd.android.cursor.item/email_v2",
+        "vnd.android.cursor.item/photo", "vnd.android.cursor.item/organization", "vnd.android.cursor.item/im",
+        "vnd.android.cursor.item/nickname", "vnd.android.cursor.item/note", "vnd.android.cursor.item/postal-address_v2",
+        "vnd.android.cursor.item/group_membership", "vnd.android.cursor.item/website", "vnd.android.cursor.item/contact_event",
+        "vnd.android.cursor.item/relation", "vnd.android.cursor.item/sip_address", "vnd.android.cursor.item/identity",
+    )
 
-    private const val USER_DOMAIN = "s.whatsapp.net"
-    private const val LEGACY_USER_DOMAIN = "c.us"
-    private val NUMBER_LENGTH = 6..15
+    /** At most this many entries per app. */
+    const val MAX_ENTRIES = 6
+    private const val MAX_ENTRY_LENGTH = 80
+
+    /** One Data row: the raw contact's account type and the row's summary/detail columns. */
+    data class Row(val accountType: String?, val mimetype: String?, val data2: String?, val data3: String?)
 
     /**
-     * Parses a profile row: DATA1 is the jid ("972541234567@s.whatsapp.net"). Group or non-phone
-     * ids are skipped. The package comes from the raw contact's ACCOUNT_TYPE, else from the mimetype.
+     * The app entries of one contact's [rows]: per account type that [isApp] accepts (an installed app's package), the
+     * rows' detail text (DATA3, else DATA2), de-duplicated. [label] names the app.
      */
-    fun entry(data1: String?, mimetype: String?, accountType: String?): WhatsAppEntry? {
-        val raw = data1?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val user = raw.substringBefore('@')
-        val domain = raw.substringAfter('@', missingDelimiterValue = "")
-        if (domain.isNotEmpty() && domain != USER_DOMAIN && domain != LEGACY_USER_DOMAIN) return null
-        if (user.length !in NUMBER_LENGTH || !user.all { it in '0'..'9' }) return null
-        val packageName = when {
-            accountType == BUSINESS_PACKAGE -> BUSINESS_PACKAGE
-            accountType == PACKAGE -> PACKAGE
-            mimetype == BUSINESS_MIMETYPE -> BUSINESS_PACKAGE
-            else -> PACKAGE
+    fun entries(rows: List<Row>, isApp: (String) -> Boolean, label: (String) -> String?): List<ContactAppEntry> {
+        val byApp = LinkedHashMap<String, LinkedHashSet<String>>()
+        for (row in rows) {
+            val pkg = row.accountType?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+            if (row.mimetype == null || row.mimetype in STANDARD_MIMETYPES || !isApp(pkg)) continue
+            val text = sequenceOf(row.data3, row.data2).mapNotNull { it?.replace(WHITESPACE, " ")?.trim()?.takeIf { t -> t.isNotEmpty() } }
+                .firstOrNull()?.take(MAX_ENTRY_LENGTH)
+            val set = byApp.getOrPut(pkg) { LinkedHashSet() }
+            if (text != null && set.size < MAX_ENTRIES) set += text
         }
-        return WhatsAppEntry(number = user, jid = "$user@$USER_DOMAIN", packageName = packageName)
+        return byApp.map { (pkg, texts) -> ContactAppEntry(pkg, label(pkg), texts.toList()) }
     }
+
+    private val WHITESPACE = Regex("\\s+")
 }

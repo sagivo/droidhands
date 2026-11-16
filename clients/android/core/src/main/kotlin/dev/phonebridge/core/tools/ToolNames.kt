@@ -20,14 +20,13 @@ object ToolNames {
         "device_status", "flashlight_set", "volume_set", "ringer_mode_set", "media_control", "clipboard_set", "speak",
         "alarm_set", "timer_set",
         // Apps
-        APPS_LIST, "app_open", "url_open", "whatsapp_open_chat", APP_ACTIONS_LIST, APP_ACTION_RUN,
+        APPS_LIST, "app_open", "url_open", APP_ACTIONS_LIST, APP_ACTION_RUN,
         // Intents
         INTENT_START,
         // Contacts
         "contacts_search",
         // Messages
-        "sms_list", "call_log_list", "sms_send", "whatsapp_send", "phone_call", "call_status", "call_answer", "call_end",
-        "email_send",
+        "sms_list", "call_log_list", "sms_send", "phone_call", "call_status", "call_answer", "call_end",
         // Notifications
         "notifications_list", "notification_reply", "notification_action", "notification_dismiss",
         // Calendar
@@ -35,7 +34,7 @@ object ToolNames {
         // Location
         "location_get",
         // Screen
-        "screen_read", "screen_find", "screen_screenshot", "ui_wait", "ui_tap", "ui_type", "ui_scroll", "ui_swipe",
+        "screen_observe", "screen_read", "screen_find", "screen_screenshot", "ui_wait", "ui_tap", "ui_type", "ui_scroll", "ui_swipe",
         "ui_global_action",
     )
 

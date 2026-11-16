@@ -76,12 +76,12 @@ class RefRegistry(private val ids: RefIds = RefIds()) {
 
     /** Looks up a ref; throws [ToolException] with guidance for malformed, stale, foreign or unknown refs. */
     fun lookup(raw: String): Entry {
-        val id = parseRef(raw) ?: throw ToolException("'$raw' is not a valid element ref. Refs look like n12 and come from screen_read or screen_find.")
+        val id = parseRef(raw) ?: throw ToolException("'$raw' is not a valid element ref. Refs look like n12 and come from screen_observe, screen_read or screen_find.")
         synchronized(lock) {
-            if (!started) throw ToolException("No element refs yet. Call screen_read (or screen_find) first, then use the refs it returns.")
+            if (!started) throw ToolException("No element refs yet. Call screen_observe (or screen_read) first, then use the refs it returns.")
             return entries[id] ?: throw ToolException(
-                "Ref n$id is not from your latest screen_read/screen_find: every screen_read replaces the refs, and refs only " +
-                    "work for the agent that read them. Call screen_read again and use the refs it returns.",
+                "Ref n$id is not from your latest screen_observe/screen_read/screen_find: each screen_observe or screen_read replaces the refs, and refs only " +
+                    "work for the agent that read them. Call screen_observe again and use the refs it returns.",
             )
         }
     }

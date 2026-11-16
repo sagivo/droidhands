@@ -1,79 +1,25 @@
 package dev.phonebridge.android.pairing
 
 import dev.phonebridge.android.confirm.DisplayText
-import dev.phonebridge.core.auth.ConfirmPolicy
-import dev.phonebridge.core.tools.Risk
-import dev.phonebridge.core.tools.Scopes
+import dev.phonebridge.core.auth.GrantDraft
 import dev.phonebridge.core.transport.PairingRequest
 import java.util.Locale
 
-/** One of the access levels offered when approving a new agent ([Scopes.PRESETS]). */
-data class AccessLevel(
-    /** Preset name, e.g. "Assistant". */
-    val name: String,
-    val scopes: Set<String>,
-    /** One short plain-language sentence. */
-    val description: String,
-    val recommended: Boolean,
-    /** Highest tool risk the level allows ([Scopes.PRESET_MAX_RISK]); null = no cap. */
-    val maxRisk: Risk? = null,
-)
-
-/** What the user chose for a new agent. */
+/** What the user chose for a new agent on the grant screen. */
 data class PairingChoice(
     /** Agent name shown in PhoneBridge; blank means the client's own name. */
     val name: String,
-    val scopes: Set<String>,
-    val policy: ConfirmPolicy = ConfirmPolicy.SENSITIVE,
-    /** Highest tool risk the agent may use (the chosen level's [AccessLevel.maxRisk]); null = no cap. */
-    val maxRisk: Risk? = null,
+    /** Its access: Everything, or chosen apps and abilities; approvals (docs/SECURITY.md "Access"). */
+    val grant: GrantDraft = GrantDraft.forNewAgent(),
 ) {
     companion object {
-        /** The recommended choice: the client's name, Assistant, ask before sensitive actions. */
-        fun defaults(request: PairingRequest) = of(request.clientName, PairingPresentation.level(PairingPresentation.DEFAULT_LEVEL))
-
-        /** [level]'s scopes and risk cap, named [name]. */
-        fun of(name: String, level: AccessLevel, policy: ConfirmPolicy = ConfirmPolicy.SENSITIVE) =
-            PairingChoice(name = name, scopes = level.scopes, policy = policy, maxRisk = level.maxRisk)
+        /** The client's name, Everything, no prompts (what the screen starts with). */
+        fun defaults(request: PairingRequest) = PairingChoice(request.clientName)
     }
 }
 
-/** Pure text and choices for the pairing prompt (notification, [PairingActivity], Home card). */
+/** Pure text for the pairing prompt (notification, [PairingActivity], Home card). */
 object PairingPresentation {
-    const val DEFAULT_LEVEL = "Assistant"
-
-    /** The [Scopes.PRESETS], in order, with descriptions. */
-    val ACCESS_LEVELS: List<AccessLevel> = Scopes.PRESETS.map { (name, scopes) ->
-        AccessLevel(name, scopes, levelDescription(name), recommended = name == DEFAULT_LEVEL, maxRisk = Scopes.PRESET_MAX_RISK[name])
-    }
-
-    /** Confirmation policies in the order offered (recommended first). */
-    val POLICIES: List<ConfirmPolicy> = listOf(ConfirmPolicy.SENSITIVE, ConfirmPolicy.ALL_ACTIONS, ConfirmPolicy.NEVER)
-
-    fun level(name: String): AccessLevel = ACCESS_LEVELS.firstOrNull { it.name == name } ?: ACCESS_LEVELS.first { it.recommended }
-
-    fun levelDescription(name: String): String = when (name) {
-        "Read-only" -> "Can look but not act: read messages, notifications, contacts, calendar, location and the screen."
-        "Assistant" -> "Read-only, plus send messages, make calls, answer notifications and add calendar events."
-        "Full control" -> "Everything, including tapping and typing in any app. Only for agents you fully trust."
-        else -> "A custom set of permissions."
-    }
-
-    fun policyLabel(policy: ConfirmPolicy): String = when (policy) {
-        ConfirmPolicy.SENSITIVE -> "Ask me before sensitive actions"
-        ConfirmPolicy.ALL_ACTIONS -> "Ask me before every action"
-        ConfirmPolicy.NEVER -> "Never ask me"
-    }
-
-    fun policyDescription(policy: ConfirmPolicy): String = when (policy) {
-        ConfirmPolicy.SENSITIVE -> "Recommended. You approve messages, calls and replies on the phone."
-        ConfirmPolicy.ALL_ACTIONS -> "You also approve taps, typing and opening apps. Reading never asks."
-        ConfirmPolicy.NEVER -> "The agent acts without asking you."
-    }
-
-    const val NEVER_POLICY_WARNING =
-        "Without approvals, an agent tricked by a message or web page it reads can send messages and place calls as you."
-
     const val CODE_HINT = "Make sure your browser shows the same code."
 
     const val ALLOW_HINT = "Only allow if you just started connecting this agent yourself."
@@ -83,11 +29,11 @@ object PairingPresentation {
         "${request.clientName} (${request.redirectHost}) wants to connect · code ${request.displayCode}"
 
     /** Collapsed text: repeats the code first, in case the title is cut off. */
-    fun notificationText(request: PairingRequest): String = "Code ${request.displayCode} · Tap to review and choose what it may do"
+    fun notificationText(request: PairingRequest): String = "Code ${request.displayCode} · Tap to review and choose its access"
 
     fun notificationBigText(request: PairingRequest): String = buildString {
         append("Check that your browser shows code ").append(request.displayCode)
-        append(", then tap to choose what ").append(request.clientName).append(" may do on this phone.")
+        append(", then tap to give ").append(request.clientName).append(" access to this phone.")
         originLine(request)?.let { append("\n\n").append(it) }
     }
 

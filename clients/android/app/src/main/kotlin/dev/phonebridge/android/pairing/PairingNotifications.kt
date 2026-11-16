@@ -16,7 +16,7 @@ import dev.phonebridge.android.graph.NotificationGroups
  * Posts the pairing prompt as a heads-up notification on [Channels.PAIRING]:
  * "<client> (<host>) wants to connect · code <code>". Tapping it (or "Review") opens
  * [PairingActivity]; "Deny" and swiping it away deny through [PairingReceiver] with the prompt's
- * nonce. There is deliberately no Allow button: the user must pick the access level first.
+ * nonce. There is deliberately no Allow button: the user must choose the agent's access first.
  *
  * Each prompt has its own group, so Android never auto-groups and collapses it with other
  * PhoneBridge notifications. Every PendingIntent is explicit and immutable, with a unique request

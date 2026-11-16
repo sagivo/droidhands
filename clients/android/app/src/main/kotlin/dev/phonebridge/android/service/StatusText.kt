@@ -64,7 +64,7 @@ object StatusText {
     fun lastNotableEntry(entries: List<AuditEntry>): AuditEntry? =
         entries.firstOrNull { it.tool != null || it.outcome == AuditOutcome.AUTH_FAILED } ?: entries.firstOrNull()
 
-    /** e.g. "Last: whatsapp_send by Claude, 3 min ago" or "Last: rejected request (invalid token), just now". */
+    /** e.g. "Last: sms_send by Claude, 3 min ago" or "Last: rejected request (invalid token), just now". */
     fun lastActivityLine(entry: AuditEntry, now: Long): String {
         val age = relativeTime(now - entry.timestamp)
         if (entry.outcome == AuditOutcome.AUTH_FAILED) return "Last: rejected request (invalid token), $age"

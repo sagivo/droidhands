@@ -8,7 +8,7 @@
 │ MCP client   │ ── or, local mode ─────► │ self-hosted   │  behind NAT/LTE     │   ├─ LocalHttpServer (127.0.0.1:8765)    │
 └──────────────┘    adb forward/Tailscale └───────────────┘                     │   └─► McpServer (core) ─► auth ─► policy │
                                                                                 │        ─► confirm ─► Tool ─► audit       │
-                                                                                │  Tools: contacts, sms, whatsapp, calls,  │
+                                                                                │  Tools: contacts, sms, calls, phone use, │
                                                                                 │  notifications, calendar, location,      │
                                                                                 │  device, apps, intents, screen/UI        │
                                                                                 │  (AccessibilityService, NotificationLis- │
@@ -24,7 +24,9 @@
 | Relay | `relay/` (TypeScript, Node ≥ 20, `ws`) | No. It tunnels opaque HTTP to any device. |
 | Bridge core: MCP server, tokens, device identity, policy, rate limits, audit, confirmations API, relay client, local HTTP server | `clients/android/core` (pure Kotlin/JVM; no Android imports) | No. Designed to become a Kotlin Multiplatform module for iOS. An iOS app could also re-implement it from the docs. |
 | App plugins: format, validator, templates, rendering, catalog, `app_actions_list` / `app_action_run` | `plugins/` (YAML, one folder per app) and `clients/android/core/.../plugins` | No. Each plugin has an `android:` section today; the platform only runs rendered recipes. |
+| Phone use (screen tools and screen recipes over a `ScreenDriver`) | `clients/android/core/.../screen` | No. iOS uses it; the Android app still has its own screen tools. |
 | Android app: services, permissions UI, tool implementations | `clients/android/app` | Yes |
+| iOS host (Mac) and runner (iPhone): app inventory, `Info.plist` discovery, `ScreenDriver` over XCUITest | `clients/ios` ([IOS.md](IOS.md)) | Yes |
 
 Adding a platform means implementing the tools from `docs/TOOLS.md` with that platform's APIs,
 plus a device that speaks the tunnel protocol. The relay and the agents don't change.
@@ -49,7 +51,7 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
    **Dispatch.** A `DispatchTool` (`app_action_run`) stands for other tools. After its own scope check,
    the kill switch, the security settings and its own BLOCK rule, risk cap and active hours
    (`PolicyEngine.precheck`), its `resolve()` picks the tool that really runs: the app action's
-   virtual tool `<package>/<action id>`, or a built-in tool such as `whatsapp_send` for `tool` recipes.
+   virtual tool `<package>/<action id>`, or a built-in tool such as `sms_send` for `tool` recipes.
    Resolution checks app access (a blocked app is audited `DENIED_APP`) and the parameters, and has no
    side effects. The resolved tool then goes through everything above under its own name: its scope,
    `PolicyEngine.evaluate` (rules keyed by its name, rate limits counted once), confirmation by its
@@ -85,6 +87,7 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 | `AppActionsPlatform` (interface) | What the platform provides: installed apps, app-name resolution under app access, discovered actions (§8), availability, and running a rendered recipe. The Android app implements it. |
 | `AppActionCatalog`, `appActionTools()` | Per app: plugin actions plus discovered ones; each action's tool; `app_actions_list` and `app_action_run` (a `DispatchTool`). |
 | `PluginDraft` | A `plugin.yaml` skeleton from an app's discovered actions, with TODO markers and examples computed by rendering each recipe (*Apps → (app) → Create plugin draft*). |
+| `RecipeProbe`, `ActionHealth` | Sample parameters with which the platform checks that a recipe still reaches the installed app version (PLUGINS.md §8.1), and the per-app-version record of actions that failed there (`IntegrationException`, §8.2), reported to agents and persisted on the phone. |
 
 ## Android components
 
@@ -98,9 +101,19 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 | `PairingCoordinator` / `PairingActivity` | One-tap pairing: shows the agent's name, origin and code, lets the user choose the access level, and issues the token (`origin = "pairing"`). Answers both relay pairings and the local server's (core `LocalOAuth`, [PROTOCOL.md §4.1](PROTOCOL.md#41-one-tap-pairing-on-the-local-server)). |
 | `UnlockPrompt` | "Unlock to continue": asks the user to unlock when a screen-based action arrives while the phone is locked. |
 | `PluginRepository` (`plugins/`) | App plugins: the repository's `plugins/<id>/plugin.yaml`, bundled at build time as `assets/plugins/<id>.yaml` and loaded lazily, plus local plugins (`files/local-plugins/<id>.yaml`, imported in Settings or pushed with `scripts/plugin-push.sh`) while *Settings → Developer → Local plugins* is on. |
-| `AndroidAppActions` (`tools/actions/`) | Core's `AppActionsPlatform`: `AppScanner` discovers what apps declare (standard intents, `shortcuts.xml` shortcuts and App Actions capabilities; cached per app version, rescanned when packages change); `ActionIntents` starts intent and link recipes in an exported activity of the app itself, after app-access checks; `StepRunner` runs screen recipes on the screen tools' safety checks, confined to the app. |
-| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, access level, app access, tool rules, app action rules grouped by app, active hours, revoke); Apps (every app with its integration and actions; per app: risks and parameters, *Block for all agents*, *Request a better integration*, *Create plugin draft*); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `phonebridge://configure` links. |
+| `AndroidAppActions` (`tools/actions/`) | Core's `AppActionsPlatform`: `AppScanner` discovers what apps declare (standard intents, the intent filters of the app's own manifest read by `ManifestReader` / `BinaryXml` / `ManifestXml` and turned into `open_link` and `compose_<scheme>` by `DeclaredActions`, `shortcuts.xml` shortcuts and App Actions capabilities; cached per app version, rescanned when packages change); recipes of plugin actions are checked against the installed version (`ActionIntents.canStart`); `ActionIntents` starts intent and link recipes in an exported activity of the app itself, after app-access checks; `StepRunner` runs screen recipes on the screen tools' safety checks, confined to the app. |
+| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, Access (the grant editor shared with pairing and manual tokens: Everything or chosen apps and abilities, the ask-first switch), tool rules, app action rules grouped by app, active hours, expiry, revoke); Apps (every app with its integration and actions; per app: risks and parameters, *Block for all agents*, *Request a better integration*, *Create plugin draft*); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `phonebridge://configure` links. |
 | `AppDirectory` (`ui/apps/`) | The installed apps and their actions as the UI shows them (`AppListings`, built from `AppActionCatalog`), loaded once in the background and shared by the Apps tab, the app action rules and the readable names in the activity log and usage ("Spotify – Play music" for `com.spotify.music/play`). Never reachable by agents. |
+
+## Phone use
+
+The screen tools (`tools/screen/`) are the part that needs no knowledge of any app or Android version, like browser
+use for web pages. `Observation` (`screen_observe`) combines the accessibility tree (`ScreenCapture`, with app
+access, PhoneBridge's own windows withheld and one-time codes masked) with a screenshot on which `ScreenMarks` /
+`MarkPainter` box and number the actionable elements; the number is the element's ref. Each `ui_*` action captures a
+`ScreenSignature` before and after and reports the difference (`ScreenChange`), and `observe=true` appends a new
+observation. `ScreenSession` keeps each agent's refs and the size of its last screenshot, so points can be given in
+screenshot pixels (`space=screenshot`).
 
 ## Concurrency
 

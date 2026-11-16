@@ -4,12 +4,14 @@ Let **your** AI agents (Claude, or any MCP client) operate **your** phone, secur
 
 > "Send a WhatsApp to Tania saying I'll be 10 minutes late."
 
-The agent calls `contacts_search("Tania")`, then
-`whatsapp_send(contact="Tania Cohen", message="I'll be 10 minutes late")`. Your phone shows
-*"Claude wants to: Send WhatsApp to Tania Cohen (+972 54-…): 'I'll be 10 minutes late'"* with
-**Allow / Deny**. On Allow, PhoneBridge opens the chat and taps Send.
+The agent calls `contacts_search("Tania")` (which also says she is on WhatsApp), opens her chat with the message
+typed in using one of WhatsApp's actions, then looks at the screen (`screen_observe`: a screenshot with every
+button numbered) and taps Send, checking that the message went out. It works the same way in any app on any
+phone: PhoneBridge doesn't hard-code apps or Android versions. It reads what each installed app declares, and
+for everything else the agent uses the screen like a person would ("phone use", like browser use). It only acts
+inside the access you granted when you connected it, and the live notification lets you watch it and press Stop.
 
-PhoneBridge is an Android app (iOS later) that exposes the phone's capabilities as an
+PhoneBridge is an Android app, plus an iPhone host that runs on your Mac ([docs/IOS.md](docs/IOS.md)), that exposes the phone's capabilities as an
 [MCP](https://modelcontextprotocol.io) server. Agents reach it through a small relay (the one the
 app comes with, or your own self-hosted one; works over LTE and behind NAT) or directly over
 Tailscale, privately and without a relay (also USB / LAN). Routes combine; see
@@ -53,7 +55,7 @@ app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
 * **Plugins**: one small YAML file per app in [`plugins/`](plugins), written by the community and
   reviewed in pull requests, adds the actions written for that app (deep links, intents and, if needed,
   screen recipes). They ship inside the app.
-* **Same security as any tool**: each action is checked, approved (by its risk), rate-limited and
+* **Same security as any tool**: each action is checked against the agent's access, rate-limited and
   audited as `<package>/<action>`; it is pinned to its app, and you can block an app or a single action
   for every agent or for one. The **Apps** tab shows every app and what agents can do in it.
 
@@ -67,14 +69,18 @@ app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
 The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
 * **One-tap pairing**: paste your connection URL into Claude.ai, Claude Code, ChatGPT or any MCP
-  client, check the 4-letter code on the phone, choose an access level, and tap **Allow**. The token
+  client, check the 4-letter code on the phone, give it access, and tap **Allow**. The token
   is minted on the phone (256-bit, stored only as a hash). Manual tokens are available too.
-* **Per-agent control**: access level (Read-only / Assistant / Full control, or custom scopes),
-  **which apps** it may see and operate, per-tool **Allow / Ask / Block** rules, **active hours**,
-  expiry, and instant **revoke**. A global never-allow list pre-selects banking, password-manager
-  and authenticator apps, and one-time codes are hidden from agents by default.
-* **On-phone approval** of sensitive actions (default). Approval shows the *resolved* recipient and
-  text, needs an unlocked phone, and auto-denies after 60 s.
+* **Access chosen once, no prompts after**: **Everything**, or **only what you choose**: which apps
+  and what it can do (read messages, use apps, send messages, calls…). Inside that the agent acts
+  without asking; anything else is refused and the agent is told where you can allow it. Change it
+  any time in *Agents › (agent) › Access*. A global never-allow list (banking, password-manager and
+  authenticator apps pre-selected) applies even to Everything, and one-time codes are hidden from
+  agents by default.
+* **Optional approvals**: "Ask me before it sends messages, calls or pays", or an *Ask* rule on any
+  tool. Approval shows the *resolved* recipient and text, needs an unlocked phone, and auto-denies
+  after 60 s. Per-tool **Allow / Ask / Block** rules, **active hours**, expiry and instant **revoke**
+  are per agent too.
 * Per-token rate limits, a full **audit log** with per-agent usage charts, and a global **pause**
   switch (in the app and in the notification).
 * A live **activity notification** while an agent works ("Claude Code is using your phone"), with
@@ -94,6 +100,7 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 | `scripts/relay-tailscale.sh` | Run your own relay on your computer, published over Tailscale (tailnet only, or `--public` with Funnel) |
 | `scripts/make-release-key.sh`, `.github/workflows/` | Release signing key, CI (tests and builds on every push) and releases (signed APK and relay image for every `v*` tag). [docs/RELEASING.md](docs/RELEASING.md) |
 | `scripts/e2e/` | End-to-end scenarios (real MCP calls through the relay to a device/emulator) and the pairing flow test |
+| `clients/ios/` | iPhone support ([docs/IOS.md](docs/IOS.md)): `host/` runs the same core on your Mac (Gradle module `:ios-host`); `runner/` is the XCUITest bundle on the iPhone that sees and operates the screen. Start both with `scripts/ios-host.sh`. |
 | `clients/android/fixtures` | Emulator-only stand-ins for WhatsApp and a mail app used by the E2E tests |
 | `clients/android/core` | Bridge core in pure Kotlin: MCP server, tokens, policy, audit, relay client, local HTTP server. Platform-neutral. |
 | `clients/android/app` | The Android app: services, setup UI, tool implementations |

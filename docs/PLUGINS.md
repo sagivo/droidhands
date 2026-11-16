@@ -14,16 +14,21 @@ Actions come from two places:
 1. **Plugins**: one small YAML file per app, written by the community and reviewed in pull requests.
    They live in [`plugins/<id>/plugin.yaml`](../plugins), ship inside the app, and are written for each app
    (deep links, intents and, if needed, step-by-step screen recipes).
-2. **Discovered actions**: PhoneBridge scans every installed app for the standard things Android apps
-   declare (sharing text, launcher shortcuts, App Actions capabilities, media search, web search, maps),
-   so even apps without a plugin get `open` plus whatever they support.
+2. **Discovered actions**: PhoneBridge reads what every installed app declares, from the installed version on this
+   phone: the links and intents in its own manifest (`open_link`, `compose_mailto`, …), its search, share and text
+   actions, launcher shortcuts and App Actions capabilities. Even apps without a plugin get `open` plus whatever
+   they support, and an app update changes the menu by itself.
 
-Anything else still works through the generic screen tools (`screen_read`, `ui_tap`, …). Plugins make
-the common tasks fast, reliable and safe to approve.
+Anything else works through phone use (`screen_observe`, `ui_tap`, …), which needs nothing app-specific. Plugins
+are hints on top: before a plugin action is offered, PhoneBridge checks that the installed app version still accepts
+its intent or link (§8.1), and it records which actions fail on which app version (§8.2), so a stale plugin turns
+itself off instead of failing over and over.
 
 **Adding an app takes one folder and no code.** See [CONTRIBUTING.md](../CONTRIBUTING.md) for the
-5-minute walkthrough. This document is the format reference. The format is platform-neutral: each
-plugin has an `android:` section today and will get an `ios:` section later.
+5-minute walkthrough. This document is the format reference. The format is platform-neutral: a plugin
+lists the app's Android packages (`android:`) and iPhone bundle ids (`ios:`), and each action has a recipe
+for Android, for iOS, or both (§6.6). On each phone an action runs with the recipe for that phone's OS and
+is not offered where it has none.
 
 ---
 
@@ -118,13 +123,16 @@ actions:
 | `homepage` | no | `https://` URL. |
 | `status` | no | `stable` (verified on a real device, see `tested`), `beta`, or `experimental` (default). Agents are told when an integration is experimental. |
 | `maintainers` | no | GitHub handles. |
-| `tested` | no | List of `{app_version, android, date, by}` records from people who ran every action on a device. |
+| `tested` | no | List of `{app_version, android, ios, date, by}` records from people who ran every action on a device (`android` or `ios`: the OS version). |
 | `android.packages` | yes* | Package names this plugin applies to (e.g. WhatsApp and WhatsApp Business). The first installed one is used. |
-| `ios.bundle_ids` | no | Reserved for the iOS client. |
+| `ios.bundle_ids` | yes* | iOS bundle ids this plugin applies to (e.g. `[net.whatsapp.WhatsApp, net.whatsapp.WhatsAppSMB]`): letters, digits and `-` between dots. The first installed one is used. |
 | `actions` | yes | 1 to 30 actions (§4). |
 
-Unknown keys are errors, so typos are caught. `ios` sections are kept but not checked yet. A `stable`
-plugin needs at least one `tested` record and examples for every action. Package names starting with
+\* `android.packages` is required when an action has an `android` recipe, and `ios.bundle_ids` when one has an
+`ios` recipe (an `ios` section without any `ios` recipe is an error). A plugin may be Android-only, iOS-only, or both.
+
+Unknown keys are errors, so typos are caught. A `stable` plugin needs at least one `tested` record and examples
+for every action (with `os: ios` examples for its `ios` recipes, §7). Package names and bundle ids starting with
 `dev.phonebridge` (PhoneBridge itself, any build) are refused, except the emulator-only E2E fixture
 apps (`dev.phonebridge.fixture.*`), which test plugins target.
 
@@ -136,18 +144,19 @@ apps (`dev.phonebridge.fixture.*`), which test plugins target.
 | `title` | yes | Short imperative title, e.g. "Play music" (≤ 60 chars). |
 | `description` | yes | For the agent: what it does, what it does *not* do, and caveats (≤ 600 chars). |
 | `keywords` | no | Extra words for `app_actions_list(query=…)` search (at most 20, each ≤ 40 chars). |
-| `risk` | yes** | `read`, `action` (local, reversible: opens or plays something) or `sensitive` (reaches other people, spends money, or is hard to undo). Drives on-phone approval. See §9 for the floors the validator enforces. |
+| `risk` | yes** | `read`, `action` (local, reversible: opens or plays something) or `sensitive` (reaches other people, spends money, or is hard to undo). Decides which actions ask first for agents with "Ask me before it sends messages, calls or pays" on (inside an agent's access nothing else asks). See §9 for the floors the validator enforces. |
 | `scope` | no | The token scope required (default `apps`). Allowed: `apps`, `device`, `contacts.read`, `messages.read`, `messages.send`, `calls`, `notifications.read`, `calendar.read`, `calendar.write`, `location`, `screen.read`. |
 | `params` | no | Ordered map of parameter name to spec (§5). Names match `^[a-z][a-z0-9_]{0,39}$`, at most 10. |
 | `confirm` | no | Template for the approval prompt (≤ 300 chars), e.g. `Send "{{text}}" to {{contact}} on Telegram`. Defaults to `<App>: <title> (name=value, …)`. For local plugins the prompt also shows what the recipe will really do (e.g. the link it opens). |
 | `completes` | no | `true` if the action finishes the task by itself (plays music, sends a message), `false` if it opens a screen where someone still has to act (a filled-in compose screen, ride options). Defaults to `true` for `tool` and `steps`, `false` for `intent` and `url`. Agents are told what to do next when it is `false`. |
 | `android` | yes* | Exactly one recipe: `intent`, `url`, `steps` or `tool` (§6). |
+| `ios` | yes* | Exactly one recipe: `url`, `steps` or `tool` (§6.6). iOS has no intents. |
 | `examples` | no | Test cases (§7), at most 20. Strongly encouraged; required for `status: stable`. |
-| `ios` | no | Reserved for the iOS client: kept, not checked yet. |
 
-\* An action without an `android` recipe is skipped on Android (for iOS-only actions later). It needs
-an `android` or an `ios` section.
-\** Omit `risk` and `scope` for `tool` recipes. They come from the built-in tool.
+\* An action needs an `android` recipe, an `ios` recipe, or both. It is skipped on an OS it has no recipe for.
+`completes` defaults by the recipe that runs on the phone's OS.
+\** Omit `risk` and `scope` for `tool` recipes. They come from the built-in tool. An action with both recipes
+uses `tool` for both or for neither, since the other kinds declare their own `risk`.
 
 ## 5. Parameters
 
@@ -177,7 +186,9 @@ before anything runs (and before any approval prompt). Unknown parameters are re
 built-in tools, it accepts `"5"` for an integer, `"true"` for a boolean and a number for a string, and
 treats `null` (and an empty string for a required parameter) as missing.
 
-## 6. Android recipes
+## 6. Recipes
+
+§6.1 to §6.5 describe the `android:` recipes; §6.6 says what differs under `ios:`.
 
 ### 6.1 Templates
 
@@ -292,25 +303,65 @@ Recipes can't press Home, open the notification shade, or touch other apps or Ph
 ### 6.5 `tool`: use a built-in PhoneBridge tool
 
 ```yaml
-- id: send_message
-  title: Send a message
-  description: Sends a WhatsApp message to a contact or phone number.
+- id: send_sms
+  title: Send a text message
+  description: Sends an SMS to a contact or phone number.
   params:
     contact: {description: Contact name as saved on the phone}
     message: {description: Message text, required: true}
   android:
     tool:
-      name: whatsapp_send
+      name: sms_send
       args: {contact: "{{contact}}", message: "{{message}}"}
 ```
 
-The call runs exactly as if the agent had called `whatsapp_send` itself, with that tool's scope, risk,
-approval, rules and audit entry. This is how app-centric menus reuse the tested built-in tools
-(`whatsapp_send`, `email_send`, `sms_send`, `phone_call`, `calendar_event_create`, `alarm_set`, …).
-A BLOCK rule on the action's own name (`com.whatsapp/send_message`) refuses it too, and the audit entry
-notes it. `args` values are templates, numbers, booleans or lists of those. Recipes can't use
+The call runs exactly as if the agent had called `sms_send` itself, with that tool's scope, risk,
+approval, rules and audit entry. This is how app-centric menus reuse the platform's built-in tools
+(`sms_send`, `phone_call`, `calendar_event_create`, `alarm_set`, `url_open`, …). There are no built-in tools for
+particular third-party apps: their screens differ between versions and phones, so sending in such an app is
+an intent or link that opens the right screen (`completes: false`) plus phone use.
+A BLOCK rule on the action's own name (`com.google.android.apps.messaging/send_sms`) refuses it too, and the audit
+entry notes it. `args` values are templates, numbers, booleans or lists of those. Recipes can't use
 `intent_start`, the screen tools (`screen_*`, `ui_*`) or the tools that list or run actions
 (`bridge_capabilities`, `apps_list`, `app_actions_list`, `app_action_run`).
+
+### 6.6 iOS recipes
+
+An action's `ios:` section holds one recipe, like `android:`, with the same templates (§6.1) and the same rules
+for `url`, `steps` and `tool`, rendered for the first installed of `ios.bundle_ids`:
+
+```yaml
+ios:
+  bundle_ids: [com.google.Maps]
+
+actions:
+  - id: directions
+    # … title, description, risk, params as usual …
+    android:
+      url: "https://www.google.com/maps/dir/?api=1&destination={{destination}}&travelmode={{mode}}"
+    ios:
+      url: "comgooglemaps://?daddr={{destination}}&directionsmode={{mode}}"
+    examples:
+      - params: {destination: Eiffel Tower}
+        expect: {url: "https://www.google.com/maps/dir/?api=1&destination=Eiffel%20Tower&travelmode=driving"}
+      - os: ios
+        params: {destination: Eiffel Tower}
+        expect: {url: "comgooglemaps://?daddr=Eiffel%20Tower&directionsmode=driving"}
+```
+
+What differs on iOS:
+
+* **No `intent`.** iOS has no intents, as a recipe or as a step; use a `url` the app declares, or `steps`.
+* **`url`** is opened only when the installed app declares the link's scheme in its `Info.plist` (or, for
+  `https`, the domain among its associated domains). iOS, not PhoneBridge, picks the app for a link, so this
+  check is what pins the link to the app. A link the installed version doesn't declare is shown as
+  `available: false` and not run, so use the scheme the app vendor documents.
+* **`steps`** run through the PhoneBridge runner on the iPhone (docs/IOS.md), with the same confinement and
+  limits. There is no `back` step (iPhone has no Back button: tap the app's own back control, e.g.
+  `tap: Back`). In selectors, `id` is the element's accessibility identifier, used exactly as written (no
+  package prefix), and `class` is the element type (`Button`, `TextField`, `Cell`).
+* **`tool`** works as on Android, with the tools the iOS host offers; an action whose tool is missing there is
+  not offered.
 
 ## 7. Examples (tests that run without a phone)
 
@@ -320,18 +371,24 @@ examples:
     expect: {url: "https://www.google.com/maps/dir/?api=1&destination=Eiffel%20Tower&travelmode=driving"}
   - params: {}
     expect: {error: "destination"}              # validation must fail, and the message must contain this
+  - os: ios                                     # tests the ios recipe instead (default: android)
+    params: {destination: Eiffel Tower}
+    expect: {url: "comgooglemaps://?daddr=Eiffel%20Tower&directionsmode=driving"}
 ```
+
+`os` picks the recipe the example renders: `android` (the default) for the first of `android.packages`, `ios`
+for the first of `ios.bundle_ids`. An example for an OS the action has no recipe for is an error.
 
 `expect` holds exactly one of these:
 
-* `intent`: `{action, package, data, type, categories, class, extras}`. `package` is the first entry
+* `intent` (Android only): `{action, package, data, type, categories, class, extras}`. `package` is the first entry
   of `android.packages`. Only the keys you list are compared, and within `extras` only the extras you
   list; `null` means the extra must be absent. Values must match in type: `count: 5` is an int extra,
   `count: "5"` a string. `class` may be written relative (`.Main`).
 * `url`: the full rendered URL.
 * `tool`: `{name, args}`. `args` must match all rendered arguments.
 * `steps`: the full list of rendered steps, in recipe syntax with the parameters filled in (short ids
-  are fine), compared in order.
+  are fine on Android), compared in order.
 * `error`: a substring of the validation error (case does not matter).
 
 Examples run only when the plugin has no other problems.
@@ -349,6 +406,9 @@ updated or removed.
 | `play_from_search` | the app handles `MEDIA_PLAY_FROM_SEARCH` | `query` | action |
 | `web_search` | the app handles `ACTION_WEB_SEARCH` | `query` | action |
 | `show_on_map` | the app handles `geo:` links | `query` | action |
+| `search` | the app handles `ACTION_SEARCH` (its own search screen) | `query` | action |
+| `open_link` | the app's manifest declares `ACTION_VIEW` filters with `DEFAULT` or `BROWSABLE` and a scheme | `url` | runs `url_open` pinned to the app (its risk, `action`) |
+| `compose_<scheme>` | the app's manifest declares `ACTION_SENDTO` for a scheme (`mailto`, `smsto`, …) | `to`, `text` (+ `subject` for `mailto`) | action (opens a filled-in compose screen; nothing is sent) |
 | `shortcut_<id>` | each static launcher shortcut whose target is exported and not a call action | none | action; `sensitive` when its id or label says it sends, pays, orders, calls or deletes (§9 word check) |
 | `<capability>` | each App Actions capability in the app's `shortcuts.xml` (e.g. `actions.intent.GET_THING` → `get_thing`), with its parameters | per capability | action; `sensitive` for messaging, calling, ordering, booking and payment capabilities |
 
@@ -359,10 +419,40 @@ named after their `android:key` (`messageText` → `message_text`); they reach t
 that key, or through its `<url-template>`, of which the RFC 6570 forms `{var}`, `{?a,b}` and `{&a}` are
 supported (a parameter left out gives an empty value there).
 
+**Read from the manifest.** Android has no public API that lists another app's intent filters, so PhoneBridge reads
+them from the app's own base APK (`AndroidManifest.xml`, compiled; APKs are world-readable and nothing in them is
+run), cached per app version. Only activities that Android says other apps may start count: exported, enabled and
+not guarded by a permission. `open_link`'s description lists the link forms the installed version declares
+(`https://open.spotify.com/*`, `spotify:*`, or "any http(s) web link" for browsers), so the agent can build a link
+from what it knows about the app; Android itself refuses links that version doesn't handle. `compose_<scheme>` passes
+the standard extras (`EXTRA_TEXT`, `EXTRA_SUBJECT`, and `sms_body` for SMS schemes). No app is named anywhere in
+this code: a new app, or a new version, is described by what it declares.
+
 When a plugin defines an action with the same id, the plugin's version wins. A plugin applies to the
 first of its `android.packages` that is installed; other installed packages it lists get discovered
 actions only. Discovered actions are not validated like plugins, but the run-time checks below (and
 the refusal of call actions and forbidden URL schemes) apply to them too.
+
+**On iPhone** the same idea applies to what iOS apps declare: `open` and `open_link` (the URL schemes and
+associated domains in the installed app's `Info.plist` and entitlements), and in `app_actions_list` a `declares`
+object with what the app declares that PhoneBridge can't start (App Intents, Home Screen quick actions, document
+types), so the agent knows to do it with phone use. See [IOS.md](IOS.md#discovered-actions-on-ios).
+
+### 8.1 Checking recipes against the installed app
+
+Before an `intent` or `url` action is offered, PhoneBridge renders it with sample parameters (the first example that
+validates, else defaults and placeholders) and asks Android whether an exported activity of the installed app
+accepts it, without starting anything. If none does, `app_actions_list` shows the action with `available: false`
+and an `unavailable_reason` ("… has no screen that accepts this action's link (it was written for another version of
+the app) …"), and `app_action_run` refuses it before any approval prompt. The answer is cached per app version.
+
+### 8.2 Action health
+
+When an action runs but the app doesn't do what the recipe expects (no activity of this version takes the intent, or
+a screen recipe's step fails), PhoneBridge records it for that app version. `app_actions_list` then shows
+`health: {status, failures, last_error, note}` (`failed_last_time`, or `failing` after two in a row), and the error of
+a repeated failure says to use phone use instead. A success clears the record; an app update starts clean. Refusals
+(app access, a locked phone, Pause) are not failures. Records stay on the phone (`files/action-health.json`).
 
 ## 9. Security rules
 
@@ -373,12 +463,14 @@ The validator, at build time and when a local plugin is imported, rejects:
 * risk `read` for any `steps` recipe that taps, types, scrolls, starts an intent or opens a link, and for
   every `intent` and `url` recipe (opening an app is at least an `action`);
 * `risk` or `scope` on a `tool` recipe, or a `tool` name that doesn't exist (or is `intent_start`, a
-  `ui_*` / `screen_*` tool, or one of the tools that list or run actions);
+  `ui_*` / `screen_*` tool, or one of the tools that list or run actions). Discovered actions may use only one
+  tool recipe: `open_link`'s `url_open` with the app's own package pinned;
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,
   `type`, `categories`, `class` or extra keys;
 * URL templates whose scheme isn't literal;
-* `android.packages` containing PhoneBridge itself (the E2E fixture apps, `dev.phonebridge.fixture.*`,
-  are not PhoneBridge).
+* `android.packages` or `ios.bundle_ids` containing PhoneBridge itself (the E2E fixture apps,
+  `dev.phonebridge.fixture.*`, are not PhoneBridge);
+* `intent` recipes or steps, and `back` steps, under `ios:` (§6.6).
 
 The word check matches whole words, ignoring case, in the `id` (split at `_`), the `title` and the
 `confirm` text (placeholders ignored): the verbs *send, post, pay, buy, purchase, checkout, order,
@@ -393,15 +485,16 @@ At run time:
   list), its actions are hidden from that agent and refused.
 * **Policy applies per action.** Each action is checked as its own tool, named
   `<package>/<action id>` (e.g. `com.spotify.music/play`), against the agent's scopes, risk cap
-  and per-tool rules. It is approved according to its `risk`, rate-limited, and audited under that
-  name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
+  and per-tool rules. It runs without asking unless the agent's approval setting (the "Ask me before it
+  sends messages, calls or pays" switch, for `sensitive` actions) or an *Ask* rule says otherwise, is
+  rate-limited, and is audited under that name. `app_action_run` itself must be allowed too (its scope `apps`, its rule and the risk cap: a
   Read-only agent can't run app actions). An *Ask* rule on `app_action_run` makes every app action ask
   first; an *Allow* rule on it never skips the approval an action needs, so the app doesn't offer it there.
   Parameters are checked, and the recipe rendered, before any approval prompt. In the app, these rules are set per agent under *Agents → (agent) → Advanced →
   App action rules* (grouped by app); the global never-allow list also has a switch on each app's page,
   *Apps → (app) → Block for all agents*.
-* **Pinned and confined:** intents and links are pinned to the app's package, and recipes act only
-  while that app is in the foreground.
+* **Pinned and confined:** intents and links are pinned to the app's package (on iPhone, a link is opened only
+  if the app declares it, §6.6), and recipes act only while that app is in the foreground.
 * **Local plugins** (imported on the phone for testing, §10) are off unless the user turns on
   *Settings → Developer → Local plugins*. Their actions **always** need approval on the phone (even
   with an ALLOW rule or the "never ask" policy, and for `tool` recipes too), and the prompt is marked

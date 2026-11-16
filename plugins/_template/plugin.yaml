@@ -12,6 +12,9 @@ status: experimental            # experimental -> beta -> stable (stable = every
 maintainers: [your-github-handle]
 android:
   packages: [com.example.myapp]
+# iPhone: the app's bundle ids, needed once an action has an `ios:` recipe (docs/PLUGINS.md §6.6).
+# ios:
+#   bundle_ids: [com.example.MyApp]
 
 actions:
   # Prefer, in order: a `tool` alias (built-in tools), an `intent`, a `url` deep link, and only then `steps`.
@@ -27,8 +30,14 @@ actions:
         max_length: 200
     android:
       url: "https://example.com/search?q={{query}}"
+    # On iPhone: url (a link the app declares in its Info.plist), steps or tool; there are no intents.
+    # ios:
+    #   url: "myapp://search?q={{query}}"
     examples:
       - params: {query: hello world}
         expect: {url: "https://example.com/search?q=hello%20world"}
+      # - os: ios
+      #   params: {query: hello world}
+      #   expect: {url: "myapp://search?q=hello%20world"}
       - params: {}
         expect: {error: query}

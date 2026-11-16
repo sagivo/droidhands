@@ -17,6 +17,7 @@ import dev.phonebridge.core.tools.objectSchema
 import dev.phonebridge.core.tools.optInt
 import dev.phonebridge.core.tools.optString
 import dev.phonebridge.core.tools.tool
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -43,9 +44,11 @@ private fun appActionsList(catalog: AppActionCatalog): Tool = tool(
     description = "Lists the ready-made actions you can run with app_action_run, with their parameters as JSON Schema. " +
         "Pass 'app' (the app's name, e.g. Spotify, or its package) for that app's actions, or 'query' (what you want to do, " +
         "e.g. \"play music\" or \"navigate home\") to search the actions of every installed app; both together search " +
-        "within the app. apps_list shows each app's action ids. Actions are faster and more reliable than the screen " +
-        "tools; use screen_read and ui_tap for anything not listed. Only actions this agent may run are listed, and apps " +
-        "the user blocked for this agent never appear.",
+        "within the app. apps_list shows each app's action ids. Actions come from what each installed app declares on this " +
+        "phone (plus community plugins checked against it), so they differ between phones and app versions. They are " +
+        "faster than phone use (screen_observe, ui_tap), which works for anything not listed; an action with " +
+        "available=false or a 'health' entry doesn't work on this phone right now, so use phone use for it. Only actions " +
+        "this agent may run are listed, and apps the user blocked for this agent never appear.",
     scope = Scopes.APPS,
     risk = Risk.READ,
     schema = objectSchema {
@@ -80,9 +83,19 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
     val shown = (if (unmatched) runnable else ranked).take(limit)
     val plugins = catalog.applicablePlugins(app.packageName, installed)
     val integration = catalog.integration(plugins)
+    val declares = try {
+        catalog.platform.declaredCapabilities(app.packageName)?.takeIf { it.isNotEmpty() }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null // A failing read must not hide the actions.
+    }
     val footer = buildList {
         if (unmatched) add("No action of ${app.label} matched '$query'; these are all its actions.")
         if (shown.size < (if (unmatched) runnable.size else ranked.size)) add("More actions not shown; raise limit.")
+        if (declares != null) {
+            add("'declares' lists what ${app.label} declares it can do that app actions can't start: do those with phone use.")
+        }
         if (!runner) {
             add("This agent may not run app actions (app_action_run is blocked for it or above its access level), so none are listed.")
         } else if (hidden > 0) {
@@ -97,6 +110,7 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
         ActionText.integrationNote(integration, plugins.firstOrNull())?.let { put("note", it) }
         putJsonArray("actions") { shown.forEach { a -> addJsonObject { describe(catalog, a, withApp = false) } } }
         if (shown.isNotEmpty()) put("how_to_run", ActionText.howToRun(app.packageName))
+        declares?.let { put("declares", it) }
     }
     return withFooter(result, footer)
 }
@@ -146,16 +160,27 @@ private fun JsonObjectBuilder.describe(catalog: AppActionCatalog, a: AppAction, 
     put("title", a.action.title)
     put("description", a.action.description)
     catalog.toolFor(a)?.let { put("risk", it.risk.name) }
-    put("completes", a.action.completesTask)
+    put("completes", a.completes)
     put("params", ParamSchemas.objectSchema(a.action.params))
     val reason = try {
         catalog.platform.unavailableReason(a.app.packageName, a.action)?.takeIf { it.isNotBlank() }
     } catch (e: Exception) {
         "Could not check availability on the phone (${e.message ?: e.javaClass.simpleName})."
     }
-    if (reason != null && a.action.android !is ToolRecipe) {
+    if (reason != null && a.recipe !is ToolRecipe) {
         put("available", false)
         put("unavailable_reason", reason)
+    }
+    catalog.health.status(a.app, a.action.id)?.let { record ->
+        put(
+            "health",
+            buildJsonObject {
+                put("status", if (record.failing) "failing" else "failed_last_time")
+                put("failures", record.failures)
+                put("last_error", record.lastError)
+                put("note", "Failed on ${a.app.label} ${catalog.health.versionLabel(a.app)} on this phone; prefer phone use (screen_observe) for this task.")
+            },
+        )
     }
 }
 
@@ -175,7 +200,7 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
             "matching the action's parameters). app_actions_list shows the actions and their parameters; apps_list shows " +
             "each app's action ids. Each action is checked and approved like a tool of its own (named <package>/<action>), " +
             "so it may need the user's approval on the phone. Actions with completes=false open the right screen and " +
-            "leave the last step to you (screen_read, ui_tap) or the user. Apps the user blocked for this agent are refused."
+            "leave the last step to you (screen_observe, ui_tap) or the user. Apps the user blocked for this agent are refused."
     override val scope = Scopes.APPS
     override val risk = Risk.ACTION
     override val inputSchema: JsonObject = objectSchema {
@@ -196,14 +221,14 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
         val params = paramsOf(args)
         val app = catalog.resolveApp(appName, ctx.appAccess)
         val target = catalog.action(app, actionId) ?: throw ToolException(unknownAction(app, actionId, ctx))
-        val recipe = target.action.android ?: throw ToolException(unknownAction(app, actionId, ctx))
+        val recipe = target.recipe ?: throw ToolException(unknownAction(app, actionId, ctx))
         val tool = catalog.toolFor(target) ?: throw ToolException(
             "${app.label}'s '${target.action.id}' action can't run on this phone" +
                 ((recipe as? ToolRecipe)?.let { ": it needs the '${it.name}' tool, which this phone doesn't offer" } ?: "") +
                 ". Use the screen tools instead.",
         )
         val values = ParamValues.validate(target.action.params, params)
-        val rendered = RecipeRenderer(app.packageName).render(recipe, values) // Fails here, before any approval prompt.
+        val rendered = target.renderer().render(recipe, values) // Fails here, before any approval prompt.
         if (rendered is RenderedToolCall) return Dispatch(tool, rendered.args, alias = target.toolName)
         tool.unavailableReason()?.takeIf { it.isNotBlank() }?.let {
             throw ToolException("${app.label}'s '${target.action.id}' action can't run right now: $it")
@@ -241,7 +266,11 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
  * `<package>/<action id>`. Its scope and risk are the action's; actions of local plugins always need
  * approval ([Tool.alwaysConfirm]) and their prompt says "unreviewed plugin".
  */
-internal class AppActionTool(val target: AppAction, private val platform: AppActionsPlatform) : Tool {
+internal class AppActionTool(
+    val target: AppAction,
+    private val platform: AppActionsPlatform,
+    private val health: ActionHealth = ActionHealth(),
+) : Tool {
     private val action = target.action
     private val app = target.app
 
@@ -253,7 +282,7 @@ internal class AppActionTool(val target: AppAction, private val platform: AppAct
     /** A plugin action always declares its risk; anything else is treated as the riskiest (fail closed). */
     override val risk: Risk = action.risk ?: Risk.SENSITIVE
     override val inputSchema: JsonObject = ParamSchemas.objectSchema(action.params)
-    override val timeoutMs: Long = if (action.android is StepsRecipe) PluginRules.STEPS_TIMEOUT_MS else PluginRules.LAUNCH_TIMEOUT_MS
+    override val timeoutMs: Long = if (target.recipe is StepsRecipe) PluginRules.STEPS_TIMEOUT_MS else PluginRules.LAUNCH_TIMEOUT_MS
     override val alwaysConfirm: Boolean = target.isLocal
 
     override fun unavailableReason(): String? = platform.unavailableReason(app.packageName, action)
@@ -261,10 +290,10 @@ internal class AppActionTool(val target: AppAction, private val platform: AppAct
     override fun describeCall(args: JsonObject): String = ActionText.confirmation(target, args)
 
     override suspend fun call(args: JsonObject, ctx: CallContext): ToolResult {
-        val recipe = action.android ?: throw ToolException("This action has no recipe for this phone.")
+        val recipe = target.recipe ?: throw ToolException("This action has no recipe for this phone.")
         ctx.appAccess.require(app.packageName, app.label)
         val values = ParamValues.validate(action.params, args)
-        val rendered = RecipeRenderer(app.packageName).render(recipe, values)
+        val rendered = target.renderer().render(recipe, values)
         if (rendered is RenderedToolCall) throw ToolException("Internal error: '$name' must run as ${rendered.name}.")
         unavailableReason()?.takeIf { it.isNotBlank() }?.let { throw ToolException("This action can't run right now: $it") }
         ctx.ensureStillAllowed()
@@ -272,9 +301,14 @@ internal class AppActionTool(val target: AppAction, private val platform: AppAct
             platform.execute(ActionRequest(app, action, target.plugin, rendered, values), ctx)
         } catch (e: ToolException) {
             if (e is AppBlockedException || e is CallStoppedException) throw e
-            val note = ActionText.failureNote(target.plugin) ?: throw e
-            throw ToolException("${e.message.orEmpty().trimEnd()} $note")
+            val notes = listOfNotNull(
+                (e as? IntegrationException)?.let { health.failureNote(app, health.failed(app, action.id, it.message.orEmpty())) },
+                ActionText.failureNote(target.plugin),
+            )
+            if (notes.isEmpty()) throw e
+            throw ToolException((listOf(e.message.orEmpty().trimEnd()) + notes).joinToString(" "))
         }
+        health.succeeded(app, action.id)
         return ActionText.result(target, result)
     }
 }
@@ -312,8 +346,8 @@ internal object ActionText {
                 }
             }
         if (!target.isLocal) return base
-        val recipe = action.android ?: return base
-        val shown = runCatching { recipeSummary(RecipeRenderer(target.app.packageName).render(recipe, params)) }.getOrNull() ?: return base
+        val recipe = target.recipe ?: return base
+        val shown = runCatching { recipeSummary(target.renderer().render(recipe, params)) }.getOrNull() ?: return base
         return ToolText.truncate("${shown.replaceFirstChar { it.uppercaseChar() }}. Plugin says: $base", MAX_PROMPT)
     }
 
@@ -380,7 +414,7 @@ internal object ActionText {
             "Local plugin that the PhoneBridge project has not reviewed: the user must approve each of its actions on the phone."
         plugin?.status == PluginStatus.EXPERIMENTAL ->
             "Community plugin, marked experimental: if an action fails or the result looks wrong, fall back to the screen tools " +
-                "(screen_read, ui_tap)."
+                "(screen_observe, ui_tap)."
         else -> null
     }
 
@@ -399,9 +433,9 @@ internal object ActionText {
         plugin == null -> null
         plugin.source == PluginSource.LOCAL ->
             "${plugin.name} support comes from a local plugin that has not been reviewed. If the result looks wrong, check with " +
-                "screen_read and fall back to the screen tools."
+                "screen_observe and fall back to the screen tools."
         plugin.status == PluginStatus.EXPERIMENTAL ->
-            "${plugin.name} support is an experimental community plugin. If the result looks wrong, check with screen_read and " +
+            "${plugin.name} support is an experimental community plugin. If the result looks wrong, check with screen_observe and " +
                 "fall back to the screen tools."
         else -> null
     }
@@ -412,7 +446,7 @@ internal object ActionText {
         put("app", target.app.label)
         put("package", target.app.packageName)
         put("action", action.id)
-        val done = action.completesTask
+        val done = target.completes
         put("done", done)
         if (!done) put("opened", true)
         for ((key, value) in result.fields) if (key !in RESERVED) put(key, value)
@@ -421,7 +455,7 @@ internal object ActionText {
             put(
                 "next",
                 "${target.app.label} is open at the right place, but the task is not finished: someone still has to complete " +
-                    "it there. Use screen_read to see the screen and ui_tap to finish it, or ask the user to finish it on the phone.",
+                    "it there. Use screen_observe to see the screen and ui_tap to finish it, or ask the user to finish it on the phone.",
             )
         }
         resultNote(target.plugin)?.let { put("integration_note", it) }

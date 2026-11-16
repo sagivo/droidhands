@@ -13,7 +13,7 @@ import android.provider.ContactsContract.RawContacts
 import android.util.Log
 import dev.phonebridge.android.tools.support.ContactMatch
 import dev.phonebridge.android.tools.support.PhoneEntry
-import dev.phonebridge.android.tools.support.WhatsAppEntry
+import dev.phonebridge.android.tools.support.ContactAppEntry
 import dev.phonebridge.core.tools.ToolException
 import kotlin.math.max
 
@@ -182,7 +182,7 @@ internal class ContactsRepository(private val context: Context) {
         val ids = ranked.map { it.row.id }
         val phones = loadPhones(ids)
         val emails = loadEmails(ids)
-        val whatsapp = loadWhatsApp(ids)
+        val apps = loadApps(ids)
         return ranked.map { ranking ->
             val row = ranking.row
             val contactPhones = phones[row.id].orEmpty()
@@ -192,7 +192,7 @@ internal class ContactsRepository(private val context: Context) {
                 name = row.name.ifEmpty { contactPhones.firstOrNull()?.number ?: contactEmails.firstOrNull() ?: "(no name)" },
                 phones = contactPhones,
                 emails = contactEmails,
-                whatsapp = whatsapp[row.id].orEmpty(),
+                apps = apps[row.id].orEmpty(),
                 starred = row.starred,
                 score = ranking.score,
             )
@@ -233,32 +233,43 @@ internal class ContactsRepository(private val context: Context) {
         return emails
     }
 
-    private fun loadWhatsApp(ids: List<Long>): Map<Long, List<WhatsAppEntry>> {
-        val entries = HashMap<Long, MutableList<WhatsAppEntry>>()
+    /** Per contact, the apps that synced it ([ContactAppRows]). Unreadable rows are skipped. */
+    private fun loadApps(ids: List<Long>): Map<Long, List<ContactAppEntry>> {
+        val rows = HashMap<Long, MutableList<ContactAppRows.Row>>()
         forEachIdChunk(ids) { placeholders, args ->
-            val selection = "${Data.CONTACT_ID} IN ($placeholders) AND ${Data.MIMETYPE} IN (${SqlText.placeholders(WhatsAppRows.MIMETYPES.size)})"
-            val selectionArgs = args + WhatsAppRows.MIMETYPES
-            val projection = arrayOf(Data.CONTACT_ID, Data.MIMETYPE, Data.DATA1, RawContacts.ACCOUNT_TYPE)
+            val standard = ContactAppRows.STANDARD_MIMETYPES
+            val selection = "${Data.CONTACT_ID} IN ($placeholders) AND ${Data.MIMETYPE} NOT IN (${SqlText.placeholders(standard.size)})"
+            val projection = arrayOf(Data.CONTACT_ID, RawContacts.ACCOUNT_TYPE, Data.MIMETYPE, Data.DATA2, Data.DATA3)
             val cursor = try {
-                resolver.query(Data.CONTENT_URI, projection, selection, selectionArgs, null)
+                resolver.query(Data.CONTENT_URI, projection, selection, args + standard, null)
             } catch (e: IllegalArgumentException) {
-                // ACCOUNT_TYPE is part of the Data view on AOSP; fall back to the mimetype if an OEM drops it.
-                resolver.query(Data.CONTENT_URI, projection.copyOf(3).requireNoNulls(), selection, selectionArgs, null)
+                null // An OEM provider without ACCOUNT_TYPE in the Data view: no app entries.
             }
             cursor?.use { c ->
                 while (c.moveToNext()) {
-                    val entry = WhatsAppRows.entry(c.stringOrNull(2), c.stringOrNull(1), if (c.columnCount > 3) c.stringOrNull(3) else null)
-                        ?: continue
-                    val list = entries.getOrPut(c.getLong(0)) { ArrayList(1) }
-                    if (list.none { it.number == entry.number && it.packageName == entry.packageName }) list += entry
+                    rows.getOrPut(c.getLong(0)) { ArrayList(2) } += ContactAppRows.Row(c.stringOrNull(1), c.stringOrNull(2), c.stringOrNull(3), c.stringOrNull(4))
                 }
             }
         }
-        return entries
+        val pm = context.packageManager
+        val installed = HashMap<String, String?>()
+        fun appLabel(pkg: String): String? = installed.getOrPut(pkg) {
+            try {
+                pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+            } catch (e: Exception) {
+                NOT_INSTALLED
+            }
+        }
+        return rows.mapValues { (_, list) ->
+            ContactAppRows.entries(list, isApp = { appLabel(it) != NOT_INSTALLED && it != context.packageName }, label = { appLabel(it) })
+        }
     }
 
     private companion object {
         const val TAG = "PhoneBridge/Contacts"
+
+        /** Marks account types that are no installed app's package (e.g. com.google). */
+        const val NOT_INSTALLED = "\u0000"
 
         /** Cap on ids taken from the provider's name filter (a one-letter query can match everyone). */
         const val MAX_PROVIDER_HITS = 1000

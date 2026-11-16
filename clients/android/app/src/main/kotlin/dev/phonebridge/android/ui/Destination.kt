@@ -20,6 +20,9 @@ enum class Destination(val route: String, val label: String, val icon: ImageVect
     ;
 
     companion object {
+        /** Opens Settings > Security > Never-allow apps (linked from the grant screen). */
+        const val NEVER_ALLOW_ROUTE = "never-allow"
+
         /** Tab for [route]; the wave-1 names "tokens" and "setup" map to their new homes. */
         fun fromRoute(route: String?): Destination? = when (route?.lowercase()) {
             null -> null
@@ -30,10 +33,12 @@ enum class Destination(val route: String, val label: String, val icon: ImageVect
 
         /**
          * Where an external request for [route] lands: a tab, or a page on top of one ("setup" and
-         * "permissions" open the checklist, "connect" the connect-an-agent page). Null if unknown.
+         * "permissions" open the checklist, "connect" the connect-an-agent page, "never-allow" the
+         * never-allow list). Null if unknown.
          */
         fun navStateFor(route: String?): NavState? = when (route?.lowercase()) {
             "setup", "permissions" -> NavState(SETTINGS, listOf(Screen.Permissions))
+            NEVER_ALLOW_ROUTE -> NavState(SETTINGS, listOf(Screen.NeverAllowApps))
             "connect" -> NavState(HOME, listOf(Screen.ConnectAgent))
             else -> fromRoute(route)?.let { NavState(it) }
         }

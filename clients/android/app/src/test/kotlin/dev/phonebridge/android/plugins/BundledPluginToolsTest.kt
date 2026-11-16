@@ -61,7 +61,7 @@ class BundledPluginToolsTest {
     }
 
     private val tools: Map<String, Tool> =
-        AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps) { null }).associateBy { it.name }
+        AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps, builtInTool = { null })).associateBy { it.name }
 
     private fun bundledPlugins(): List<AppPlugin> {
         val files = pluginsDir.listFiles { f -> f.isDirectory && !f.name.startsWith("_") }.orEmpty()

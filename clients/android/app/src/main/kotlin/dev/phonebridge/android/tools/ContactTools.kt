@@ -27,8 +27,10 @@ private fun contactsSearch(context: Context): Tool = tool(
     title = "Search contacts",
     description = "Search the phone's contacts by name, part of a name, nickname, phone number or email. Name matching " +
         "tolerates other spellings and scripts (Tania ~ Tanya ~ טניה ~ Таня), accents and word order. Returns " +
-        "[{id,name,phones:[{number,type,normalized}],emails,whatsapp:[{number,jid}],starred}], best matches first " +
-        "(exact and prefix matches, then fuzzy ones). Messaging and call tools accept 'contact' directly; use this " +
+        "[{id,name,phones:[{number,type,normalized}],emails,apps:[{package,app,entries}],starred}], best matches first " +
+        "(exact and prefix matches, then fuzzy ones). 'apps' lists the apps the contact is on (messaging and calling apps " +
+        "that add themselves to the address book), with their entries such as \"Message +1 555…\". SMS and call tools " +
+        "accept 'contact' directly; use this " +
         "to look someone up or to disambiguate.",
     scope = Scopes.CONTACTS_READ,
     risk = Risk.READ,
@@ -40,9 +42,11 @@ private fun contactsSearch(context: Context): Tool = tool(
         )
     },
     unavailable = { Perms.unavailableIfMissing(context, Manifest.permission.READ_CONTACTS) },
-) { args, _ ->
+) { args, ctx ->
     val query = args.reqString("query")
     val limit = CommsArgs.limit(args, SEARCH_DEFAULT_LIMIT, SEARCH_MAX_LIMIT)
     val matches = withContext(Dispatchers.IO) { ContactLookup.search(context, query, limit) }
-    ToolResult.json(JsonArray(matches.map(ContactLookup::toJson)))
+    // Apps blocked for this agent are never named, not even as "this contact is on it".
+    val visible = matches.map { m -> m.copy(apps = m.apps.filter { ctx.appAccess.isAllowed(it.packageName) }) }
+    ToolResult.json(JsonArray(visible.map(ContactLookup::toJson)))
 }

@@ -9,14 +9,17 @@ import dev.phonebridge.android.tools.support.Accessibility
 import dev.phonebridge.android.tools.support.DeviceState
 import dev.phonebridge.android.tools.support.UnlockPrompt
 import dev.phonebridge.core.tools.CallContext
+import dev.phonebridge.core.tools.Scopes
+import dev.phonebridge.core.tools.ToolContent
 import dev.phonebridge.core.tools.ToolException
+import dev.phonebridge.core.tools.ToolResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * State shared by every tool that drives the screen (ui_*, whatsapp_*, email_send): a single [Mutex] so only
+ * State shared by every tool that drives the screen (ui_*, screen recipes): a single [Mutex] so only
  * one gesture/action sequence runs at a time, plus common preconditions (unlock, app access, service health)
  * and result helpers.
  */
@@ -112,7 +115,13 @@ object UiAutomation {
      * brought an app blocked for this agent to the foreground, presses Home and throws instead, so the agent can
      * neither see nor operate it.
      */
-    suspend fun report(service: BridgeAccessibilityService, access: ScreenAccess, message: String, settleFirst: Boolean = true): String {
+    suspend fun report(
+        service: BridgeAccessibilityService,
+        access: ScreenAccess,
+        message: String,
+        settleFirst: Boolean = true,
+        before: Before? = null,
+    ): String {
         if (settleFirst) settle()
         if (access.restricted) {
             val blocked = withContext(Dispatchers.IO) { blockedForeground(service.rootNodes(), access) }
@@ -122,8 +131,45 @@ object UiAutomation {
                 throw ToolException(blockedAfterAction(message, label, wentHome))
             }
         }
-        return "$message Foreground app: ${foregroundPackage(service) ?: "unknown"}."
+        val change = before?.let { b ->
+            try {
+                ScreenChange.describe(b.signature, ScreenSignature.of(ScreenCapture.capture(b.context, service, access)))
+            } catch (e: ToolException) {
+                null
+            }
+        }
+        return listOfNotNull("$message Foreground app: ${foregroundPackage(service) ?: "unknown"}.", change).joinToString(" ")
     }
+
+    /** The screen before an action, so [report] can say what the action changed. */
+    class Before(val context: Context, val signature: ScreenSignature)
+
+    /** Captures [Before] for [report]; null if the screen can't be read now (the report then just omits the change). */
+    suspend fun before(context: Context, service: BridgeAccessibilityService, access: ScreenAccess): Before? = try {
+        Before(context, ScreenSignature.of(ScreenCapture.capture(context, service, access)))
+    } catch (e: ToolException) {
+        null
+    }
+
+    /**
+     * The result of a ui_* action: [message], plus a fresh [Observation] when the agent passed `observe=true` (needs the
+     * screen.read scope, like screen_observe itself).
+     */
+    suspend fun result(context: Context, ctx: CallContext, observe: Boolean, message: String): ToolResult {
+        if (!observe) return ToolResult.text(message)
+        if (Scopes.SCREEN_READ !in ctx.scopes) {
+            return ToolResult.text("$message (observe=true was ignored: this agent may not read the screen.)")
+        }
+        val observation = try {
+            Observation.observe(context, ctx, ObserveOptions())
+        } catch (e: ToolException) {
+            return ToolResult.text("$message (Could not observe the screen afterwards: ${e.message})")
+        }
+        return ToolResult(listOf(ToolContent.Text(message)) + observation)
+    }
+
+    /** Schema text of the action tools' `observe` argument. */
+    const val OBSERVE_ARG = "Also return a new screen_observe (marked screenshot and elements) after the action"
 
     private fun blockedForeground(roots: List<WindowRoot>, access: ScreenAccess): String? =
         access.visibility.blockedForeground(
@@ -135,9 +181,9 @@ object UiAutomation {
     /** The error after an action opened a blocked app (pure). */
     fun blockedAfterAction(done: String, label: String, wentHome: Boolean): String = buildString {
         append(done).append(' ')
-        append("This brought $label to the foreground, but the user blocked $label for this agent, so ")
+        append("This brought $label to the foreground, but this agent isn't allowed to use $label, so ")
         append(if (wentHome) "PhoneBridge went back to the home screen." else "PhoneBridge tried to go back to the home screen.")
-        append(" Don't try to open $label another way; ask the user if it is needed.")
+        append(" Don't try to open $label another way. If it is needed, tell the user: they can allow it in PhoneBridge > Agents > (this agent) > Access.")
     }
 
     /** Sentence for the descriptions of the screen-control tools. */

@@ -200,6 +200,8 @@ Implemented on the device by `McpServer` (core). The relay is a transparent tunn
 * Methods: `initialize`, `ping`, `tools/list`, `tools/call`; `resources/list`,
   `resources/templates/list`, `prompts/list` return empty lists. Notifications
   (`notifications/*`) are accepted silently. Anything else → `-32601`.
+* `initialize` returns `instructions`: how to drive the phone, followed by the calling token's access
+  (its apps, what it may and may not do, and whether actions ask the user first).
 * `tools/list` returns only tools whose scope is granted to the calling token.
 * `tools/call` for an unknown tool or a tool outside the token's scopes → JSON-RPC error `-32602`.
   Tool failures, policy denials, user denials, timeouts and "access paused" are returned as a

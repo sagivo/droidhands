@@ -1,0 +1,28 @@
+{
+  "com.spotify.client": {
+    "ApplicationType": "User",
+    "CFBundleIdentifier": "com.spotify.client",
+    "CFBundleDisplayName": "Spotify",
+    "CFBundleName": "Spotify",
+    "CFBundleShortVersionString": "8.9.0",
+    "CFBundleVersion": "8.9.0.575",
+    "Path": "/private/var/containers/Bundle/Application/3333/Spotify.app",
+    "CFBundleURLTypes": [{ "CFBundleURLSchemes": ["spotify"] }],
+    "UIApplicationShortcutItems": [{ "UIApplicationShortcutItemType": "search", "UIApplicationShortcutItemTitle": "Search" }],
+    "Entitlements": {
+      "application-identifier": "ABCDE12345.com.spotify.client",
+      "com.apple.developer.associated-domains": ["applinks:open.spotify.com"]
+    }
+  },
+  "com.apple.mobilesafari": {
+    "ApplicationType": "System",
+    "CFBundleIdentifier": "com.apple.mobilesafari",
+    "CFBundleDisplayName": "Safari",
+    "CFBundleShortVersionString": "18.0",
+    "CFBundleVersion": "8619"
+  },
+  "com.apple.InCallService": {
+    "ApplicationType": "Hidden",
+    "CFBundleIdentifier": "com.apple.InCallService"
+  }
+}

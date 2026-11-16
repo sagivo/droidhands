@@ -3,7 +3,8 @@
 An AI agent talks to PhoneBridge over MCP, so it needs a way to reach the phone. PhoneBridge offers a
 few **routes**. You can use more than one at a time, for example the relay for claude.ai and
 Tailscale for Claude Code on your laptop. Whatever the route, every agent still has to be allowed on
-the phone, and everything it does is checked, approved and logged there ([SECURITY.md](SECURITY.md)).
+the phone, where you choose its access once; everything it does is checked against that access and
+logged there ([SECURITY.md](SECURITY.md)).
 
 | Route | Who can reach the phone | Privacy | claude.ai / ChatGPT? | Setup |
 |---|---|---|---|---|

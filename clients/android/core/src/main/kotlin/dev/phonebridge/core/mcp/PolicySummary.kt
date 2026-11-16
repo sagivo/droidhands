@@ -22,11 +22,14 @@ import kotlinx.serialization.json.putJsonObject
  */
 internal object PolicySummary {
     /**
-     * Adds `app_access`, `tool_rules` (rules of the tools in [inScopeTools], BLOCK included so the agent
-     * stops trying them), `active_hours`, `one_time_codes_hidden` and `max_risk` (the risk cap's name, or
-     * null for none) for [ctx].
+     * Adds `access` (the grant in plain words: abilities, what is not allowed, approvals and where the user
+     * changes it; [AccessSummary.json]), `app_access`, `tool_rules` (rules of the tools in [inScopeTools], BLOCK
+     * included so the agent stops trying them), `active_hours`, `one_time_codes_hidden` and `max_risk` (the risk
+     * cap's name, or null for none) for [ctx].
      */
     fun put(builder: JsonObjectBuilder, ctx: CallContext, inScopeTools: Set<String>) {
+        val facts = AccessSummary.Facts(ctx.tokenName, ctx.scopes, ctx.appAccess, ctx.confirmPolicy, ctx.maxRisk, ctx.toolRules)
+        builder.put("access", AccessSummary.json(facts))
         builder.put("app_access", appAccess(ctx.appAccess))
         builder.putJsonObject("tool_rules") {
             ctx.toolRules.entries.filter { it.key in inScopeTools }.sortedBy { it.key }.forEach { (name, rule) -> put(name, rule.name) }

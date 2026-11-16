@@ -94,11 +94,11 @@ class ActionRulesTest {
 
     @Test
     fun rulesOnActionsLiveInTheSameMapAsToolRules() {
-        val draft = AgentDraft(name = "Claude", scopes = assistant, policy = ConfirmPolicy.SENSITIVE)
+        val draft = AgentDraft(name = "Claude")
             .withRule("com.spotify.music/play", RuleChoice.BLOCK)
             .withRule("sms_send", RuleChoice.ASK)
         assertEquals(mapOf("com.spotify.music/play" to ToolRule.BLOCK, "sms_send" to ToolRule.ASK), draft.toolRules)
-        val groups = ActionRules.groups(apps, draft.scopes, draft.maxRisk, draft.toolRules, all)
+        val groups = ActionRules.groups(apps, assistant, null, draft.toolRules, all)
         assertEquals("1 blocked", ToolRules.summary(draft.toolRules, ActionRules.names(groups)))
         assertEquals(emptyMap<String, ToolRule>(), draft.withRule("com.spotify.music/play", RuleChoice.DEFAULT).withRule("sms_send", RuleChoice.DEFAULT).toolRules)
     }
