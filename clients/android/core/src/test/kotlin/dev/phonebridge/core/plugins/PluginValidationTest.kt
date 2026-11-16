@@ -101,7 +101,7 @@ class PluginValidationTest {
         assertProblem(doc().replace("id: demo", "id: demo\ntested: [{who: me}]"), "tested[0].who: unknown field")
         assertProblem(doc().replace("id: demo", "id: demo\nnmae: x"), "nmae: unknown field (did you mean 'name'?)")
         assertProblem(doc().replace("id: demo", "id: demo\nscreenshots: x.png"), "screenshots: unknown field (allowed: id, name,")
-        assertValid(doc().replace("id: demo", "id: demo\nios: {bundle_ids: [com.demo.ios], anything: [1]}"))
+        assertProblem(doc().replace("id: demo", "id: demo\nios: {bundle_ids: [com.demo.ios], anything: [1]}"), "ios.anything: unknown field (allowed: bundle_ids)")
         assertProblem(doc().replace("category: other", "category: 7"), "category: must be text (quote it), found 7 (a number)")
         assertProblem(doc().replace("name: Demo", "name: \"  \""), "name: must not be empty")
         assertProblem(doc().replace("name: Demo\n", ""), "name: required")
@@ -147,7 +147,7 @@ class PluginValidationTest {
         assertProblem(doc(action("$ok\nconfirm: ${"x".repeat(301)}")), "actions[0].confirm: is 301 characters long; the limit is 300")
         assertProblem(doc(action("$ok\ncompletes: yes")), "actions[0].completes: must be true or false, found text \"yes\"")
         assertProblem(doc(action("risk: action")), "actions[0]: has no recipe: add an 'android' section")
-        assertValid(doc("$search\n" + action("risk: action\nios: {shortcut: x}")))
+        assertProblem(doc("$search\n" + action("risk: action\nios: {shortcut: x}")), "actions[1].ios.shortcut: unknown field (allowed: url, steps, tool)")
         assertProblem(doc(action("$ok\nconfrim: x")), "actions[0].confrim: unknown field (did you mean 'confirm'?)")
         assertProblem(doc(action("$ok\nconfirm: \"Open {{nope}}\"")), "actions[0].confirm: {{nope}} is not declared in params (the action has no params)")
         assertProblem(doc(action("risk: action\nandroid: {url: \"https://x\", intent: {action: a.B}}")), "needs exactly one recipe: intent, url, steps or tool (found intent, url)")
@@ -347,6 +347,128 @@ class PluginValidationTest {
         assertProblem(doc(action("risk: read\nandroid:\n  steps:\n    - if_present: x\n      then: [{open_url: \"https://example.com\"}]")), "can't be read")
         assertProblem(doc(action("risk: read\n$url")), "actions[0].risk: can't be read: url recipes open the app, which is at least an action")
         assertProblem(doc(action("risk: read\nandroid: {intent: {action: a.VIEW}}")), "can't be read: intent recipes open the app")
+    }
+
+    // iOS (§3, §4, §6.6, §7)
+
+    private val iosHeader = header + "\nios:\n  bundle_ids: [com.demo.ios]"
+
+    /** An action with an iOS recipe ([ios], at the recipe's indentation) and optionally an Android one. */
+    private fun iosAction(ios: String, android: String? = null, risk: String = "risk: action", params: String = "params: {q: {description: Q}}") =
+        action("$risk\n$params\n" + (android?.let { "android:\n" + it.trimIndent().prependIndent("  ") + "\n" } ?: "") + "ios:\n" + ios.trimIndent().prependIndent("  "))
+
+    @Test
+    fun iosBundleIds() {
+        val plugin = assertValid(doc(iosAction("url: \"demo://s?q={{q}}\""), iosHeader))
+        assertEquals(listOf("com.demo.ios"), plugin.iosBundleIds)
+        assertEquals(listOf("com.demo.ios"), plugin.appIds(DeviceOs.IOS))
+        assertEquals(listOf("com.demo.app", "com.demo.lite"), plugin.appIds(DeviceOs.ANDROID))
+        // An iOS-only plugin needs no android section, and an Android-only one no ios section.
+        assertValid(doc(iosAction("url: \"demo://x\""), iosHeader.replace("android:\n  packages: [com.demo.app, com.demo.lite]\n", "")))
+        assertProblem(doc(iosAction("url: \"demo://x\"")), "ios.bundle_ids: required: the bundle ids of the iOS app")
+        assertProblem(doc(header = iosHeader), "ios.bundle_ids: no action has an 'ios' recipe: add one, or remove the 'ios' section")
+        val ios = doc(iosAction("url: \"demo://x\""), iosHeader)
+        assertValid(ios.replace("[com.demo.ios]", "[com.demo.ios, com.demo-co.App2]"))
+        assertProblem(ios.replace("[com.demo.ios]", "[]"), "ios.bundle_ids: list at least one bundle id")
+        assertProblem(ios.replace("[com.demo.ios]", "[demo]"), "ios.bundle_ids[0]: 'demo' is not an iOS bundle id")
+        assertProblem(ios.replace("[com.demo.ios]", "[com.demo_ios.app]"), "is not an iOS bundle id")
+        assertProblem(ios.replace("[com.demo.ios]", "[com.demo.ios, com.demo.ios]"), "ios.bundle_ids: 'com.demo.ios' is listed twice")
+        assertProblem(ios.replace("[com.demo.ios]", "[dev.phonebridge.runner]"), "ios.bundle_ids[0]: plugins can't target PhoneBridge itself")
+        assertProblem(ios.replace("bundle_ids: [com.demo.ios]", "bundle_id: com.demo.ios"), "ios.bundle_id: unknown field (did you mean 'bundle_ids'?)")
+        assertProblem(ios.replace("ios:\n  bundle_ids: [com.demo.ios]", "ios: com.demo.ios"), "ios: must be a map with 'bundle_ids'")
+        // tested records may name the iOS version.
+        val tested = assertValid(ios.replace("id: demo", "id: demo\ntested: [{app_version: 3.1, ios: 18.1, date: 2026-11-01, by: octocat}]"))
+        assertEquals(TestedRecord("3.1", null, "2026-11-01", "octocat", ios = "18.1"), tested.tested.single())
+    }
+
+    @Test
+    fun iosRecipes() {
+        val both = assertValid(doc(iosAction("url: \"demo://s?q={{q}}\"", android = "url: \"https://demo.com/s?q={{q}}\""), iosHeader)).actions.single()
+        assertEquals(UrlRecipe("https://demo.com/s?q={{q}}"), both.android)
+        assertEquals(UrlRecipe("demo://s?q={{q}}"), both.ios)
+        assertEquals(UrlRecipe("demo://s?q={{q}}"), both.recipeFor(DeviceOs.IOS))
+        assertEquals(false, both.completesOn(DeviceOs.IOS))
+        val iosOnly = assertValid(doc(iosAction("steps:\n  - launch: true\n  - tap: Search"), iosHeader)).actions.single()
+        assertEquals(null, iosOnly.recipeFor(DeviceOs.ANDROID))
+        assertEquals(true, iosOnly.completesOn(DeviceOs.IOS))
+
+        fun ios(recipe: String, android: String? = null, risk: String = "risk: action") = doc(iosAction(recipe, android, risk), iosHeader)
+        assertProblem(ios("intent: {action: a.VIEW}"), "actions[0].ios.intent: iOS has no intents: use url (a link the app declares) or steps")
+        assertProblem(ios("{url: \"demo://x\", steps: [{launch: true}]}"), "actions[0].ios: needs exactly one recipe: url, steps or tool (found url, steps)")
+        assertProblem(ios("{}"), "actions[0].ios: needs exactly one recipe: url, steps or tool (found none)")
+        assertProblem(ios("{uri: \"demo://x\"}"), "actions[0].ios.uri: unknown field (did you mean 'url'?)")
+        // The same template and scheme rules as on Android.
+        assertProblem(ios("url: \"{{q}}:x\""), "actions[0].ios.url: the URL scheme must be literal")
+        assertProblem(ios("url: \"javascript:{{q}}\""), "actions[0].ios.url: the 'javascript:' scheme is not allowed")
+        assertProblem(ios("url: \"demo://{{nope}}\""), "actions[0].ios.url: {{nope}} is not declared in params")
+        assertProblem(ios("url: \"demo://x\"", risk = ""), "actions[0].risk: required: read, action or sensitive")
+        assertProblem(ios("url: \"demo://x\"", risk = "risk: read"), "actions[0].risk: can't be read: url recipes open the app")
+        assertProblem(ios("url: \"demo://x\"", android = "url: \"https://x\"", risk = "risk: read"), "can't be read: url recipes open the app")
+        assertProblem(doc(iosAction("url: \"demo://x\"", risk = "risk: action", params = "").replace("id: act", "id: send_it"), iosHeader), "the id says 'send'")
+        // Tool recipes: no risk or scope, and both OS sections tool recipes or neither.
+        val tool = "tool: {name: url_open, args: {url: \"https://x/{{q}}\"}}"
+        val t = assertValid(ios(tool, risk = "")).actions.single()
+        assertEquals("url_open", (t.ios as ToolRecipe).name)
+        assertProblem(ios(tool), "actions[0].risk: remove it: a tool recipe takes the built-in tool's risk")
+        assertProblem(ios("tool: {name: ui_tap}", risk = ""), "actions[0].ios.tool.name: 'ui_tap' can't be used by plugins: use a steps recipe")
+        assertProblem(ios(tool, android = "url: \"https://x\""), "actions[0]: the android and ios recipes must both be tool recipes or neither")
+        assertValid(ios(tool, android = tool, risk = ""))
+    }
+
+    @Test
+    fun iosSteps() {
+        fun steps(body: String, risk: String = "risk: action") = doc(iosAction("steps:\n" + body.trimIndent().prependIndent("  "), risk = risk), iosHeader)
+        val recipe = assertValid(
+            steps(
+                """
+                - launch: {fresh: true}
+                - open_url: "demo://search/{{q}}"
+                - type: {into: {id: SearchField}, text: "{{q}}", submit: true}
+                - tap: {id: "com.other:id/x"}
+                - tap: {id: "Player:Play"}
+                - wait_for: {class: Button, text_contains: "{{q}}"}
+                """,
+            ),
+        ).actions.single().ios as StepsRecipe
+        // Accessibility identifiers are kept as written: no package prefix, any characters.
+        assertEquals(Step(StepAction.Tap(Selector(id = "Player:Play"))), recipe.steps[4])
+        assertProblem(steps("- intent: {action: a.VIEW}"), "actions[0].ios.steps[0].intent: iOS has no intents: use open_url")
+        assertProblem(steps("- back: true"), "actions[0].ios.steps[0].back: iOS has no Back button: tap the app's own back control instead")
+        assertProblem(steps("- if_present: x\n  then: [{back: true}]"), "actions[0].ios.steps[0].then[0].back: iOS has no Back button")
+        assertProblem(steps("- tap: {id: \"{{q}}\"}"), "actions[0].ios.steps[0].tap.id: templates are not allowed")
+        assertProblem(steps("- tap: {text: \"{{nope}}\"}"), "actions[0].ios.steps[0].tap.text: {{nope}} is not declared")
+        assertProblem(steps((1..41).joinToString("\n") { "- sleep: 1" }), "actions[0].ios.steps: at most 40 steps in total")
+        assertProblem(steps("- tap: Go", risk = "risk: read"), "can't be read: the steps tap")
+    }
+
+    @Test
+    fun iosExamples() {
+        val action = iosAction("url: \"demo://s?q={{q}}\"", android = "url: \"https://demo.com/s?q={{q}}\"") +
+            "\n  examples:\n" + """
+                - params: {q: a b}
+                  expect: {url: "https://demo.com/s?q=a%20b"}
+                - os: ios
+                  params: {q: a b}
+                  expect: {url: "demo://s?q=a%20b"}
+            """.trimIndent().prependIndent("    ")
+        val plugin = assertValid(doc(action, iosHeader))
+        assertEquals(listOf(DeviceOs.ANDROID, DeviceOs.IOS), plugin.actions.single().examples.map { it.os })
+        assertProblem(doc(action.replace("os: ios", "os: windows"), iosHeader), "actions[0].examples[1].os: 'windows' is not an OS; use android or ios")
+        assertProblem(doc(action.replace("demo://s?q=a%20b", "demo://s?q=a+b"), iosHeader), "actions[0].examples[1]: url: expected demo://s?q=a+b")
+        val iosOnly = iosAction("url: \"demo://x\"") + "\n  examples:\n    - expect: {url: \"demo://x\"}"
+        assertProblem(doc(iosOnly, iosHeader), "actions[0].examples[0]: the action has no 'android' recipe to test; add 'os: ios'")
+        assertValid(doc(iosOnly.replace("- expect", "- os: ios\n      expect"), iosHeader))
+        val androidOnly = doc(search + "\n  examples:\n    - os: ios\n      expect: {error: query}")
+        assertProblem(androidOnly, "actions[0].examples[0].os: the action has no 'ios' recipe to test")
+    }
+
+    @Test
+    fun stablePluginsNeedIosExamplesForIosRecipes() {
+        val tested = "id: demo\nstatus: stable\ntested: [{app_version: 1, ios: 18, date: 2026-11-01, by: octocat}]"
+        val action = iosAction("url: \"demo://x\"", params = "") + "\n  examples:\n    - os: ios\n      expect: {url: \"demo://x\"}"
+        assertValid(doc(action, iosHeader).replace("id: demo", tested))
+        val noIosExample = iosAction("url: \"demo://x\"", android = "url: \"https://x\"", params = "") + "\n  examples:\n    - expect: {url: \"https://x\"}"
+        assertProblem(doc(noIosExample, iosHeader).replace("id: demo", tested), "actions[0].examples: every ios recipe of a stable plugin needs examples with os: ios")
     }
 
     @Test

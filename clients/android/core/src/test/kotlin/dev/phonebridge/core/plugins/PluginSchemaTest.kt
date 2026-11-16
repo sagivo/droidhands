@@ -46,5 +46,8 @@ class PluginSchemaTest {
         assertEquals(PluginRules.MAX_STEPS.toString(), schema.at("definitions", "recipe", "properties", "steps").getValue("maxItems").jsonPrimitive.content)
         assertEquals(PluginRules.PLUGIN_ID.pattern, schema.at("properties", "id").getValue("pattern").jsonPrimitive.content)
         assertEquals(PluginRules.ACTION_ID.pattern, action.at("id").getValue("pattern").jsonPrimitive.content)
+        assertEquals(PluginRules.BUNDLE_ID.pattern, schema.at("properties", "ios", "properties", "bundle_ids", "items").getValue("pattern").jsonPrimitive.content)
+        assertEquals(PluginRules.MAX_STEPS.toString(), schema.at("definitions", "iosRecipe", "properties", "steps").getValue("maxItems").jsonPrimitive.content)
+        assertEquals(DeviceOs.entries.map { it.id }, schema.at("definitions", "example", "properties", "os").strings("enum"))
     }
 }

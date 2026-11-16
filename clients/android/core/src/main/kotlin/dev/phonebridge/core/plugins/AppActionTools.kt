@@ -17,6 +17,7 @@ import dev.phonebridge.core.tools.objectSchema
 import dev.phonebridge.core.tools.optInt
 import dev.phonebridge.core.tools.optString
 import dev.phonebridge.core.tools.tool
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -82,9 +83,19 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
     val shown = (if (unmatched) runnable else ranked).take(limit)
     val plugins = catalog.applicablePlugins(app.packageName, installed)
     val integration = catalog.integration(plugins)
+    val declares = try {
+        catalog.platform.declaredCapabilities(app.packageName)?.takeIf { it.isNotEmpty() }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null // A failing read must not hide the actions.
+    }
     val footer = buildList {
         if (unmatched) add("No action of ${app.label} matched '$query'; these are all its actions.")
         if (shown.size < (if (unmatched) runnable.size else ranked.size)) add("More actions not shown; raise limit.")
+        if (declares != null) {
+            add("'declares' lists what ${app.label} declares it can do that app actions can't start: do those with phone use.")
+        }
         if (!runner) {
             add("This agent may not run app actions (app_action_run is blocked for it or above its access level), so none are listed.")
         } else if (hidden > 0) {
@@ -99,6 +110,7 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
         ActionText.integrationNote(integration, plugins.firstOrNull())?.let { put("note", it) }
         putJsonArray("actions") { shown.forEach { a -> addJsonObject { describe(catalog, a, withApp = false) } } }
         if (shown.isNotEmpty()) put("how_to_run", ActionText.howToRun(app.packageName))
+        declares?.let { put("declares", it) }
     }
     return withFooter(result, footer)
 }
@@ -148,14 +160,14 @@ private fun JsonObjectBuilder.describe(catalog: AppActionCatalog, a: AppAction, 
     put("title", a.action.title)
     put("description", a.action.description)
     catalog.toolFor(a)?.let { put("risk", it.risk.name) }
-    put("completes", a.action.completesTask)
+    put("completes", a.completes)
     put("params", ParamSchemas.objectSchema(a.action.params))
     val reason = try {
         catalog.platform.unavailableReason(a.app.packageName, a.action)?.takeIf { it.isNotBlank() }
     } catch (e: Exception) {
         "Could not check availability on the phone (${e.message ?: e.javaClass.simpleName})."
     }
-    if (reason != null && a.action.android !is ToolRecipe) {
+    if (reason != null && a.recipe !is ToolRecipe) {
         put("available", false)
         put("unavailable_reason", reason)
     }
@@ -209,14 +221,14 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
         val params = paramsOf(args)
         val app = catalog.resolveApp(appName, ctx.appAccess)
         val target = catalog.action(app, actionId) ?: throw ToolException(unknownAction(app, actionId, ctx))
-        val recipe = target.action.android ?: throw ToolException(unknownAction(app, actionId, ctx))
+        val recipe = target.recipe ?: throw ToolException(unknownAction(app, actionId, ctx))
         val tool = catalog.toolFor(target) ?: throw ToolException(
             "${app.label}'s '${target.action.id}' action can't run on this phone" +
                 ((recipe as? ToolRecipe)?.let { ": it needs the '${it.name}' tool, which this phone doesn't offer" } ?: "") +
                 ". Use the screen tools instead.",
         )
         val values = ParamValues.validate(target.action.params, params)
-        val rendered = RecipeRenderer(app.packageName).render(recipe, values) // Fails here, before any approval prompt.
+        val rendered = target.renderer().render(recipe, values) // Fails here, before any approval prompt.
         if (rendered is RenderedToolCall) return Dispatch(tool, rendered.args, alias = target.toolName)
         tool.unavailableReason()?.takeIf { it.isNotBlank() }?.let {
             throw ToolException("${app.label}'s '${target.action.id}' action can't run right now: $it")
@@ -270,7 +282,7 @@ internal class AppActionTool(
     /** A plugin action always declares its risk; anything else is treated as the riskiest (fail closed). */
     override val risk: Risk = action.risk ?: Risk.SENSITIVE
     override val inputSchema: JsonObject = ParamSchemas.objectSchema(action.params)
-    override val timeoutMs: Long = if (action.android is StepsRecipe) PluginRules.STEPS_TIMEOUT_MS else PluginRules.LAUNCH_TIMEOUT_MS
+    override val timeoutMs: Long = if (target.recipe is StepsRecipe) PluginRules.STEPS_TIMEOUT_MS else PluginRules.LAUNCH_TIMEOUT_MS
     override val alwaysConfirm: Boolean = target.isLocal
 
     override fun unavailableReason(): String? = platform.unavailableReason(app.packageName, action)
@@ -278,10 +290,10 @@ internal class AppActionTool(
     override fun describeCall(args: JsonObject): String = ActionText.confirmation(target, args)
 
     override suspend fun call(args: JsonObject, ctx: CallContext): ToolResult {
-        val recipe = action.android ?: throw ToolException("This action has no recipe for this phone.")
+        val recipe = target.recipe ?: throw ToolException("This action has no recipe for this phone.")
         ctx.appAccess.require(app.packageName, app.label)
         val values = ParamValues.validate(action.params, args)
-        val rendered = RecipeRenderer(app.packageName).render(recipe, values)
+        val rendered = target.renderer().render(recipe, values)
         if (rendered is RenderedToolCall) throw ToolException("Internal error: '$name' must run as ${rendered.name}.")
         unavailableReason()?.takeIf { it.isNotBlank() }?.let { throw ToolException("This action can't run right now: $it") }
         ctx.ensureStillAllowed()
@@ -334,8 +346,8 @@ internal object ActionText {
                 }
             }
         if (!target.isLocal) return base
-        val recipe = action.android ?: return base
-        val shown = runCatching { recipeSummary(RecipeRenderer(target.app.packageName).render(recipe, params)) }.getOrNull() ?: return base
+        val recipe = target.recipe ?: return base
+        val shown = runCatching { recipeSummary(target.renderer().render(recipe, params)) }.getOrNull() ?: return base
         return ToolText.truncate("${shown.replaceFirstChar { it.uppercaseChar() }}. Plugin says: $base", MAX_PROMPT)
     }
 
@@ -434,7 +446,7 @@ internal object ActionText {
         put("app", target.app.label)
         put("package", target.app.packageName)
         put("action", action.id)
-        val done = action.completesTask
+        val done = target.completes
         put("done", done)
         if (!done) put("opened", true)
         for ((key, value) in result.fields) if (key !in RESERVED) put(key, value)

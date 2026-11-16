@@ -77,8 +77,7 @@ internal class PluginParser(private val source: PluginSource) {
         }.orEmpty()
         val tested = list(o, "", "tested")?.mapIndexedNotNull { i, e -> tested(e, PluginPath.index("tested", i)) }.orEmpty()
         val androidPackages = androidSection(o["android"])
-        val iosBundleIds = ((o["ios"] as? JsonObject)?.get("bundle_ids") as? JsonArray)
-            ?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.orEmpty()
+        val iosBundleIds = iosSection(o["ios"])
 
         val actions = when (val raw = o["actions"]) {
             null, JsonNull -> {
@@ -135,17 +134,34 @@ internal class PluginParser(private val source: PluginSource) {
         return packages
     }
 
+    private fun iosSection(e: JsonElement?): List<String> {
+        if (e == null || e is JsonNull) return emptyList()
+        val o = e as? JsonObject ?: run {
+            broken("ios", "must be a map with 'bundle_ids'")
+            return emptyList()
+        }
+        known(o, "ios", setOf("bundle_ids"))
+        val ids = textList(o, "ios", "bundle_ids", required = true) ?: return emptyList()
+        if (ids.isEmpty()) problem("ios.bundle_ids", "list at least one bundle id")
+        ids.forEachIndexed { i, id ->
+            if (!PluginRules.BUNDLE_ID.matches(id)) problem("ios.bundle_ids[$i]", "'$id' is not an iOS bundle id (e.g. com.spotify.client)")
+        }
+        ids.groupBy { it }.filter { it.value.size > 1 }.keys.forEach { problem("ios.bundle_ids", "'$it' is listed twice") }
+        return ids
+    }
+
     private fun tested(e: JsonElement, path: String): TestedRecord? {
         val o = e as? JsonObject ?: run {
-            broken(path, "must be a map {app_version, android, date, by}")
+            broken(path, "must be a map {app_version, android, ios, date, by}")
             return null
         }
-        known(o, path, setOf("app_version", "android", "date", "by"))
+        known(o, path, setOf("app_version", "android", "ios", "date", "by"))
         return TestedRecord(
             appVersion = scalarText(o, path, "app_version"),
             android = scalarText(o, path, "android"),
             date = scalarText(o, path, "date"),
             by = scalarText(o, path, "by"),
+            ios = scalarText(o, path, "ios"),
         )
     }
 
@@ -182,8 +198,9 @@ internal class PluginParser(private val source: PluginSource) {
         val params = params(o["params"], "$path.params")
         val confirm = text(o, path, "confirm", max = PluginRules.MAX_CONFIRM)
         val completes = bool(o, path, "completes")
-        val android = o["android"]?.takeIf { it !is JsonNull }?.let { recipe(it, "$path.android") }
-        if (o["android"] == null && o["ios"] == null) problem(path, "has no recipe: add an 'android' section")
+        val android = o["android"]?.takeIf { it !is JsonNull }?.let { recipe(it, "$path.android", DeviceOs.ANDROID) }
+        val ios = o["ios"]?.takeIf { it !is JsonNull }?.let { recipe(it, "$path.ios", DeviceOs.IOS) }
+        if (o["android"] == null && o["ios"] == null) problem(path, "has no recipe: add an 'android' section, an 'ios' section or both")
         val examples = list(o, path, "examples")?.let { list ->
             if (list.size > PluginRules.MAX_EXAMPLES) problem("$path.examples", "at most ${PluginRules.MAX_EXAMPLES} examples")
             list.mapIndexedNotNull { i, ex -> example(ex, PluginPath.index("$path.examples", i)) }
@@ -200,6 +217,7 @@ internal class PluginParser(private val source: PluginSource) {
             confirm = confirm,
             completes = completes,
             android = android,
+            ios = ios,
             examples = examples,
         )
     }
@@ -303,21 +321,28 @@ internal class PluginParser(private val source: PluginSource) {
 
     // Recipes (§6)
 
-    private fun recipe(e: JsonElement, path: String): Recipe? {
+    /** The recipe of one OS section (`android:` or `ios:`); iOS takes no `intent` (§6.6). */
+    private fun recipe(e: JsonElement, path: String, os: DeviceOs): Recipe? {
+        val kinds = if (os == DeviceOs.IOS) IOS_RECIPE_KEYS else RECIPE_KEYS
+        val names = kinds.dropLast(1).joinToString(", ") + " or " + kinds.last()
         val o = e as? JsonObject ?: run {
-            broken(path, "must be a map with one recipe: intent, url, steps or tool")
+            broken(path, "must be a map with one recipe: $names")
             return null
         }
-        known(o, path, RECIPE_KEYS)
-        val present = RECIPE_KEYS.filter { o[it] != null }
+        if (os == DeviceOs.IOS && o["intent"] != null) {
+            broken("$path.intent", "iOS has no intents: use url (a link the app declares) or steps")
+            return null
+        }
+        known(o, path, kinds)
+        val present = kinds.filter { o[it] != null }
         if (present.size != 1) {
-            broken(path, "needs exactly one recipe: intent, url, steps or tool (found ${present.ifEmpty { listOf("none") }.joinToString(", ")})")
+            broken(path, "needs exactly one recipe: $names (found ${present.ifEmpty { listOf("none") }.joinToString(", ")})")
             return null
         }
         return when (val kind = present.single()) {
             "intent" -> intent(o.getValue(kind), "$path.intent")
             "url" -> text(o, path, "url", required = true)?.let(::UrlRecipe)
-            "steps" -> steps(o.getValue(kind), "$path.steps", nested = false)?.let(::StepsRecipe)
+            "steps" -> steps(o.getValue(kind), "$path.steps", nested = false, os = os)?.let(::StepsRecipe)
             else -> tool(o.getValue(kind), "$path.tool")
         }
     }
@@ -426,24 +451,24 @@ internal class PluginParser(private val source: PluginSource) {
 
     // Steps (§6.4)
 
-    /** Steps written in recipe syntax, e.g. an example's expected steps (§7); null after a problem. */
-    fun literalSteps(e: JsonElement, path: String): List<Step>? {
+    /** Steps for [os] written in recipe syntax, e.g. an example's expected steps (§7); null after a problem. */
+    fun literalSteps(e: JsonElement, path: String, os: DeviceOs = DeviceOs.ANDROID): List<Step>? {
         val before = problems.size
-        return steps(e, path, nested = false)?.takeIf { problems.size == before }
+        return steps(e, path, nested = false, os = os)?.takeIf { problems.size == before }
     }
 
-    private fun steps(e: JsonElement, path: String, nested: Boolean): List<Step>? {
+    private fun steps(e: JsonElement, path: String, nested: Boolean, os: DeviceOs): List<Step>? {
         val list = e as? JsonArray ?: run {
             broken(path, "must be a list of steps")
             return null
         }
         if (list.isEmpty()) problem(path, "list at least one step")
         val before = broken
-        val steps = list.mapIndexedNotNull { i, s -> step(s, PluginPath.index(path, i), nested) }
+        val steps = list.mapIndexedNotNull { i, s -> step(s, PluginPath.index(path, i), nested, os) }
         return if (broken > before) null else steps
     }
 
-    private fun step(e: JsonElement, path: String, nested: Boolean): Step? {
+    private fun step(e: JsonElement, path: String, nested: Boolean, os: DeviceOs): Step? {
         val o = e as? JsonObject ?: run {
             broken(path, "each step must be a map such as {tap: {text: Send}}")
             return null
@@ -485,13 +510,21 @@ internal class PluginParser(private val source: PluginSource) {
                 }
             }
             "open_url" -> text(o, path, kind, required = true)?.let(StepAction::OpenUrl)
-            "intent" -> intent(value, p)?.let(StepAction::StartIntent)
+            "intent" -> if (os == DeviceOs.IOS) {
+                broken(p, "iOS has no intents: use open_url with a link the app declares")
+                null
+            } else {
+                intent(value, p)?.let(StepAction::StartIntent)
+            }
             "wait_for" -> selector(value, p)?.let(StepAction::WaitFor)
             "tap" -> selector(value, p)?.let(StepAction::Tap)
             "long_press" -> selector(value, p)?.let(StepAction::LongPress)
             "type" -> typeText(value, p)
             "scroll" -> scroll(value, p)
-            "back" -> if (value is JsonPrimitive && !value.isString && value.booleanOrNull == true) {
+            "back" -> if (os == DeviceOs.IOS) {
+                broken(p, "iOS has no Back button: tap the app's own back control instead, e.g. tap: Back")
+                null
+            } else if (value is JsonPrimitive && !value.isString && value.booleanOrNull == true) {
                 StepAction.Back
             } else {
                 broken(p, "use 'back: true'")
@@ -513,7 +546,7 @@ internal class PluginParser(private val source: PluginSource) {
                         broken("$path.then", "if_present needs 'then', the steps to run")
                         null
                     }
-                    else -> steps(o.getValue("then"), "$path.then", nested = true)
+                    else -> steps(o.getValue("then"), "$path.then", nested = true, os = os)
                 }
                 if (selector != null && then != null) StepAction.IfPresent(selector, then) else null
             }
@@ -590,7 +623,13 @@ internal class PluginParser(private val source: PluginSource) {
             broken(path, "each example must be a map {params, expect}")
             return null
         }
-        known(o, path, setOf("params", "expect"))
+        known(o, path, setOf("os", "params", "expect"))
+        val os = text(o, path, "os")?.let { name ->
+            DeviceOs.entries.firstOrNull { it.id == name } ?: run {
+                broken("$path.os", "'$name' is not an OS; use android or ios")
+                return null
+            }
+        } ?: DeviceOs.ANDROID
         val params = when (val raw = o["params"]) {
             null, JsonNull -> JsonObject(emptyMap())
             is JsonObject -> {
@@ -643,7 +682,7 @@ internal class PluginParser(private val source: PluginSource) {
             "url" -> ExampleExpectation.Url(text(expect, ep, "url", required = true) ?: return null)
             else -> ExampleExpectation.Error(text(expect, ep, "error", required = true) ?: return null)
         }
-        return PluginExample(params, expectation)
+        return PluginExample(params, expectation, os)
     }
 
     // Field helpers
@@ -767,6 +806,7 @@ internal class PluginParser(private val source: PluginSource) {
             "type", "description", "required", "enum", "default", "min_length", "max_length", "minimum", "maximum", "pattern",
         )
         private val RECIPE_KEYS = listOf("intent", "url", "steps", "tool")
+        private val IOS_RECIPE_KEYS = listOf("url", "steps", "tool")
         private val INTENT_KEYS = setOf("action", "type", "data", "categories", "class", "extras")
         private val STEP_KEYS = listOf(
             "launch", "open_url", "intent", "wait_for", "tap", "long_press", "type", "scroll", "back", "sleep", "expect",

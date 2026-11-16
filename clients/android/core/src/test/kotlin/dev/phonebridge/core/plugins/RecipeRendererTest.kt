@@ -160,6 +160,47 @@ class RecipeRendererTest {
     }
 
     @Test
+    fun iosRecipesArePinnedToTheBundleIdAndKeepIdsAsWritten() {
+        val ios = RecipeRenderer("com.example.ios", DeviceOs.IOS)
+        assertEquals(RenderedUrl("example://search?q=hi%20there", "com.example.ios"), ios.render(UrlRecipe("example://search?q={{text}}"), values))
+        assertFailsWith<ToolException> { ios.render(UrlRecipe("javascript:{{text}}"), values) }
+        val steps = listOf(
+            Step(StepAction.Launch()),
+            Step(StepAction.OpenUrl("example://x/{{text}}")),
+            Step(StepAction.TypeText(Selector(id = "SearchField"), "{{text}}", submit = true)),
+            Step(StepAction.Tap(Selector(id = "Player:Play", className = "Button"))),
+            Step(StepAction.Expect(Selector(id = "com.example.app:id/x"))),
+        )
+        val rendered = ios.render(StepsRecipe(steps), values) as RenderedSteps
+        assertEquals(
+            RenderedSteps(
+                "com.example.ios",
+                listOf(
+                    RenderedStep(RenderedStepAction.Launch()),
+                    RenderedStep(RenderedStepAction.OpenUrl(RenderedUrl("example://x/hi%20there", "com.example.ios"))),
+                    RenderedStep(RenderedStepAction.TypeText(Selector(id = "SearchField"), "hi there", submit = true)),
+                    RenderedStep(RenderedStepAction.Tap(Selector(id = "Player:Play", className = "Button"))),
+                    RenderedStep(RenderedStepAction.Expect(Selector(id = "com.example.app:id/x"), RecipeRenderer.DEFAULT_EXPECT_FAIL)),
+                ),
+            ),
+            rendered,
+        )
+        assertEquals("SearchField", ios.fullViewId("SearchField"))
+        val call = ios.render(ToolRecipe("url_open", linkedMapOf("url" to ValueSpec.Template("https://x/{{text}}"))), values) as RenderedToolCall
+        assertEquals("""{"url":"https://x/hi there"}""", call.args.toString())
+    }
+
+    @Test
+    fun iosRefusesIntentsAndBackEvenWithoutTheValidator() {
+        val ios = RecipeRenderer("com.example.ios", DeviceOs.IOS)
+        val intent = assertFailsWith<ToolException> { ios.render(IntentRecipe("android.intent.action.VIEW"), values) }
+        assertTrue("iPhone doesn't have" in intent.message!!, intent.message)
+        assertFailsWith<ToolException> { ios.render(StepsRecipe(listOf(Step(StepAction.StartIntent(IntentRecipe("a.VIEW"))))), values) }
+        val back = assertFailsWith<ToolException> { ios.render(StepsRecipe(listOf(Step(StepAction.Back))), values) }
+        assertTrue("Back" in back.message!!, back.message)
+    }
+
+    @Test
     fun toolArgsTakeParameterTypesAndDropMissingOnes() {
         val recipe = ToolRecipe(
             "alarm_set",

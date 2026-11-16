@@ -28,13 +28,22 @@ enum class Integration {
     val id: String get() = name.lowercase()
 }
 
-/** One action of one installed app. [plugin] is null for a discovered action. */
-data class AppAction(val app: InstalledApp, val action: PluginAction, val plugin: AppPlugin?) {
+/** One action of one installed app on a device running [os]. [plugin] is null for a discovered action. */
+data class AppAction(val app: InstalledApp, val action: PluginAction, val plugin: AppPlugin?, val os: DeviceOs = DeviceOs.ANDROID) {
     /** The name policy, rules and audit use: `<package>/<action id>`, e.g. `com.spotify.music/play`. */
     val toolName: String get() = virtualToolName(app.packageName, action.id)
 
     /** From an unreviewed local plugin: always needs approval. */
     val isLocal: Boolean get() = plugin?.source == PluginSource.LOCAL
+
+    /** The recipe that runs it on [os]; null only for an action that isn't offered there. */
+    val recipe: Recipe? get() = action.recipeFor(os)
+
+    /** Whether it finishes the task by itself on [os] (§4 `completes`). */
+    val completes: Boolean get() = action.completesOn(os)
+
+    /** Renders its recipe, pinned to the installed app. */
+    fun renderer(): RecipeRenderer = RecipeRenderer(app.packageName, os)
 }
 
 /** `<package>/<action id>`: the tool name of an app action (docs/PLUGINS.md §9). */
@@ -105,14 +114,15 @@ class AppActionCatalog(
     /**
      * Every action of [app]: actions of the plugins that apply to it (those whose first installed package it
      * is, docs/PLUGINS.md §3), in catalog order, then the discovered actions whose ids no plugin action uses.
-     * Plugin actions without an Android recipe are left out.
+     * Actions without a recipe for the platform's OS ([AppActionsPlatform.os]) are left out.
      */
     suspend fun actions(app: InstalledApp): List<AppAction> = actions(app, installedPackages())
 
     /** [actions] given the [installed] package names (to list many apps with one platform query). */
     suspend fun actions(app: InstalledApp, installed: Set<String>): List<AppAction> {
+        val os = platform.os
         val applicable = applicablePlugins(app.packageName, installed)
-        val fromPlugins = applicable.flatMap { p -> p.actions.filter { it.android != null }.map { AppAction(app, it, p) } }
+        val fromPlugins = applicable.flatMap { p -> p.actions.filter { it.recipeFor(os) != null }.map { AppAction(app, it, p, os) } }
         val taken = fromPlugins.mapTo(HashSet()) { it.action.id }
         val discovered = try {
             platform.discoveredActions(app.packageName)
@@ -124,8 +134,9 @@ class AppActionCatalog(
         val extra = discovered
             .filter { a ->
                 PluginRules.ACTION_ID.matches(a.id) &&
-                    when (val recipe = a.android) {
-                        is IntentRecipe, is UrlRecipe, is StepsRecipe -> a.risk != null
+                    when (val recipe = a.recipeFor(os)) {
+                        is IntentRecipe -> os == DeviceOs.ANDROID && a.risk != null
+                        is UrlRecipe, is StepsRecipe -> a.risk != null
                         // Only one built-in tool: open_link opening links with url_open, pinned to this app.
                         is ToolRecipe -> a.risk == null && isPinnedLinkOpener(recipe, app.packageName)
                         null -> false
@@ -133,7 +144,7 @@ class AppActionCatalog(
             }
             .distinctBy { it.id }
             .filter { it.id !in taken }
-            .map { AppAction(app, it, null) }
+            .map { AppAction(app, it, null, os) }
         return fromPlugins + extra
     }
 
@@ -154,9 +165,14 @@ class AppActionCatalog(
     /** Package names of the installed apps. */
     suspend fun installedPackages(): Set<String> = platform.installedApps().mapTo(HashSet()) { it.packageName }
 
-    /** The plugins that apply to [packageName]: those for which it is the first installed of their packages. */
-    fun applicablePlugins(packageName: String, installed: Set<String>): List<AppPlugin> =
-        plugins().pluginsFor(packageName).filter { p -> p.androidPackages.firstOrNull { it in installed } == packageName }
+    /**
+     * The plugins that apply to [packageName]: those for which it is the first installed of their app ids on the
+     * platform's OS (`android.packages`, or `ios.bundle_ids` on iOS).
+     */
+    fun applicablePlugins(packageName: String, installed: Set<String>): List<AppPlugin> {
+        val os = platform.os
+        return plugins().pluginsFor(packageName, os).filter { p -> p.appIds(os).firstOrNull { it in installed } == packageName }
+    }
 
     /** The integration of an app whose applicable plugins ([applicablePlugins]) are [plugins]. */
     fun integration(plugins: List<AppPlugin>): Integration = when {
@@ -182,7 +198,7 @@ class AppActionCatalog(
      * otherwise a tool named [AppAction.toolName] that renders and runs the recipe on the platform.
      */
     fun toolFor(action: AppAction): Tool? {
-        val recipe = action.action.android ?: return null
+        val recipe = action.recipe ?: return null
         if (recipe !is ToolRecipe) return AppActionTool(action, platform, health)
         if (ToolNames.recipeRefusal(recipe.name) != null) return null
         val tool = builtInTool(recipe.name) ?: return null

@@ -7,6 +7,8 @@ homepage: https://www.spotify.com
 status: experimental
 android:
   packages: [com.spotify.music]
+ios:
+  bundle_ids: [com.spotify.client]
 
 actions:
   - id: play
@@ -72,9 +74,14 @@ actions:
     confirm: Open Spotify {{type}} {{id}}
     android:
       url: "https://open.spotify.com/{{type}}/{{id}}"
+    ios:
+      url: "spotify:{{type}}:{{id}}"
     examples:
       - params: {type: album, id: 0sNOF9WDwhWunNAHPD3Baj}
         expect: {url: "https://open.spotify.com/album/0sNOF9WDwhWunNAHPD3Baj"}
+      - os: ios
+        params: {type: album, id: 0sNOF9WDwhWunNAHPD3Baj}
+        expect: {url: "spotify:album:0sNOF9WDwhWunNAHPD3Baj"}
       - params: {type: playlist, id: "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"}
         expect: {error: id}
       - params: {type: song, id: 0sNOF9WDwhWunNAHPD3Baj}

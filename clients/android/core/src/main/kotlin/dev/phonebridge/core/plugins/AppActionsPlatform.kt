@@ -79,6 +79,7 @@ interface AppActionsPlatform {
     /**
      * Actions discovered from what [packageName] declares (§8): ordinary actions with intent or url
      * recipes, ids as in §8 (`open`, `share_text`, `shortcut_<id>`, …). Empty if none or not installed.
+     * Their recipes go in the section for [os] (`android` or `ios`); the catalog ignores the other.
      */
     suspend fun discoveredActions(packageName: String): List<PluginAction>
 

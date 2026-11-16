@@ -39,6 +39,7 @@
         "properties": {
           "app_version": { "type": ["string", "number"] },
           "android": { "type": ["string", "number"] },
+          "ios": { "type": ["string", "number"] },
           "date": { "type": "string" },
           "by": { "type": "string" }
         }
@@ -62,7 +63,24 @@
         }
       }
     },
-    "ios": { "description": "Reserved for the iOS client (kept, not checked yet).", "type": "object" },
+    "ios": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundle_ids"],
+      "properties": {
+        "bundle_ids": {
+          "description": "iOS bundle ids this plugin applies to; the first installed one is used. Needed when an action has an ios recipe.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$",
+            "not": { "pattern": "^dev\\.phonebridge(\\.|$)" }
+          }
+        }
+      }
+    },
     "actions": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/definitions/action" } }
   },
   "definitions": {
@@ -103,14 +121,20 @@
           "type": "boolean"
         },
         "android": { "$ref": "#/definitions/recipe" },
-        "ios": { "description": "Reserved for the iOS client (kept, not checked yet).", "type": "object" },
+        "ios": { "$ref": "#/definitions/iosRecipe" },
         "examples": { "type": "array", "maxItems": 20, "items": { "$ref": "#/definitions/example" } }
       },
       "allOf": [
+        { "anyOf": [{ "required": ["android"] }, { "required": ["ios"] }] },
         {
           "if": { "required": ["android"], "properties": { "android": { "required": ["tool"] } } },
           "then": { "not": { "anyOf": [{ "required": ["risk"] }, { "required": ["scope"] }] } },
           "else": { "if": { "required": ["android"] }, "then": { "required": ["risk"] } }
+        },
+        {
+          "if": { "required": ["ios"], "properties": { "ios": { "required": ["tool"] } } },
+          "then": { "not": { "anyOf": [{ "required": ["risk"] }, { "required": ["scope"] }] } },
+          "else": { "if": { "required": ["ios"] }, "then": { "required": ["risk"] } }
         }
       ]
     },
@@ -147,6 +171,27 @@
         "steps": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/definitions/step" } },
         "tool": { "$ref": "#/definitions/tool" }
       }
+    },
+    "iosRecipe": {
+      "description": "Exactly one iOS recipe: url, steps or tool. iOS has no intents.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "url": {
+          "description": "Opened only if the installed app declares the link's scheme (or https domain). Literal scheme; {{params}} are percent-encoded.",
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:"
+        },
+        "steps": { "type": "array", "minItems": 1, "maxItems": 40, "items": { "$ref": "#/definitions/iosStep" } },
+        "tool": { "$ref": "#/definitions/tool" }
+      }
+    },
+    "iosStep": {
+      "description": "A screen step on iOS: no intent (iOS has none) and no back (iPhone has no Back button).",
+      "allOf": [{ "$ref": "#/definitions/step" }],
+      "not": { "anyOf": [{ "required": ["intent"] }, { "required": ["back"] }] }
     },
     "intent": {
       "description": "Starts an activity, always pinned to the plugin's installed package.",
@@ -216,12 +261,15 @@
             { "required": ["desc_contains"] }, { "required": ["class"] }, { "required": ["clickable"] }
           ],
           "properties": {
-            "id": { "description": "Short (search_src_text) or full (com.example:id/search_src_text).", "type": "string" },
+            "id": {
+              "description": "Android: short (search_src_text) or full (com.example:id/search_src_text) view id. iOS: the accessibility identifier, as written.",
+              "type": "string"
+            },
             "text": { "type": "string" },
             "text_contains": { "type": "string" },
             "desc": { "type": "string" },
             "desc_contains": { "type": "string" },
-            "class": { "description": "Simple class name, e.g. EditText.", "type": "string" },
+            "class": { "description": "Android: simple class name, e.g. EditText. iOS: element type, e.g. Button.", "type": "string" },
             "clickable": { "type": "boolean" },
             "index": { "type": "integer", "minimum": 0, "maximum": 50, "default": 0 },
             "optional": { "type": "boolean" },
@@ -287,6 +335,7 @@
       "additionalProperties": false,
       "required": ["expect"],
       "properties": {
+        "os": { "description": "Which recipe the example renders (default android).", "enum": ["android", "ios"], "default": "android" },
         "params": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean", "null"] } },
         "expect": {
           "type": "object",

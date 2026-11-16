@@ -7,6 +7,8 @@ homepage: https://www.waze.com
 status: experimental
 android:
   packages: [com.waze]
+ios:
+  bundle_ids: [com.waze.iphone]
 
 actions:
   - id: search
@@ -24,9 +26,14 @@ actions:
     confirm: Search Waze for "{{query}}"
     android:
       url: "https://waze.com/ul?q={{query}}"
+    ios:
+      url: "waze://?q={{query}}"
     examples:
       - params: {query: 66 Acacia Avenue}
         expect: {url: "https://waze.com/ul?q=66%20Acacia%20Avenue"}
+      - os: ios
+        params: {query: 66 Acacia Avenue}
+        expect: {url: "waze://?q=66%20Acacia%20Avenue"}
       - params: {}
         expect: {error: query}
 
@@ -47,9 +54,14 @@ actions:
     confirm: Drive to "{{destination}}" with Waze
     android:
       url: "https://waze.com/ul?q={{destination}}&navigate=yes"
+    ios:
+      url: "waze://?q={{destination}}&navigate=yes"
     examples:
       - params: {destination: "1 Market Street, San Francisco"}
         expect: {url: "https://waze.com/ul?q=1%20Market%20Street%2C%20San%20Francisco&navigate=yes"}
+      - os: ios
+        params: {destination: "1 Market Street, San Francisco"}
+        expect: {url: "waze://?q=1%20Market%20Street%2C%20San%20Francisco&navigate=yes"}
       - params: {}
         expect: {error: destination}
 
@@ -77,9 +89,14 @@ actions:
     completes: true
     android:
       url: "https://waze.com/ul?ll={{latitude}},{{longitude}}&navigate=yes"
+    ios:
+      url: "waze://?ll={{latitude}},{{longitude}}&navigate=yes"
     examples:
       - params: {latitude: 45.6906304, longitude: -120.810983}
         expect: {url: "https://waze.com/ul?ll=45.6906304,-120.810983&navigate=yes"}
+      - os: ios
+        params: {latitude: 45.6906304, longitude: -120.810983}
+        expect: {url: "waze://?ll=45.6906304,-120.810983&navigate=yes"}
       - params: {latitude: 91, longitude: 0}
         expect: {error: latitude}
       - params: {latitude: 45.69}
@@ -101,8 +118,13 @@ actions:
     completes: true
     android:
       url: "https://waze.com/ul?favorite={{place}}&navigate=yes"
+    ios:
+      url: "waze://?favorite={{place}}&navigate=yes"
     examples:
       - params: {place: work}
         expect: {url: "https://waze.com/ul?favorite=work&navigate=yes"}
+      - os: ios
+        params: {place: home}
+        expect: {url: "waze://?favorite=home&navigate=yes"}
       - params: {place: gym}
         expect: {error: place}

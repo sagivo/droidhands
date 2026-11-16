@@ -6,8 +6,9 @@ import dev.phonebridge.core.tools.ToolNames
 
 /**
  * The rules of docs/PLUGINS.md that relate several fields of a parsed plugin (single-field rules are
- * [PluginParser]'s): folder name, packages, `stable` requirements, templates against declared parameters,
- * URL schemes, intent safety, `tool` recipes, step limits and the risk floors of §9. Pure.
+ * [PluginParser]'s): folder name, packages and bundle ids, `stable` requirements, templates against declared
+ * parameters, URL schemes, intent safety, `tool` recipes, step limits, examples against recipes and the risk floors
+ * of §9. Each action's `android` and `ios` recipes are checked alike, with the iOS differences of §6.6. Pure.
  */
 object PluginValidator {
     /**
@@ -31,10 +32,23 @@ object PluginValidator {
         plugin.androidPackages.forEachIndexed { i, p ->
             if (PluginRules.isBridgePackage(p)) problem("android.packages[$i]", "plugins can't target PhoneBridge itself")
         }
+        val hasIosActions = plugin.actions.any { it.ios != null }
+        if (hasIosActions && plugin.iosBundleIds.isEmpty()) {
+            problem("ios.bundle_ids", "required: the bundle ids of the iOS app, e.g. [com.spotify.client]")
+        }
+        if (!hasIosActions && plugin.iosBundleIds.isNotEmpty()) {
+            problem("ios.bundle_ids", "no action has an 'ios' recipe: add one, or remove the 'ios' section")
+        }
+        plugin.iosBundleIds.forEachIndexed { i, id ->
+            if (PluginRules.isBridgePackage(id.lowercase())) problem("ios.bundle_ids[$i]", "plugins can't target PhoneBridge itself")
+        }
         if (plugin.status == PluginStatus.STABLE) {
             if (plugin.tested.isEmpty()) problem("tested", "a stable plugin needs at least one 'tested' record from a real device")
             plugin.actions.forEachIndexed { i, a ->
                 if (a.android != null && a.examples.isEmpty()) problem("actions[$i].examples", "every action of a stable plugin needs examples")
+                if (a.ios != null && a.examples.none { it.os == DeviceOs.IOS }) {
+                    problem("actions[$i].examples", "every ios recipe of a stable plugin needs examples with os: ios")
+                }
             }
         }
         plugin.actions.forEachIndexed { i, action ->
@@ -52,22 +66,49 @@ object PluginValidator {
     ) {
         private val declared = action.params.map { it.name }.toSet()
 
+        /** The recipes the action has, with their OS. */
+        private val recipes: List<Pair<DeviceOs, Recipe>> =
+            DeviceOs.entries.mapNotNull { os -> action.recipeFor(os)?.let { os to it } }
+
         fun run() {
             action.confirm?.let { template("$path.confirm", it) }
-            when (val recipe = action.android) {
-                null -> Unit
-                is ToolRecipe -> toolRecipe(recipe)
-                else -> {
-                    if (action.risk == null) problem("$path.risk", "required: read, action or sensitive")
-                    when (recipe) {
-                        is IntentRecipe -> intent(recipe, "$path.android.intent")
-                        is UrlRecipe -> url("$path.android.url", recipe.url)
-                        is StepsRecipe -> steps(recipe)
-                        is ToolRecipe -> Unit
-                    }
+            val tools = recipes.count { it.second is ToolRecipe }
+            if (tools in 1 until recipes.size) {
+                problem(
+                    path,
+                    "the android and ios recipes must both be tool recipes or neither: a tool recipe takes the built-in " +
+                        "tool's risk and scope, other recipes declare their own (make them two actions)",
+                )
+            } else if (tools > 0) {
+                if (action.risk != null) problem("$path.risk", "remove it: a tool recipe takes the built-in tool's risk")
+                if (action.scope != null) problem("$path.scope", "remove it: a tool recipe takes the built-in tool's scope")
+            } else if (recipes.isNotEmpty() && action.risk == null) {
+                problem("$path.risk", "required: read, action or sensitive")
+            }
+            for ((os, recipe) in recipes) {
+                val p = "$path.${os.id}"
+                when (recipe) {
+                    is ToolRecipe -> toolRecipe(recipe, "$p.tool")
+                    is IntentRecipe -> intent(recipe, "$p.intent")
+                    is UrlRecipe -> url("$p.url", recipe.url)
+                    is StepsRecipe -> steps(recipe, "$p.steps", os)
                 }
             }
+            examples()
             riskFloors()
+        }
+
+        /** Each example must test a recipe the action has, on an OS the plugin lists apps for. */
+        private fun examples() {
+            action.examples.forEachIndexed { i, example ->
+                if (action.recipeFor(example.os) != null) return@forEachIndexed
+                val p = PluginPath.index("$path.examples", i)
+                if (example.os == DeviceOs.IOS) {
+                    problem("$p.os", "the action has no 'ios' recipe to test")
+                } else {
+                    problem(p, "the action has no 'android' recipe to test; add 'os: ios' to test its ios recipe")
+                }
+            }
         }
 
         private fun riskFloors() {
@@ -87,12 +128,14 @@ object PluginValidator {
                         "deletes or transfers; docs/PLUGINS.md §9). If the word means something harmless here, rephrase it.",
                 )
             }
-            val recipe = action.android
-            if (risk == Risk.READ && recipe is StepsRecipe && touches(recipe.steps)) {
+            if (risk != Risk.READ) return
+            val touching = recipes.map { it.second }.firstOrNull { it is StepsRecipe && touches(it.steps) }
+            if (touching != null) {
                 problem("$path.risk", "can't be read: the steps tap, type, scroll, start an intent or open a link")
             }
-            if (risk == Risk.READ && (recipe is IntentRecipe || recipe is UrlRecipe)) {
-                problem("$path.risk", "can't be read: ${recipe.kind} recipes open the app, which is at least an action")
+            val opening = recipes.map { it.second }.firstOrNull { it is IntentRecipe || it is UrlRecipe }
+            if (opening != null) {
+                problem("$path.risk", "can't be read: ${opening.kind} recipes open the app, which is at least an action")
             }
         }
 
@@ -105,10 +148,7 @@ object PluginValidator {
             }
         }
 
-        private fun toolRecipe(recipe: ToolRecipe) {
-            val p = "$path.android.tool"
-            if (action.risk != null) problem("$path.risk", "remove it: a tool recipe takes the built-in tool's risk")
-            if (action.scope != null) problem("$path.scope", "remove it: a tool recipe takes the built-in tool's scope")
+        private fun toolRecipe(recipe: ToolRecipe, p: String) {
             val refusal = if (recipe.name in toolNames) ToolNames.recipeRefusal(recipe.name) else "'${recipe.name}' is not a PhoneBridge tool (see docs/TOOLS.md)"
             refusal?.let { problem("$p.name", it) }
             for ((key, value) in recipe.args) value(PluginPath.key("$p.args", key), value)
@@ -132,17 +172,17 @@ object PluginValidator {
             }
         }
 
-        private fun steps(recipe: StepsRecipe) {
-            val p = "$path.android.steps"
+        private fun steps(recipe: StepsRecipe, p: String, os: DeviceOs) {
             val total = countSteps(recipe.steps)
             if (total > PluginRules.MAX_STEPS) problem(p, "at most ${PluginRules.MAX_STEPS} steps in total, nested ones included (found $total)")
-            recipe.steps.forEachIndexed { i, s -> step(s, PluginPath.index(p, i)) }
+            recipe.steps.forEachIndexed { i, s -> step(s, PluginPath.index(p, i), os) }
         }
 
         private fun countSteps(steps: List<Step>): Int =
             steps.sumOf { s -> 1 + ((s.action as? StepAction.IfPresent)?.then?.let(::countSteps) ?: 0) }
 
-        private fun step(step: Step, p: String) {
+        private fun step(step: Step, p: String, os: DeviceOs) {
+            fun selector(s: Selector, at: String) = selector(s, at, os)
             when (val a = step.action) {
                 is StepAction.OpenUrl -> url("$p.open_url", a.url)
                 is StepAction.StartIntent -> intent(a.intent, "$p.intent")
@@ -163,13 +203,14 @@ object PluginValidator {
                 }
                 is StepAction.IfPresent -> {
                     selector(a.selector, "$p.if_present")
-                    a.then.forEachIndexed { i, s -> step(s, PluginPath.index("$p.then", i)) }
+                    a.then.forEachIndexed { i, s -> step(s, PluginPath.index("$p.then", i), os) }
                 }
                 is StepAction.Launch, StepAction.Back, is StepAction.Sleep -> Unit
             }
         }
 
-        private fun selector(s: Selector, p: String) {
+        /** On iOS an `id` is an accessibility identifier, used as written; on Android a short or full view id. */
+        private fun selector(s: Selector, p: String, os: DeviceOs) {
             s.textOrDesc?.let { template(p, it) }
             s.text?.let { template("$p.text", it) }
             s.textContains?.let { template("$p.text_contains", it) }
@@ -177,7 +218,7 @@ object PluginValidator {
             s.descContains?.let { template("$p.desc_contains", it) }
             s.className?.let { literal("$p.class", it) }
             s.id?.let { id ->
-                if (!literal("$p.id", id)) return@let
+                if (!literal("$p.id", id) || os == DeviceOs.IOS) return@let
                 val owner = id.substringBefore(":id/", missingDelimiterValue = "")
                 if (id.contains(":id/") && owner != "android" && owner !in plugin.androidPackages) {
                     problem("$p.id", "'$id' belongs to another app; use a short id or one of the plugin's packages")

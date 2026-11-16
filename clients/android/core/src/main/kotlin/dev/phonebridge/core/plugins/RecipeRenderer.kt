@@ -12,12 +12,13 @@ import kotlinx.serialization.json.longOrNull
 /**
  * Renders recipes with one call's validated parameters ([ParamValues.validate]) into the platform-neutral
  * [RenderedRecipe] types (docs/PLUGINS.md §6.1). Everything is pinned to [packageName], the app's installed
- * package. Pure.
+ * Android package or iOS bundle id, and rendered for [os]: on iOS selector ids are accessibility identifiers, kept
+ * as written, and intents and Back are refused (§6.6). Pure.
  *
  * Runtime safety does not rely on the validator alone (discovered actions skip it): call actions are
  * refused and rendered URLs must not use a forbidden scheme.
  */
-class RecipeRenderer(private val packageName: String) {
+class RecipeRenderer(private val packageName: String, private val os: DeviceOs = DeviceOs.ANDROID) {
     /** Renders [recipe]. @throws ToolException if the result isn't allowed or a typed value doesn't convert. */
     fun render(recipe: Recipe, values: JsonObject): RenderedRecipe = when (recipe) {
         is IntentRecipe -> intent(recipe, values)
@@ -27,6 +28,9 @@ class RecipeRenderer(private val packageName: String) {
     }
 
     fun intent(recipe: IntentRecipe, values: JsonObject): RenderedIntent {
+        if (os == DeviceOs.IOS) {
+            throw ToolException("This action starts an Android intent, which iPhone doesn't have. Use phone use (screen_observe, ui_tap) instead.")
+        }
         if (PluginRules.isCallAction(recipe.action)) {
             throw ToolException("This action would place a phone call, which app actions may not do. Use phone_call instead.")
         }
@@ -81,7 +85,11 @@ class RecipeRenderer(private val packageName: String) {
                 until = a.until?.let { selector(it, values) },
                 max = a.max,
             )
-            StepAction.Back -> RenderedStepAction.Back
+            StepAction.Back -> if (os == DeviceOs.IOS) {
+                throw ToolException("This action's recipe presses Back, which iPhone doesn't have. Use phone use (screen_observe, ui_tap) instead.")
+            } else {
+                RenderedStepAction.Back
+            }
             is StepAction.Sleep -> RenderedStepAction.Sleep(a.ms)
             is StepAction.Expect -> RenderedStepAction.Expect(selector(a.selector, values), a.fail ?: DEFAULT_EXPECT_FAIL)
             is StepAction.IfPresent -> RenderedStepAction.IfPresent(selector(a.selector, values), steps(a.then, values))
@@ -89,7 +97,7 @@ class RecipeRenderer(private val packageName: String) {
         return RenderedStep(action, step.optional, step.timeoutMs ?: Step.DEFAULT_TIMEOUT_MS)
     }
 
-    /** Renders the text fields and expands a short [Selector.id] to `<package>:id/<name>`. */
+    /** Renders the text fields and, on Android, expands a short [Selector.id] to `<package>:id/<name>`. */
     fun selector(selector: Selector, values: JsonObject): Selector {
         fun r(text: String?) = text?.let { parse(it).render(values) }
         return selector.copy(
@@ -102,8 +110,11 @@ class RecipeRenderer(private val packageName: String) {
         )
     }
 
-    /** `search_src_text` → `<package>:id/search_src_text`; full ids (`pkg:id/name`) are kept. */
-    fun fullViewId(id: String): String = if (id.contains(":id/")) id else "$packageName:id/$id"
+    /**
+     * `search_src_text` → `<package>:id/search_src_text`; full ids (`pkg:id/name`) are kept. On iOS ids are
+     * accessibility identifiers and always kept.
+     */
+    fun fullViewId(id: String): String = if (os == DeviceOs.IOS || id.contains(":id/")) id else "$packageName:id/$id"
 
     private fun extra(key: String, spec: ExtraSpec, values: JsonObject): ExtraValue? {
         val type = spec.type

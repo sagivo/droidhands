@@ -5,8 +5,9 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Parameters for checking, on the phone, that an action's intent or link still reaches the installed app (pure): the
- * platform renders the recipe with them and asks the OS whether an activity of the app accepts the result, without
- * starting anything. A plugin written for one app version then stops being offered on versions that dropped the link.
+ * platform renders the recipe for its OS with them ([AppAction.renderer]) and asks the OS whether an activity of the
+ * app accepts the result (on iOS: whether the installed app declares the link's scheme or domain), without starting
+ * anything. A plugin written for one app version then stops being offered on versions that dropped the link.
  */
 object RecipeProbe {
     /**

@@ -16,6 +16,9 @@ object PluginRules {
     /** Java package names (Android application ids). */
     val PACKAGE_NAME = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
 
+    /** iOS bundle identifiers: reverse-DNS, letters, digits and `-` between dots (e.g. `com.spotify.client`). */
+    val BUNDLE_ID = Regex("^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$")
+
     /** GitHub handles (an optional leading `@` is allowed). */
     val GITHUB_HANDLE = Regex("^@?[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
 
@@ -42,7 +45,7 @@ object PluginRules {
      */
     const val FIXTURE_PACKAGE_PREFIX = "dev.phonebridge.fixture."
 
-    /** True if [packageName] is PhoneBridge (or one of its variants); the E2E fixture apps are not. */
+    /** True if [packageName] (an Android package or iOS bundle id) is PhoneBridge (or one of its variants); the E2E fixture apps are not. */
     fun isBridgePackage(packageName: String): Boolean =
         (packageName == BRIDGE_PACKAGE_PREFIX || packageName.startsWith("$BRIDGE_PACKAGE_PREFIX.")) &&
             !packageName.startsWith(FIXTURE_PACKAGE_PREFIX)

@@ -7,6 +7,8 @@ homepage: https://www.whatsapp.com
 status: experimental
 android:
   packages: [com.whatsapp, com.whatsapp.w4b]
+ios:
+  bundle_ids: [net.whatsapp.WhatsApp, net.whatsapp.WhatsAppSMB]
 
 actions:
   - id: draft_message
@@ -58,6 +60,8 @@ actions:
         type: text/plain
         extras:
           android.intent.extra.TEXT: "{{text}}"
+    ios:
+      url: "whatsapp://send?text={{text}}"
     examples:
       - params: {text: "https://example.com/menu"}
         expect:
@@ -66,5 +70,8 @@ actions:
             package: com.whatsapp
             type: text/plain
             extras: {android.intent.extra.TEXT: "https://example.com/menu"}
+      - os: ios
+        params: {text: "Hello, World!"}
+        expect: {url: "whatsapp://send?text=Hello%2C%20World%21"}
       - params: {}
         expect: {error: text}
