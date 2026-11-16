@@ -24,7 +24,9 @@
 | Relay | `relay/` (TypeScript, Node ≥ 20, `ws`) | No. It tunnels opaque HTTP to any device. |
 | Bridge core: MCP server, tokens, device identity, policy, rate limits, audit, confirmations API, relay client, local HTTP server | `clients/android/core` (pure Kotlin/JVM; no Android imports) | No. Designed to become a Kotlin Multiplatform module for iOS. An iOS app could also re-implement it from the docs. |
 | App plugins: format, validator, templates, rendering, catalog, `app_actions_list` / `app_action_run` | `plugins/` (YAML, one folder per app) and `clients/android/core/.../plugins` | No. Each plugin has an `android:` section today; the platform only runs rendered recipes. |
+| Phone use (screen tools and screen recipes over a `ScreenDriver`) | `clients/android/core/.../screen` | No. iOS uses it; the Android app still has its own screen tools. |
 | Android app: services, permissions UI, tool implementations | `clients/android/app` | Yes |
+| iOS host (Mac) and runner (iPhone): app inventory, `Info.plist` discovery, `ScreenDriver` over XCUITest | `clients/ios` ([IOS.md](IOS.md)) | Yes |
 
 Adding a platform means implementing the tools from `docs/TOOLS.md` with that platform's APIs,
 plus a device that speaks the tunnel protocol. The relay and the agents don't change.

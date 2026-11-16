@@ -74,7 +74,7 @@ Errors are `4xx/5xx` with `{"error": "<plain sentence for the agent>"}`. Coordin
 
 | Method, path | Body → response |
 |---|---|
-| `GET /status` | → `{runner_version, os: "ios", os_version, model, name, screen: {width, height, scale}, locked?}` |
+| `GET /status` | → `{runner_version, os: "ios", os_version, model, name, screen: {width, height, scale}, locked?}`. XCTest has no lock-state API, so `locked` is usually absent. |
 | `POST /foreground` | `{candidates?: [bundle ids]}` → `{bundle_id}`: the app in front (`com.apple.springboard` for the Home Screen). The runner may ignore `candidates` if it can tell otherwise. |
 | `POST /snapshot` | `{bundle_id?, max_depth?: 60}` (default: the app in front) → `{bundle_id, screen: {width, height}, keyboard: bool, root: Element\|null, overlays: [{owner, root: Element}]}`. `overlays` holds system alerts drawn over the app. |
 | `POST /screenshot` | `{format?: "png"\|"jpeg", quality?: 0.8}` → `{mime, width, height, data}` (pixels; `data` is base64) |
@@ -82,9 +82,9 @@ Errors are `4xx/5xx` with `{"error": "<plain sentence for the agent>"}`. Coordin
 | `POST /swipe` | `{from_x, from_y, to_x, to_y, duration_ms?: 300}` → `{}` |
 | `POST /type` | `{text}` → `{}`: types into the focused element. `409` when no element has keyboard focus |
 | `POST /clear` | `{}` → `{}`: clears the focused text field |
-| `POST /key` | `{key: "return"\|"delete"}` → `{}` |
+| `POST /key` | `{key: "return"\|"delete"}` → `{}`. `409` when no element has keyboard focus |
 | `POST /button` | `{name: "home"\|"volume_up"\|"volume_down"}` → `{}` |
-| `POST /lock` | `{}` → `{}` |
+| `POST /lock` | `{}` → `{}`. `501` if this XCTest lacks the lock button |
 | `POST /launch` | `{bundle_id}` → `{state}`: activates the app, launching it if needed |
 | `POST /open_url` | `{url}` → `{}`: the system opens the URL (iOS picks the app) |
 | `POST /app_state` | `{bundle_ids: [..]}` → `{states: {<id>: "not_running"\|"background"\|"foreground"\|"unknown"}}` |

@@ -2,7 +2,7 @@
 name: PhoneBridgeRunner
 options:
   deploymentTarget:
-    iOS: "16.4"
+    iOS: "17.0"
   createIntermediateGroups: true
 settings:
   base:

@@ -162,7 +162,7 @@ class RunnerScreenDriver(
 
         private val ACTIONABLE = setOf(
             "button", "cell", "link", "switch", "toggle", "slider", "stepper", "segmentedControl", "tab", "menuItem", "menuButton",
-            "popUpButton", "checkBox", "radioButton", "disclosureTriangle", "picker", "pickerWheel", "datePicker", "key",
+            "popUpButton", "checkBox", "radioButton", "disclosureTriangle", "picker", "pickerWheel", "datePicker", "icon",
             "textField", "secureTextField", "searchField", "textView", "colorWell", "incrementArrow", "decrementArrow",
         )
         private val EDITABLE = setOf("textField", "secureTextField", "searchField", "textView")

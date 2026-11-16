@@ -146,7 +146,8 @@ fun main(args: Array<String>) {
     val driver = RunnerScreenDriver(client) { appActions.apps().map { it.bundleId } }
     val monitor = RunnerMonitor(driver)
     val links = LinkOpener(driver)
-    val steps = ScreenStepRunner(driver)
+    val appLabel: suspend (String) -> String? = { id -> appActions.app(id)?.name }
+    val steps = ScreenStepRunner(driver, appLabel)
     appActions = IosAppActions(inventory, links, monitor::unavailableReason, runSteps = { s, app, ctx -> steps.run(s, app, ctx) })
 
     val plugins = BundledPlugins.load(log)
@@ -182,11 +183,7 @@ fun main(args: Array<String>) {
     )
     registry.registerAll(iosTools(appActions, driver, links, catalog, inventory.source))
     registry.registerAll(appActionTools(catalog))
-    try {
-        registry.registerAll(phoneUseTools(driver, { id -> appActions.app(id)?.name }, AwtScreenshotMarker()))
-    } catch (e: NotImplementedError) {
-        log("Phone use (screen_observe, ui_tap…) isn't in this build of the core yet; the other tools work.")
-    }
+    registry.registerAll(phoneUseTools(driver, appLabel, AwtScreenshotMarker()))
 
     val server = McpServer(
         registry = registry,
