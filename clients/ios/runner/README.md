@@ -1,13 +1,13 @@
-# PhoneBridge iOS runner
+# DroidHands iOS runner
 
-The part of PhoneBridge that runs on the iPhone (or simulator). It is an XCUITest bundle: while its one test,
-`PhoneBridgeRunnerTests/testRunBridge`, runs, it serves the runner protocol over HTTP on the phone and drives
+The part of DroidHands that runs on the iPhone (or simulator). It is an XCUITest bundle: while its one test,
+`DroidHandsRunnerTests/testRunBridge`, runs, it serves the runner protocol over HTTP on the phone and drives
 any app with Apple's UI-testing API: screenshot, accessibility tree of the app in front, tap, long press, swipe,
-type, Home and volume buttons, lock, launch an app, open a URL. The PhoneBridge iOS host on the Mac is its only
+type, Home and volume buttons, lock, launch an app, open a URL. The DroidHands iOS host on the Mac is its only
 client. The protocol is in [docs/IOS.md](../../../docs/IOS.md#runner-protocol-host--runner).
 
-`PhoneBridgeRunnerHost` is an empty app the UI test is attached to (Xcode requires one). It only says
-"PhoneBridge runner — keep this running"; the runner works whichever app is in front.
+`DroidHandsRunnerHost` is an empty app the UI test is attached to (Xcode requires one). It only says
+"DroidHands runner — keep this running"; the runner works whichever app is in front.
 
 ## Build and run
 
@@ -25,10 +25,10 @@ builds are signed ad hoc; device builds use automatic signing with your team, an
 appended so it doesn't collide with anyone else's. Normally the host (`scripts/ios-host.sh`) starts the runner for
 you with a fresh secret.
 
-By hand, in Xcode: `xcodegen generate`, open `PhoneBridgeRunner.xcodeproj`, and pass `TEST_RUNNER_PB_RUNNER_SECRET`
+By hand, in Xcode: `xcodegen generate`, open `DroidHandsRunner.xcodeproj`, and pass `TEST_RUNNER_PB_RUNNER_SECRET`
 (and optionally `TEST_RUNNER_PB_RUNNER_PORT`) in the environment of `xcodebuild test`.
 
-When the server is up the runner logs `PHONEBRIDGE_RUNNER_READY port=<port>`.
+When the server is up the runner logs `DROIDHANDS_RUNNER_READY port=<port>`.
 
 ## Security
 

@@ -116,7 +116,7 @@ export function sendPage(req: IncomingMessage, res: ServerResponse, status: numb
 /** A simple page with a heading, paragraphs and an optional hint. */
 export function messagePage(title: string, paragraphs: readonly (string | SafeHtml)[], extra?: SafeHtml): PageOptions {
   return {
-    title: `${title} · PhoneBridge`,
+    title: `${title} · DroidHands`,
     body: html`<h1>${title}</h1>${paragraphs.map((p) => html`<p>${p}</p>`)}${extra}`,
   };
 }

@@ -8,7 +8,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RELAY_DIR, freePort, main, onCleanup, start } from './runner.mjs';
 
-const APK_URL = 'https://downloads.example.com/phonebridge.apk';
+const APK_URL = 'https://downloads.example.com/droidhands.apk';
 
 await main('worker', async (settings) => {
   const port = await freePort();

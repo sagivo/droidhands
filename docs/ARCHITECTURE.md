@@ -1,4 +1,4 @@
-# PhoneBridge architecture
+# DroidHands architecture
 
 ```
 ┌──────────────┐  MCP (Streamable HTTP)   ┌───────────────┐  WebSocket tunnel   ┌──────────────────────────────────────────┐
@@ -76,7 +76,7 @@ plus a device that speaks the tunnel protocol. The relay and the agents don't ch
 ## App actions and plugins
 
 Every installed app gets a menu of actions ([PLUGINS.md](PLUGINS.md)). The plugin engine lives in
-core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
+core (`com.droidhands.core.plugins`) and knows no Android APIs:
 
 | Piece | Does |
 |---|---|
@@ -93,7 +93,7 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 
 | Component | Purpose |
 |---|---|
-| `PhoneBridgeApp` / `BridgeGraph` | Manual DI: settings, identity, `TokenManager`, `AuditLog`, `ToolRegistry`, `McpServer`, confirmation provider, transports. |
+| `DroidHandsApp` / `BridgeGraph` | Manual DI: settings, identity, `TokenManager`, `AuditLog`, `ToolRegistry`, `McpServer`, confirmation provider, transports. |
 | `BridgeService` | Foreground service (`specialUse`). Runs `RelayClient` and/or `LocalHttpServer`. A persistent notification shows status, with a Pause/Resume action. |
 | `BridgeAccessibilityService` | Reads the UI tree of any app, performs clicks, text entry, gestures, global actions and screenshots. Also exempts the app from background-activity-launch limits. |
 | `BridgeNotificationListener` | Mirrors active notifications. Replies through `RemoteInput`, triggers actions, dismisses. |
@@ -102,14 +102,14 @@ core (`dev.phonebridge.core.plugins`) and knows no Android APIs:
 | `UnlockPrompt` | "Unlock to continue": asks the user to unlock when a screen-based action arrives while the phone is locked. |
 | `PluginRepository` (`plugins/`) | App plugins: the repository's `plugins/<id>/plugin.yaml`, bundled at build time as `assets/plugins/<id>.yaml` and loaded lazily, plus local plugins (`files/local-plugins/<id>.yaml`, imported in Settings or pushed with `scripts/plugin-push.sh`) while *Settings → Developer → Local plugins* is on. |
 | `AndroidAppActions` (`tools/actions/`) | Core's `AppActionsPlatform`: `AppScanner` discovers what apps declare (standard intents, the intent filters of the app's own manifest read by `ManifestReader` / `BinaryXml` / `ManifestXml` and turned into `open_link` and `compose_<scheme>` by `DeclaredActions`, `shortcuts.xml` shortcuts and App Actions capabilities; cached per app version, rescanned when packages change); recipes of plugin actions are checked against the installed version (`ActionIntents.canStart`); `ActionIntents` starts intent and link recipes in an exported activity of the app itself, after app-access checks; `StepRunner` runs screen recipes on the screen tools' safety checks, confined to the app. |
-| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, Access (the grant editor shared with pairing and manual tokens: Everything or chosen apps and abilities, the ask-first switch), tool rules, app action rules grouped by app, active hours, expiry, revoke); Apps (every app with its integration and actions; per app: risks and parameters, *Block for all agents*, *Request a better integration*, *Create plugin draft*); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `phonebridge://configure` links. |
+| UI (`MainActivity`, Compose) | Onboarding wizard; Home (status, pending approvals and pairings, today's summary); Agents (per-agent usage chart, top tools, activity, Access (the grant editor shared with pairing and manual tokens: Everything or chosen apps and abilities, the ask-first switch), tool rules, app action rules grouped by app, active hours, expiry, revoke); Apps (every app with its integration and actions; per app: risks and parameters, *Block for all agents*, *Request a better integration*, *Create plugin draft*); Activity (filterable audit); Settings (connection, permissions & access, security: never-allow apps, hide one-time codes, revoke all; developer: local plugins). Handles `droidhands://configure` links. |
 | `AppDirectory` (`ui/apps/`) | The installed apps and their actions as the UI shows them (`AppListings`, built from `AppActionCatalog`), loaded once in the background and shared by the Apps tab, the app action rules and the readable names in the activity log and usage ("Spotify – Play music" for `com.spotify.music/play`). Never reachable by agents. |
 
 ## Phone use
 
 The screen tools (`tools/screen/`) are the part that needs no knowledge of any app or Android version, like browser
 use for web pages. `Observation` (`screen_observe`) combines the accessibility tree (`ScreenCapture`, with app
-access, PhoneBridge's own windows withheld and one-time codes masked) with a screenshot on which `ScreenMarks` /
+access, DroidHands's own windows withheld and one-time codes masked) with a screenshot on which `ScreenMarks` /
 `MarkPainter` box and number the actionable elements; the number is the element's ref. Each `ui_*` action captures a
 `ScreenSignature` before and after and reports the difference (`ScreenChange`), and `observe=true` appends a new
 observation. `ScreenSession` keeps each agent's refs and the size of its last screenshot, so points can be given in

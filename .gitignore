@@ -26,3 +26,4 @@ relay/data/
 
 # Agent worktrees
 .claude/
+bin/

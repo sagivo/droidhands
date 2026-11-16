@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// PhoneBridge iOS host (docs/IOS.md): the shared core running on the Mac for one iPhone or simulator, with the app
+// DroidHands iOS host (docs/IOS.md): the shared core running on the Mac for one iPhone or simulator, with the app
 // inventory from Apple's tools and the on-phone XCUITest runner for the screen. Run through scripts/ios-host.sh.
 
 plugins {
@@ -27,8 +27,8 @@ dependencies {
 }
 
 application {
-    mainClass.set("dev.phonebridge.ios.IosHostKt")
-    applicationName = "phonebridge-ios-host"
+    mainClass.set("com.droidhands.ios.IosHostKt")
+    applicationName = "droidhands-ios-host"
     // Screenshots are marked with java.awt off screen: never open a Dock icon or a window.
     applicationDefaultJvmArgs = listOf("-Djava.awt.headless=true", "-Dapple.awt.UIElement=true")
 }
@@ -40,7 +40,7 @@ tasks.named<JavaExec>("run") {
 }
 
 // The repository's reviewed app plugins (docs/PLUGINS.md), bundled as resources like the Android app's assets:
-// phonebridge/plugins/<id>.yaml plus an index, since a jar can't be listed.
+// droidhands/plugins/<id>.yaml plus an index, since a jar can't be listed.
 val repoPluginsDir: File = rootDir.resolve("../../plugins").normalize()
 val bundledPlugins = layout.buildDirectory.dir("generated/plugins")
 
@@ -50,7 +50,7 @@ val bundlePlugins = tasks.register("bundlePlugins") {
     inputs.dir(repoPluginsDir).withPropertyName("plugins").withPathSensitivity(PathSensitivity.RELATIVE)
     outputs.dir(bundledPlugins)
     doLast {
-        val out = bundledPlugins.get().asFile.resolve("phonebridge/plugins")
+        val out = bundledPlugins.get().asFile.resolve("droidhands/plugins")
         out.deleteRecursively()
         out.mkdirs()
         val names = repoPluginsDir.listFiles().orEmpty()

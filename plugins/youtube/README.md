@@ -12,4 +12,4 @@ Sources:
 Known limitations: `play_from_search` lets YouTube pick the video, and YouTube may show results or an ad first.
 
 YouTube Music is not covered: no source confirms which intents it handles. If it declares
-`MEDIA_PLAY_FROM_SEARCH`, PhoneBridge offers the discovered `play_from_search` action for it anyway.
+`MEDIA_PLAY_FROM_SEARCH`, DroidHands offers the discovered `play_from_search` action for it anyway.

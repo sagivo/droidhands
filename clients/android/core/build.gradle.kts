@@ -36,7 +36,7 @@ val pluginsDir: File = repoRoot.resolve("plugins")
 tasks.test {
     useJUnit()
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
-    systemProperty("phonebridge.pluginsDir", pluginsDir.absolutePath)
+    systemProperty("droidhands.pluginsDir", pluginsDir.absolutePath)
     inputs.dir(pluginsDir).withPropertyName("plugins").withPathSensitivity(PathSensitivity.RELATIVE)
     // PluginScaffoldScriptTest runs it.
     inputs.file(repoRoot.resolve("scripts/plugin-scaffold.sh")).withPropertyName("scaffoldScript").withPathSensitivity(PathSensitivity.RELATIVE)
@@ -48,7 +48,7 @@ tasks.register<JavaExec>("checkPlugins") {
     group = "verification"
     description = "Validates app plugins (docs/PLUGINS.md) and runs their examples. -Ppath=plugins/<id> checks one."
     classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("dev.phonebridge.core.plugins.PluginCheckKt")
+    mainClass.set("com.droidhands.core.plugins.PluginCheckKt")
     val target = providers.gradleProperty("path").orNull
         ?.let { p -> File(p).let { if (it.isAbsolute) it else repoRoot.resolve(p) } }
         ?: pluginsDir
@@ -61,17 +61,17 @@ tasks.register<JavaExec>("pluginTable") {
     group = "documentation"
     description = "Updates the plugin table in plugins/README.md (docs/PLUGINS.md). -Pcheck=true fails instead when it is stale."
     classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("dev.phonebridge.core.plugins.PluginTableKt")
+    mainClass.set("com.droidhands.core.plugins.PluginTableKt")
     val check = providers.gradleProperty("check").orNull?.toBoolean() == true
     args(listOfNotNull(pluginsDir.absolutePath, if (check) "--check" else null))
 }
 
-// Headless demo device for cross-language E2E tests (src/test/kotlin/dev/phonebridge/core/demo/DemoDevice.kt).
+// Headless demo device for cross-language E2E tests (src/test/kotlin/com/droidhands/core/demo/DemoDevice.kt).
 // Env: DEMO_POLICY, DEMO_CONFIRM, DEMO_CONFIRM_TIMEOUT_MS, DEMO_LOCAL_PORT, DEMO_RELAY_URL, DEMO_ACCESS_KEY,
 // DEMO_DEVICE_SECRET. Prints DEMO_TOKEN=... and DEMO_DEVICE_ID=... on stdout, then runs until killed.
 tasks.register<JavaExec>("runDemoDevice") {
     group = "application"
-    description = "Runs the PhoneBridge demo device for end-to-end tests."
+    description = "Runs the DroidHands demo device for end-to-end tests."
     classpath = sourceSets["test"].runtimeClasspath
-    mainClass.set("dev.phonebridge.core.demo.DemoDeviceKt")
+    mainClass.set("com.droidhands.core.demo.DemoDeviceKt")
 }

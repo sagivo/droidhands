@@ -1,6 +1,6 @@
 # WhatsApp
 
-* There is no built-in "send" action: PhoneBridge doesn't hard-code WhatsApp's screens. Agents open the chat with
+* There is no built-in "send" action: DroidHands doesn't hard-code WhatsApp's screens. Agents open the chat with
   `draft_message` and finish with phone use (`screen_observe`, `ui_tap` on Send), or reply to an incoming message
   with `notification_reply`.
 * `draft_message` uses WhatsApp's documented click-to-chat link, `https://wa.me/<number>?text=<text>`

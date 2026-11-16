@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Startup window theme: follows system dark mode; Compose draws everything else. -->
-    <style name="Theme.PhoneBridge" parent="@android:style/Theme.DeviceDefault.DayNight">
+    <style name="Theme.DroidHands" parent="@android:style/Theme.DeviceDefault.DayNight">
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
     </style>

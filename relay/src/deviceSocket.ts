@@ -75,7 +75,7 @@ export function acceptDeviceSocket(
       reject(
         'relay_full',
         CloseCode.RELAY_FULL,
-        'This relay is full right now. PhoneBridge keeps retrying; to connect now, use another relay or run your own.',
+        'This relay is full right now. DroidHands keeps retrying; to connect now, use another relay or run your own.',
       );
       logger.warn('relay full: refused a new device', { devices: registry.size, maxDevices: config.maxDevices });
       return;

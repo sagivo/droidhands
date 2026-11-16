@@ -56,11 +56,11 @@ export interface RelayConfig {
   readonly relaySecret: string | null;
   /** Directory for the persisted relay secret. null = do not persist (temporary secret). */
   readonly dataDir: string | null;
-  /** Directory the operator may put `phonebridge.apk` in, served at `/download/phonebridge.apk`. */
+  /** Directory the operator may put `droidhands.apk` in, served at `/download/droidhands.apk`. */
   readonly publicDir: string;
   /**
    * Where the setup page's Install button downloads the app, e.g. the latest GitHub release's
-   * `PhoneBridge.apk`. When set it wins over a file in [publicDir], and `/download/phonebridge.apk`
+   * `DroidHands.apk`. When set it wins over a file in [publicDir], and `/download/droidhands.apk`
    * redirects to it.
    */
   readonly apkUrl: string | null;

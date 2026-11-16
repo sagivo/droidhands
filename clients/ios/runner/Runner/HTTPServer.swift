@@ -38,7 +38,7 @@ final class HTTPServer {
     typealias Handler = (HTTPRequest, @escaping (HTTPResponse) -> Void) -> Void
 
     private let listener: NWListener
-    private let queue = DispatchQueue(label: "dev.phonebridge.runner.http")
+    private let queue = DispatchQueue(label: "com.droidhands.runner.http")
     private let secretDigest: SHA256.Digest
     private let handler: Handler
     private var connections: [ObjectIdentifier: HTTPConnection] = [:]
@@ -60,7 +60,7 @@ final class HTTPServer {
             switch state {
             case .ready: onState(.success(()))
             case .failed(let error): onState(.failure(error))
-            case .waiting(let error): NSLog("[PhoneBridgeRunner] listener waiting: %@", "\(error)")
+            case .waiting(let error): NSLog("[DroidHandsRunner] listener waiting: %@", "\(error)")
             default: break
             }
         }

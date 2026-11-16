@@ -27,7 +27,7 @@ enum PrivateXCTest {
             result = pids
         }
         if let exception {
-            NSLog("[PhoneBridgeRunner] active application lookup raised %@: %@", exception.name.rawValue, exception.reason ?? "")
+            NSLog("[DroidHandsRunner] active application lookup raised %@: %@", exception.name.rawValue, exception.reason ?? "")
             return nil
         }
         return result

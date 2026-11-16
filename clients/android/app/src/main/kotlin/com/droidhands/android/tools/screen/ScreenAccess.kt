@@ -1,0 +1,101 @@
+package com.droidhands.android.tools.screen
+
+import android.content.Context
+import com.droidhands.android.access.AppVisibility
+import com.droidhands.android.access.NodeRedaction
+import com.droidhands.android.access.SystemOverlay
+import com.droidhands.android.access.SystemSurfaces
+import com.droidhands.android.access.UiNode
+import com.droidhands.android.notify.AppLabels
+import com.droidhands.core.tools.CallContext
+import com.droidhands.core.tools.ToolException
+import com.droidhands.core.util.OneTimeCodes
+
+/**
+ * The calling agent's view of the screen (docs/SECURITY.md "Advanced controls") as applied by the screen tools: what
+ * they may show ([visibility]), the refusals they raise, whose element refs they use ([tokenId]) and whether one-time
+ * codes are masked ([redactor]). Built once per call with [of].
+ */
+class ScreenAccess private constructor(
+    private val context: Context,
+    private val call: CallContext,
+    val visibility: AppVisibility,
+) {
+    /** Whether any app is blocked for this agent (besides DroidHands itself). */
+    val restricted: Boolean get() = visibility.restricted
+
+    /** The calling token: element refs are kept per agent ([ScreenSession.refs]). */
+    val tokenId: String get() = call.tokenId
+
+    /**
+     * [OneTimeCodes.redact] when the user hides one-time codes ([CallContext.redactOneTimeCodes]), else null. Screen
+     * tools apply it to every node text they show or match ([ScreenCapture.capture], [redact]).
+     */
+    val redactor: ((String) -> String)? = if (call.redactOneTimeCodes) OneTimeCodes::redact else null
+
+    fun allows(pkg: String?): Boolean = visibility.allows(pkg)
+
+    /** [node] as this agent may see it: one-time codes masked when the user hides them. For shallow (refreshed) nodes. */
+    fun redact(node: UiNode): UiNode = redactor?.let { NodeRedaction.node(node, it) } ?: node
+
+    /**
+     * Throws if access was paused or this agent was revoked since the call began ([CallContext.ensureStillAllowed]).
+     * Call after every wait and right before each side effect.
+     */
+    suspend fun ensureStillAllowed() = call.ensureStillAllowed()
+
+    /** Throws the user's refusal for [pkg] unless it is allowed. Blocking (label lookup): call off the main thread. */
+    fun require(pkg: String?) {
+        if (pkg != null && !allows(pkg)) refuse(pkg)
+    }
+
+    /** Throws the refusal for the blocked [pkg] (worded by [com.droidhands.core.tools.AppAccess.require]), optionally after [prefix]. */
+    fun refuse(pkg: String, prefix: String? = null): Nothing {
+        val label = label(pkg)
+        try {
+            call.appAccess.require(pkg, label)
+        } catch (e: ToolException) {
+            throw if (prefix == null) e else ToolException("$prefix ${e.message}")
+        }
+        // AppAccess and the visibility rules agree by construction; this is only a safety net.
+        throw ToolException(listOfNotNull(prefix, blockedText(label)).joinToString(" "))
+    }
+
+    /** User-visible app name (cached). Blocking on first use per package. */
+    fun label(pkg: String): String = AppLabels.of(context, pkg)
+
+    companion object {
+        /** Visibility for the call [ctx]. Blocking PackageManager IPC at most once a minute: call off the main thread. */
+        fun of(context: Context, ctx: CallContext): ScreenAccess {
+            val access = ctx.appAccess
+            val own = context.packageName
+            val restricted = AppVisibility.isRestricted(access.mode, access.packages, access.neverAllow, own)
+            val visibility = if (!restricted) {
+                AppVisibility.UNRESTRICTED
+            } else {
+                AppVisibility(
+                    restricted = true,
+                    isAllowed = access::isAllowed,
+                    exempt = SystemSurfaces.packages(context),
+                    explicitlyBlocked = AppVisibility.explicitlyBlocked(access.mode, access.packages, access.neverAllow, own),
+                )
+            }
+            return ScreenAccess(context.applicationContext, ctx, visibility)
+        }
+
+        private fun blockedText(label: String) =
+            "This agent isn't allowed to use $label. Don't try to reach it another way. If it is needed, tell the user: they " +
+                "can allow it in DroidHands > Agents > (this agent) > Access."
+
+        /** Why screenshots are refused while [overlay] shows, for agents with app restrictions. */
+        fun overlayRefusal(overlay: SystemOverlay): String {
+            val next = when (overlay) {
+                SystemOverlay.LOCK_SCREEN -> "Ask the user to unlock the phone, or use notifications_list to read notifications."
+                SystemOverlay.RECENTS -> "Leave it first (ui_global_action back or home)."
+                else -> "Use notifications_list to read notifications (it leaves out blocked apps), or close it first with ui_global_action back."
+            }
+            return "Can't take a screenshot while ${overlay.description} is showing: it can show content from apps this agent " +
+                "may not access. $next"
+        }
+    }
+}

@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// TEST FIXTURE: impersonates WhatsApp's package name (com.whatsapp) so PhoneBridge's WhatsApp and
+// TEST FIXTURE: impersonates WhatsApp's package name (com.whatsapp) so DroidHands's WhatsApp and
 // notification tools can be exercised end-to-end on an emulator. Never install it on a real phone.
 // See ../README.md.
 plugins {

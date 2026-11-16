@@ -59,7 +59,7 @@ final class Bridge {
         }
         let leftover = IssueSink.take()
         let elapsed = Int(Date().timeIntervalSince(started) * 1000)
-        NSLog("[PhoneBridgeRunner] %@ %@ -> %d (%d ms)%@", request.method, request.path, response.status, elapsed,
+        NSLog("[DroidHandsRunner] %@ %@ -> %d (%d ms)%@", request.method, request.path, response.status, elapsed,
               leftover.isEmpty ? "" : " issues: \(leftover.joined(separator: " | "))")
         return response
     }

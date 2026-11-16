@@ -19,7 +19,7 @@ async function main(): Promise<void> {
     config = loadConfigFromEnv(process.env);
   } catch (err) {
     if (!(err instanceof ConfigError)) throw err;
-    process.stderr.write(`phonebridge-relay: invalid configuration: ${err.message}\n`);
+    process.stderr.write(`droidhands-relay: invalid configuration: ${err.message}\n`);
     process.exit(1);
   }
 
@@ -66,6 +66,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  process.stderr.write(`phonebridge-relay: failed to start: ${errorMessage(err)}\n`);
+  process.stderr.write(`droidhands-relay: failed to start: ${errorMessage(err)}\n`);
   process.exit(1);
 });

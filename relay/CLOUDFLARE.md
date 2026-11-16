@@ -1,4 +1,4 @@
-# PhoneBridge relay on Cloudflare Workers
+# DroidHands relay on Cloudflare Workers
 
 The relay also runs on [Cloudflare Workers](https://developers.cloudflare.com/workers/) with
 [Durable Objects](https://developers.cloudflare.com/durable-objects/): no server to run, TLS and a
@@ -76,7 +76,7 @@ npx wrangler secret put RELAY_ACCESS_KEY # paste the output of: openssl rand -ba
 npm run cf:deploy
 ```
 
-`cf:deploy` prints the relay's URL, `https://phonebridge-relay.<your-subdomain>.workers.dev`. Check
+`cf:deploy` prints the relay's URL, `https://droidhands-relay.<your-subdomain>.workers.dev`. Check
 it with `curl https://…/healthz` (`{"ok":true}`; a `500` names a missing or invalid setting), then
 open `https://…/setup` on the phone (with `#key=<RELAY_ACCESS_KEY>` appended if you set one).
 
@@ -102,7 +102,7 @@ them); secrets are set with `npx wrangler secret put <NAME>`. The variables are 
 | Variable | Default | Meaning |
 |---|---|---|
 | `PUBLIC_URL` | *(empty)* | The relay's public URL. Empty: the address each request was sent to. Set it when the relay has a custom domain, so all URLs it hands out use it. |
-| `APK_URL` | *(empty)* | Where the setup page's **Install PhoneBridge** button points (for example the APK of the latest GitHub release); `/download/phonebridge.apk` redirects there. Without it the page has no install button. |
+| `APK_URL` | *(empty)* | Where the setup page's **Install DroidHands** button points (for example the APK of the latest GitHub release); `/download/droidhands.apk` redirects there. Without it the page has no install button. |
 | `ALLOWED_ORIGINS` | *(empty)* | As on the Node relay: browser origins allowed to call the MCP endpoints. |
 | `SETUP_BANNER` | `false` | Log the setup link and a QR code once per Worker instance. Off by default: deployed logs are stored by Cloudflare, and the link contains `RELAY_ACCESS_KEY` if set. |
 | `HEARTBEAT_TIMEOUT_MS` | `75000` | A phone that sends heartbeats but was silent this long counts as offline (AI apps get `503 Device offline` at once). |
@@ -129,13 +129,13 @@ workers_dev = false   # one public URL, so every connection URL looks the same
 ```
 
 and set `PUBLIC_URL = "https://relay.example.com"` in `[vars]`, then `npm run cf:deploy`. (Or use the
-dashboard: **Workers & Pages › phonebridge-relay › Settings › Domains & Routes**.)
+dashboard: **Workers & Pages › droidhands-relay › Settings › Domains & Routes**.)
 
 ### Make release APKs use it
 
 Release builds bake in a default relay URL from the GitHub repository variable
-`PHONEBRIDGE_RELAY_URL`. Set it to your relay's URL (**Settings › Secrets and variables › Actions ›
-Variables**, or `gh variable set PHONEBRIDGE_RELAY_URL --body https://relay.example.com`), then cut a
+`DROIDHANDS_RELAY_URL`. Set it to your relay's URL (**Settings › Secrets and variables › Actions ›
+Variables**, or `gh variable set DROIDHANDS_RELAY_URL --body https://relay.example.com`), then cut a
 release. Phones that install that APK connect to your relay without any setup.
 
 ### Deploy from GitHub Actions
@@ -171,13 +171,13 @@ Clients see the same behavior; the conformance suite checks it. Operational diff
   they live in the phone's object. Cloudflare's own DDoS protection sits in front. Use a long random
   `RELAY_ACCESS_KEY` (as `openssl rand` makes): guessing is then hopeless at any rate.
 * Phones must send `?deviceId=` on the device URL. Apps from before that change are refused with
-  "update the PhoneBridge app" (close code `4002`, so they stop retrying).
+  "update the DroidHands app" (close code `4002`, so they stop retrying).
 * `pair_complete` is sent when the token is handed out (a Worker cannot see whether the response
   reached the AI app); the phone's 15-minute cleanup of unused tokens still applies.
 * Pending pairings and undelivered pairing notices are kept in the phone's object storage, not only in
   memory, so they survive the object being unloaded.
 * There is no startup banner (see `SETUP_BANNER`), no graceful shutdown (deploys restart objects), and
-  no file system (`APK_URL` replaces `public/phonebridge.apk`).
+  no file system (`APK_URL` replaces `public/droidhands.apk`).
 * Before its hello a socket is limited per frame (16 KiB), not per byte as it arrives. Locally,
   `wrangler dev` keeps the TCP connection of a socket that never sent anything open after closing it
   with `4008`; devices act on the close frame, so this only shows up in tools that wait for TCP.

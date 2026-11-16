@@ -1,11 +1,11 @@
-# PhoneBridge on iPhone
+# DroidHands on iPhone
 
-PhoneBridge gives agents the same three layers on iPhone as on Android, from the same core, with the same tool
+DroidHands gives agents the same three layers on iPhone as on Android, from the same core, with the same tool
 names ([TOOLS.md](TOOLS.md)):
 
 1. **Every app on the phone**: `apps_list`, `app_open`, read from the phone's own app inventory.
 2. **What each app declares it can do**: `app_actions_list` / `app_action_run`, built at run time from the
-   installed app's `Info.plist`, entitlements and App Intents metadata, never from a list kept by PhoneBridge.
+   installed app's `Info.plist`, entitlements and App Intents metadata, never from a list kept by DroidHands.
 3. **Phone use** for everything else: `screen_observe` (a screenshot with numbered boxes plus the actionable
    elements), `ui_tap`, `ui_type`, `ui_scroll`, `ui_swipe`, `ui_global_action`. The agent looks and decides where
    to tap.
@@ -16,10 +16,10 @@ iOS gives an App Store app no way to list other apps, read their declarations, s
 The one channel Apple provides for all four is UI testing: an XCUITest runner can screenshot the screen, read the
 accessibility tree of any app, tap, type, swipe, launch apps and open URLs. Apple's developer tools on a Mac can list
 installed apps with their `Info.plist`. Every iPhone automation tool (Xcode UI tests, Appium, Maestro) uses this
-channel. PhoneBridge uses it too:
+channel. DroidHands uses it too:
 
 ```
-┌──────────┐  MCP   ┌───────┐  tunnel  ┌──────────── Mac: PhoneBridge iOS host (clients/ios/host) ────────────┐
+┌──────────┐  MCP   ┌───────┐  tunnel  ┌──────────── Mac: DroidHands iOS host (clients/ios/host) ────────────┐
 │ AI agent │ ─────► │ relay │ ◄─────── │ the same core as Android: MCP server, tokens, grant, policy, audit,  │
 └──────────┘        └───────┘          │ relay client, local server, plugins, app actions, phone-use tools   │
                                        │                                                                       │
@@ -28,7 +28,7 @@ channel. PhoneBridge uses it too:
                                        │ RunnerScreenDriver ── HTTP + secret ──┐                               │
                                        └───────────────────────────────────────┼───────────────────────────────┘
                                                                                ▼
-                                       ┌──────── iPhone: PhoneBridge runner (clients/ios/runner) ──────┐
+                                       ┌──────── iPhone: DroidHands runner (clients/ios/runner) ──────┐
                                        │ an XCUITest bundle: screenshot, accessibility tree of the app  │
                                        │ in front, tap, type, swipe, Home, launch app, open URL         │
                                        └────────────────────────────────────────────────────────────────┘
@@ -39,7 +39,7 @@ What is shared and what is per platform:
 | | Android | iOS |
 |---|---|---|
 | MCP, tokens, grant, policy, audit, transports, plugins, `app_actions_*` | core | core (same code) |
-| Phone-use tools | Android app (`tools/screen`) | core `dev.phonebridge.core.screen` over a `ScreenDriver` |
+| Phone-use tools | Android app (`tools/screen`) | core `com.droidhands.core.screen` over a `ScreenDriver` |
 | Screen access | AccessibilityService | runner (XCUITest) |
 | App list | PackageManager | simctl / devicectl / pymobiledevice3 |
 | What apps declare | `AndroidManifest.xml`, `shortcuts.xml` | `Info.plist`, entitlements, `Metadata.appintents` |
@@ -55,7 +55,7 @@ Everything below is read from the installed version of each app, every time it c
 | Action id / `declares` key | Read from | Runs as |
 |---|---|---|
 | `open` | always | launch the app |
-| `open_link` | `CFBundleURLTypes` schemes, and `applinks:` domains in the `com.apple.developer.associated-domains` entitlement | `url_open` pinned to the app: only links with a scheme the app declares, or `https` on its declared domains. The result says which app came to the front, since iOS, not PhoneBridge, picks the app for a link |
+| `open_link` | `CFBundleURLTypes` schemes, and `applinks:` domains in the `com.apple.developer.associated-domains` entitlement | `url_open` pinned to the app: only links with a scheme the app declares, or `https` on its declared domains. The result says which app came to the front, since iOS, not DroidHands, picks the app for a link |
 | `declares.app_intents` | `Metadata.appintents/extract.actionsdata` in the app bundle (when the inventory can read the bundle) | not runnable by other apps on iOS: Siri, Spotlight and Shortcuts run them. Listed with their titles, parameters and App Shortcut phrases so the agent knows the app can do it, and does it with phone use |
 | `declares.quick_actions` | `UIApplicationShortcutItems` | Home Screen icon menu (phone use: long-press the icon) |
 | `declares.document_types` | `CFBundleDocumentTypes` | informational |
@@ -104,7 +104,7 @@ scripts/ios-host.sh --device <udid>      # a USB or Wi-Fi paired iPhone in Devel
 ```
 
 The host prints the connection URL; pairing and approvals appear as dialogs on the Mac. State (device identity,
-tokens, audit log) lives in `~/.phonebridge/ios/<device>/`.
+tokens, audit log) lives in `~/.droidhands/ios/<device>/`.
 
 Limits on iPhone, each reported to the agent in plain words when it applies: the Mac must be on and the phone
 reachable (USB, or the same Wi-Fi); a locked iPhone can't be operated; screens that block capture (passwords, some

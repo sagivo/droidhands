@@ -1,4 +1,4 @@
-# PhoneBridge design system
+# DroidHands design system
 
 The Android app follows one small design system so every screen looks and behaves the same. It
 borrows from apps known for calm, trustworthy UX:
@@ -44,7 +44,7 @@ blocks on a screen, 12dp inside a card, and 8dp between buttons.
 | Screen | `ScreenScaffold`. Tabs pass `large = true` (big collapsing title); pushed pages pass `onBack` |
 | Group of settings or items | `ListSection(title, footer, action)` holding `ListRow`s separated by `ListDivider()` (`ListDivider(IconRowInset)` after rows with a leading tile) |
 | Row | `ListRow(title, subtitle, leading, trailing, onClick)`. It shows a chevron by itself when it navigates. `SwitchRow` for toggles, `RowValue` for a trailing value |
-| Row icon | `IconTile(icon, Accents.X)`. Same meaning, same color: Indigo for PhoneBridge and connections, Green for allowed/running, Orange for limits/warnings, Red for danger, Gray for info/neutral, Blue/Teal/Purple/Pink to tell list entries apart |
+| Row icon | `IconTile(icon, Accents.X)`. Same meaning, same color: Indigo for DroidHands and connections, Green for allowed/running, Orange for limits/warnings, Red for danger, Gray for info/neutral, Blue/Teal/Purple/Pink to tell list entries apart |
 | App or agent without an icon | `Monogram(name)` |
 | Free-standing card | `AppCard` (white, borderless, 16dp corners, optional `onClick`) |
 | Hero status / empty state icon | `IconBadge(icon, color)` (tinted circle) |

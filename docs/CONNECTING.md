@@ -1,6 +1,6 @@
 # How agents reach your phone
 
-An AI agent talks to PhoneBridge over MCP, so it needs a way to reach the phone. PhoneBridge offers a
+An AI agent talks to DroidHands over MCP, so it needs a way to reach the phone. DroidHands offers a
 few **routes**. You can use more than one at a time, for example the relay for claude.ai and
 Tailscale for Claude Code on your laptop. Whatever the route, every agent still has to be allowed on
 the phone, where you choose its access once; everything it does is checked against that access and
@@ -8,9 +8,9 @@ logged there ([SECURITY.md](SECURITY.md)).
 
 | Route | Who can reach the phone | Privacy | claude.ai / ChatGPT? | Setup |
 |---|---|---|---|---|
-| **PhoneBridge relay** (default) | Agents anywhere, with your connection URL | HTTPS to the relay. Whoever runs the relay could see the requests passing through. | Yes | None: the app is online after the wizard |
+| **DroidHands relay** (default) | Agents anywhere, with your connection URL | HTTPS to the relay. Whoever runs the relay could see the requests passing through. | Yes | None: the app is online after the wizard |
 | **Tailscale** (private, no relay) | Only your own devices on your tailnet | No relay. Tailscale (WireGuard) encrypts the traffic end to end. | No | Tailscale on the phone and the computer, then one switch |
-| **Your own relay** | Agents anywhere (or only your tailnet, see below) | Only you handle the requests | Yes, when it has a public HTTPS address | Run the relay, scan its QR code in PhoneBridge |
+| **Your own relay** | Agents anywhere (or only your tailnet, see below) | Only you handle the requests | Yes, when it has a public HTTPS address | Run the relay, scan its QR code in DroidHands |
 | Same Wi-Fi (advanced) | Anyone on the same network | Unencrypted `http://` | No | Settings › Local server › All networks |
 | USB (developers) | The computer the phone is plugged into | Stays on the cable | No | `adb forward` |
 
@@ -18,7 +18,7 @@ In the app, the routes are on the onboarding **Connect** step (under **More ways
 **Settings › How agents reach this phone**, which lists the connection URL of every route that is
 on, with **Copy** and **Share**. Home shows them too.
 
-## PhoneBridge relay (default)
+## DroidHands relay (default)
 
 Nothing to do. On first run the app connects to the relay it comes with and the Connect step says
 **You're online**. Tap **Connect an AI agent**, paste the connection URL
@@ -43,9 +43,9 @@ as well if you use them.
 
 1. Install Tailscale on the phone (the app offers **Get Tailscale**, which opens the Play Store) and on
    your computer, and sign in to both with the same account.
-2. In PhoneBridge: Connect step › **More ways to connect** › Tailscale › **Use Tailscale**, or
+2. In DroidHands: Connect step › **More ways to connect** › Tailscale › **Use Tailscale**, or
    *Settings › How agents reach this phone* › **Tailscale (private, no relay)** › **Save**.
-3. PhoneBridge shows the URL, for example `http://pixel-8.tail1234.ts.net:8765/mcp` (the phone's
+3. DroidHands shows the URL, for example `http://pixel-8.tail1234.ts.net:8765/mcp` (the phone's
    MagicDNS name, or its `100.x.y.z` address when MagicDNS is off). Paste it into your agent, then tap
    **Allow** on the phone. If your version of the app has no one-tap connect on this route yet,
    create a token instead (**Use a token instead** on the *Connect an AI agent* page) and use the
@@ -57,19 +57,19 @@ as well if you use them.
    | Codex | Add a streamable-HTTP MCP server with that URL, e.g. `[mcp_servers.phone]` with `url = "…"` in `~/.codex/config.toml` |
    | Claude Desktop | Through `mcp-remote` in `claude_desktop_config.json` (it runs on your computer). Its *Connectors* page connects from Anthropic's servers, which can't reach your tailnet. |
 
-While Tailscale is off on the phone, PhoneBridge shows **Waiting for Tailscale** and listens
+While Tailscale is off on the phone, DroidHands shows **Waiting for Tailscale** and listens
 nowhere; it starts again by itself when Tailscale reconnects, and follows the address if it changes.
 The URL is `http://`, which is fine here: Tailscale encrypts everything between your devices.
 
 Good to know:
 
-* PhoneBridge listens **only** on the phone's tailnet address, not on Wi-Fi or mobile data, and not
+* DroidHands listens **only** on the phone's tailnet address, not on Wi-Fi or mobile data, and not
   on `127.0.0.1` (so `adb forward` doesn't reach it in this mode).
-* If Tailscale is on but PhoneBridge still waits, check that PhoneBridge isn't excluded in Tailscale's
+* If Tailscale is on but DroidHands still waits, check that DroidHands isn't excluded in Tailscale's
   app settings (split tunneling): excluded apps can't use the tailnet.
-* Mobile carriers sometimes give phones addresses in the same `100.64.0.0/10` range. PhoneBridge only
+* Mobile carriers sometimes give phones addresses in the same `100.64.0.0/10` range. DroidHands only
   uses one that belongs to a VPN (Tailscale), never the carrier's.
-* PhoneBridge listens on the phone's IPv4 tailnet address. Clients that try MagicDNS's IPv6 address
+* DroidHands listens on the phone's IPv4 tailnet address. Clients that try MagicDNS's IPv6 address
   first fall back to IPv4 by themselves.
 
 ## Your own relay
@@ -84,14 +84,14 @@ long as it has an HTTPS address they can reach.
 Then point the phone at it. The relay prints a **setup link** and its QR code when it starts (its
 setup page, `https://<relay>/setup`, shows them too):
 
-* **Scan QR code in PhoneBridge**: in *More ways to connect* › Your own relay, or *Settings › How
+* **Scan QR code in DroidHands**: in *More ways to connect* › Your own relay, or *Settings › How
   agents reach this phone* › Relay, tap **Scan QR code** and point the camera at the code. The
-  scanner is Google Play services', so PhoneBridge needs no camera permission; on phones without
+  scanner is Google Play services', so DroidHands needs no camera permission; on phones without
   Google Play services the button is hidden.
-* Or open the setup link on the phone and tap **Open in PhoneBridge**, or paste the setup link (or
+* Or open the setup link on the phone and tap **Open in DroidHands**, or paste the setup link (or
   just the relay's address) into the Relay URL field there.
 
-Either way PhoneBridge shows **Connect to relay?** with the relay's address before it changes
+Either way DroidHands shows **Connect to relay?** with the relay's address before it changes
 anything. A QR code that isn't a relay setup link (another web page, an agent's `/mcp` connection
 URL, `javascript:` and other schemes) is refused. Agents connected through the previous relay need
 the new connection URL.
@@ -107,7 +107,7 @@ the new connection URL.
 It checks that Tailscale is installed and logged in, runs the relay from `relay/` (Node.js 20+, or
 `--docker`) on `127.0.0.1`, publishes it at `https://<your-computer>.<tailnet>.ts.net` with
 `tailscale serve`, and prints the setup link and QR code for the phone. The relay keeps its secret in
-`~/.phonebridge-relay`, so connected agents keep working after a restart.
+`~/.droidhands-relay`, so connected agents keep working after a restart.
 
 * **Private (default)**: only devices on your tailnet reach the relay, so the phone needs the
   Tailscale app too. Agents on your own computers work; claude.ai and ChatGPT don't.
@@ -130,7 +130,7 @@ still needs a token, but prefer Tailscale.
 
 ## USB (developers)
 
-*Local server (advanced)* with **Listen on › This phone only** (the default): PhoneBridge listens on
+*Local server (advanced)* with **Listen on › This phone only** (the default): DroidHands listens on
 `127.0.0.1`. On the computer the phone is plugged into, run `adb forward tcp:8765 tcp:8765` and use
 `http://127.0.0.1:8765/mcp` with a token. [GETTING_STARTED.md](GETTING_STARTED.md#developer-setup-over-usb-scriptssetup-phonesh)
 sets up a developer build this way.

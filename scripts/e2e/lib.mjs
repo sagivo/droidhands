@@ -1,4 +1,4 @@
-// Minimal MCP (Streamable HTTP, stateless) client + adb helpers for PhoneBridge E2E tests.
+// Minimal MCP (Streamable HTTP, stateless) client + adb helpers for DroidHands E2E tests.
 // No dependencies: Node >= 20 (global fetch).
 import { execFileSync } from 'node:child_process';
 
@@ -41,7 +41,7 @@ export class McpClient {
     const result = await this.rpc('initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
-      clientInfo: { name: 'phonebridge-e2e', version: '1.0' },
+      clientInfo: { name: 'droidhands-e2e', version: '1.0' },
     });
     await this.post({ jsonrpc: '2.0', method: 'notifications/initialized' });
     return result;

@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the PhoneBridge app, an app plugin or the relay doesn't work as it should.
+description: Something in the DroidHands app, an app plugin or the relay doesn't work as it should.
 labels: ["bug"]
 body:
   - type: markdown
@@ -33,7 +33,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: PhoneBridge version
+      label: DroidHands version
       description: Settings → About in the app.
       placeholder: "0.1.0"
     validations:
@@ -70,7 +70,7 @@ body:
     attributes:
       label: Activity log or logs (optional)
       description: >-
-        The Activity entry (tap it for details), or `adb logcat` lines tagged PhoneBridge. Remove anything personal first.
+        The Activity entry (tap it for details), or `adb logcat` lines tagged DroidHands. Remove anything personal first.
       render: text
   - type: checkboxes
     id: checks

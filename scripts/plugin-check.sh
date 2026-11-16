@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validates PhoneBridge app plugins and runs their examples, with no phone needed (docs/PLUGINS.md §7, §10).
+# Validates DroidHands app plugins and runs their examples, with no phone needed (docs/PLUGINS.md §7, §10).
 #
 #   ./scripts/plugin-check.sh                  # every plugin in plugins/
 #   ./scripts/plugin-check.sh plugins/myapp    # one plugin folder (or a plugin.yaml)

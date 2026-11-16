@@ -41,7 +41,7 @@ const SINGLE_PARAMS = [
   'scope',
 ] as const;
 
-const RECONNECT_HINT = "Remove PhoneBridge from your AI app's connectors, then add your connection URL again.";
+const RECONNECT_HINT = "Remove DroidHands from your AI app's connectors, then add your connection URL again.";
 
 /** An error page: status, what went wrong and what to do instead. */
 export interface PairingPageError {
@@ -114,7 +114,7 @@ export function checkAuthorizeRequest(q: URLSearchParams, relaySecret: Buffer): 
   const codeChallenge = q.get('code_challenge');
   if (q.get('code_challenge_method') !== 'S256' || codeChallenge === null || !CODE_CHALLENGE_REGEX.test(codeChallenge)) {
     return fail(
-      'Your AI app did not use PKCE with S256, which PhoneBridge requires to keep your phone safe.',
+      'Your AI app did not use PKCE with S256, which DroidHands requires to keep your phone safe.',
       'Update the app, or use an MCP client that supports the MCP authorization spec.',
     );
   }
@@ -135,7 +135,7 @@ export function foreignResourceError(base: string): PairingPageError {
   return {
     status: 400,
     problem: `The connection URL your AI app uses does not belong to this relay (${base}).`,
-    hint: `Copy your connection URL again from the PhoneBridge app; it looks like ${base}/d/…/mcp.`,
+    hint: `Copy your connection URL again from the DroidHands app; it looks like ${base}/d/…/mcp.`,
   };
 }
 
@@ -144,8 +144,8 @@ export const NO_RESOURCE_ERROR: PairingPageError = {
   status: 400,
   problem: "Your AI app didn't say which phone to connect to.",
   hint:
-    'Add the connection URL shown in the PhoneBridge app (it ends with /d/…/mcp), not the relay address. ' +
-    'If you did, update your AI app: PhoneBridge needs a client that supports the MCP authorization spec ' +
+    'Add the connection URL shown in the DroidHands app (it ends with /d/…/mcp), not the relay address. ' +
+    'If you did, update your AI app: DroidHands needs a client that supports the MCP authorization spec ' +
     '(2025-06-18 or later), which sends the connection URL as the "resource".',
 };
 
@@ -309,7 +309,7 @@ function selectDevice(
       res,
       400,
       "Several phones use this relay, and your AI app didn't say which one to connect to.",
-      'Add the connection URL shown in the PhoneBridge app (it ends with /d/…/mcp) instead of the relay address.',
+      'Add the connection URL shown in the DroidHands app (it ends with /d/…/mcp) instead of the relay address.',
     );
   }
   return null;

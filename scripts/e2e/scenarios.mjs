@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// End-to-end use-case scenarios against a real PhoneBridge device (emulator + fixture apps).
+// End-to-end use-case scenarios against a real DroidHands device (emulator + fixture apps).
 // usage: PB_URL=http://127.0.0.1:8787/mcp PB_TOKEN=pb1... node scripts/e2e/scenarios.mjs [filter]
 // App-action scenarios ("app actions: ..."): the local-plugin one pushes clients/android/fixtures/plugins/fakemail_test
 // with scripts/plugin-push.sh (debug build) and needs Settings > Developer > Local plugins on; it skips otherwise.
-// PB_BLOCKED_APP=<package> (an app blocked for this token) adds a check with that app; PhoneBridge itself is always used.
+// PB_BLOCKED_APP=<package> (an app blocked for this token) adds a check with that app; DroidHands itself is always used.
 // PB_APPROVE=manual: don't tap approval prompts with uiautomator (it suspends accessibility services while it runs).
 import { execFileSync } from 'node:child_process';
 import { McpClient, Runner, adb, shell, sleep, waitFor, fixtureEvents, assert, skip } from './lib.mjs';
@@ -17,7 +17,7 @@ const run = new Runner();
 const step = (name, fn) => (!only || name.toLowerCase().includes(only.toLowerCase()) ? run.step(name, fn) : null);
 
 const WA = 'com.whatsapp';
-const MAIL = 'dev.phonebridge.fixture.mail';
+const MAIL = 'com.droidhands.fixture.mail';
 const ok = (r, what) => { assert(!r.isError, `${what} returned error: ${r.text}`); return r; };
 // Device and host clocks differ slightly; allow 5 s of skew.
 const lastEvent = (pkg, ev, since) => fixtureEvents(pkg).filter((e) => e.event === ev && e.ts >= since - 5000).pop();
@@ -227,19 +227,19 @@ await step('location_get after a GPS fix', async () => {
 
 // ---- App actions (docs/PLUGINS.md): apps_list -> app_actions_list -> app_action_run ----
 
-const BRIDGE = 'dev.phonebridge.android';
+const BRIDGE = 'com.droidhands.android';
 const PLUGIN_PUSH = new URL('../plugin-push.sh', import.meta.url).pathname;
 const FAKEMAIL_PLUGIN = new URL('../../clients/android/fixtures/plugins/fakemail_test', import.meta.url).pathname;
 const UI = new URL('./ui.py', import.meta.url).pathname;
 const ui = (...a) => execFileSync('timeout', ['-k', '2', '60', 'python3', '-I', UI, ...a], { encoding: 'utf8' }).trim();
 
 /**
- * Approves the pending PhoneBridge prompt whose title contains `title`: opens it from the shade, then taps Allow.
+ * Approves the pending DroidHands prompt whose title contains `title`: opens it from the shade, then taps Allow.
  * The prompt's countdown can keep uiautomator from reading the shade; then it asks for a tap on the phone.
  */
 async function approveOnPhone(title) {
   shell('cmd statusbar expand-notifications');
-  // uiautomator suspends every accessibility service (PhoneBridge's too) while it reads the screen, which can make
+  // uiautomator suspends every accessibility service (DroidHands's too) while it reads the screen, which can make
   // the approved action fail. PB_APPROVE=manual leaves the tap to a person (or a screenshot-and-tap helper).
   if (process.env.PB_APPROVE === 'manual') {
     console.log(`    → tap Allow on the phone ("${title}")`);
@@ -281,7 +281,7 @@ await step('app actions: app_actions_list(query) finds which app can do somethin
   const r = ok(await c.call('app_actions_list', { query: 'share text', limit: 20 }), 'app_actions_list');
   const matches = r.json?.matches || [];
   assert(matches.some((m) => m.action === 'share_text'), r.text.slice(0, 500));
-  assert(matches.every((m) => m.package !== BRIDGE), 'PhoneBridge itself must never be listed');
+  assert(matches.every((m) => m.package !== BRIDGE), 'DroidHands itself must never be listed');
   assert(/app_action_run/.test(r.json.how_to_run || ''), r.text.slice(0, 300));
   return matches.slice(0, 5).map((m) => `${m.app}/${m.action}`).join(', ');
 });
@@ -355,7 +355,7 @@ await step('app actions: a recipe that fails on this app version is recorded (he
 });
 
 await step('app actions: blocked apps are refused and never listed', async () => {
-  // PhoneBridge itself is on every agent's never-allow list.
+  // DroidHands itself is on every agent's never-allow list.
   const run = await c.call('app_action_run', { app: BRIDGE, action: 'open' });
   assert(run.isError && /blocked|never-allow/i.test(run.text), run.text);
   const list = await c.call('app_actions_list', { app: BRIDGE });

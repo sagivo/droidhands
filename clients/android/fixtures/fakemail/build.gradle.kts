@@ -1,6 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// TEST FIXTURE: a minimal email app so PhoneBridge's "send email" / "reply to email" flows can be
+// TEST FIXTURE: a minimal email app so DroidHands's "send email" / "reply to email" flows can be
 // exercised end-to-end on an emulator (no Google account needed). See ../README.md.
 plugins {
     id("com.android.application")
@@ -8,12 +8,12 @@ plugins {
 }
 
 android {
-    // namespace == applicationId, so view ids resolve to "dev.phonebridge.fixture.mail:id/<name>".
-    namespace = "dev.phonebridge.fixture.mail"
+    // namespace == applicationId, so view ids resolve to "com.droidhands.fixture.mail:id/<name>".
+    namespace = "com.droidhands.fixture.mail"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.phonebridge.fixture.mail"
+        applicationId = "com.droidhands.fixture.mail"
         minSdk = 30
         targetSdk = 35
         versionCode = 1

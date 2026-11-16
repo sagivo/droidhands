@@ -14,7 +14,7 @@ actions:
     description: >-
       Places a phone call to a phone number (to) or a contact saved on the phone (contact), using the built-in
       phone_call tool. The user may have to approve it on the phone; the prompt shows the resolved name and
-      number. PhoneBridge can't speak on the call or tell whether it was answered (call_log_list shows it
+      number. DroidHands can't speak on the call or tell whether it was answered (call_log_list shows it
       afterwards). If several contacts match the name, nothing happens and the candidates are returned. Codes
       with * or # are refused.
     keywords: [phone, ring, dial, call, voice, telephone]

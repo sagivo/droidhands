@@ -54,9 +54,9 @@ test('reads every variable', () => {
     RATE_LIMIT_REQUESTS_PER_MIN: '100',
     RATE_LIMIT_AUTH_FAILURES_PER_MIN: '5',
     RELAY_SECRET: ' a-relay-secret-that-is-long-enough-1234 ',
-    DATA_DIR: '/var/lib/phonebridge',
+    DATA_DIR: '/var/lib/droidhands',
     PUBLIC_DIR: '/srv/public',
-    APK_URL: ' https://github.com/acme/phonebridge/releases/latest/download/PhoneBridge.apk ',
+    APK_URL: ' https://github.com/acme/droidhands/releases/latest/download/DroidHands.apk ',
     SETUP_BANNER: 'off',
   });
   assert.equal(config.port, 9000);
@@ -78,9 +78,9 @@ test('reads every variable', () => {
   assert.equal(config.rateLimitRequestsPerMin, 100);
   assert.equal(config.rateLimitAuthFailuresPerMin, 5);
   assert.equal(config.relaySecret, ' a-relay-secret-that-is-long-enough-1234 ', 'relay secret is used verbatim');
-  assert.equal(config.dataDir, '/var/lib/phonebridge');
+  assert.equal(config.dataDir, '/var/lib/droidhands');
   assert.equal(config.publicDir, '/srv/public');
-  assert.equal(config.apkUrl, 'https://github.com/acme/phonebridge/releases/latest/download/PhoneBridge.apk');
+  assert.equal(config.apkUrl, 'https://github.com/acme/droidhands/releases/latest/download/DroidHands.apk');
   assert.equal(config.setupBanner, false);
 });
 
@@ -122,9 +122,9 @@ test('invalid values are rejected with the variable name', () => {
     [{ MAX_PENDING_HANDSHAKES_PER_IP: '0' }, /MAX_PENDING_HANDSHAKES_PER_IP/],
     [{ MAX_DEVICES: '0' }, /MAX_DEVICES/],
     [{ MAX_DEVICES: 'many' }, /MAX_DEVICES/],
-    [{ APK_URL: 'phonebridge.apk' }, /APK_URL/],
-    [{ APK_URL: 'ftp://example.com/PhoneBridge.apk' }, /APK_URL/],
-    [{ APK_URL: 'https://user:pw@example.com/PhoneBridge.apk' }, /APK_URL/],
+    [{ APK_URL: 'droidhands.apk' }, /APK_URL/],
+    [{ APK_URL: 'ftp://example.com/DroidHands.apk' }, /APK_URL/],
+    [{ APK_URL: 'https://user:pw@example.com/DroidHands.apk' }, /APK_URL/],
     [{ APK_URL: 'javascript:alert(1)' }, /APK_URL/],
   ];
   for (const [env, pattern] of cases) {

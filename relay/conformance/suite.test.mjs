@@ -1,4 +1,4 @@
-// Black-box conformance suite for PhoneBridge relays (docs/PROTOCOL.md §2-5). Runs against any
+// Black-box conformance suite for DroidHands relays (docs/PROTOCOL.md §2-5). Runs against any
 // relay base URL with a scripted fake device:
 //
 //   RELAY_URL=http://127.0.0.1:8787 node --test conformance/suite.test.mjs
@@ -297,7 +297,7 @@ test('keepalive: hb → hb_ack, ping → pong with the same t', async (t) => {
 
 test('connector: 401 without a token or with another device token names the resource metadata', async (t) => {
   const d = await device(t);
-  const challenge = `Bearer realm="phonebridge", resource_metadata="${resourceMetadataUrl(d.deviceId)}"`;
+  const challenge = `Bearer realm="droidhands", resource_metadata="${resourceMetadataUrl(d.deviceId)}"`;
   for (const token of [undefined, tokenFor(newIdentity().deviceId), 'pb1.bad']) {
     const res = await postMcp(connectorUrl(d.deviceId), { token });
     assert.equal(res.status, 401);
@@ -307,15 +307,15 @@ test('connector: 401 without a token or with another device token names the reso
   assert.equal(await d.noFrame('request'), true);
   const plain = await postMcp(`${base}/mcp`);
   assert.equal(plain.status, 401);
-  assert.equal(plain.headers['www-authenticate'], 'Bearer realm="phonebridge"');
+  assert.equal(plain.headers['www-authenticate'], 'Bearer realm="droidhands"');
 });
 
 test('connector: a 401 from the device gets the resource_metadata challenge', async (t) => {
   const d = await device(t);
-  d.serve(() => ({ status: 401, body: UNAUTHORIZED_BODY, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer realm="phonebridge"' } }));
+  d.serve(() => ({ status: 401, body: UNAUTHORIZED_BODY, headers: { 'content-type': 'application/json', 'www-authenticate': 'Bearer realm="droidhands"' } }));
   const res = await postMcp(connectorUrl(d.deviceId), { token: tokenFor(d.deviceId) });
   assert.equal(res.status, 401);
-  assert.equal(res.headers['www-authenticate'], `Bearer realm="phonebridge", resource_metadata="${resourceMetadataUrl(d.deviceId)}"`);
+  assert.equal(res.headers['www-authenticate'], `Bearer realm="droidhands", resource_metadata="${resourceMetadataUrl(d.deviceId)}"`);
 });
 
 // ---- CORS and Origin --------------------------------------------------------------------------
@@ -365,7 +365,7 @@ test('discovery: protected resource and authorization server metadata', async ()
   assert.equal(resource.resource, connectorUrl(id));
   assert.deepEqual(resource.authorization_servers, [base]);
   assert.deepEqual(resource.bearer_methods_supported, ['header']);
-  assert.equal(resource.resource_name, 'PhoneBridge');
+  assert.equal(resource.resource_name, 'DroidHands');
 
   for (const path of ['/.well-known/oauth-authorization-server', '/.well-known/openid-configuration']) {
     const res = await http(`${base}${path}`);
@@ -685,7 +685,7 @@ test('setup: page with the configure deep link; QR endpoint checks the access ke
   assert.equal(res.status, 200);
   assert.match(res.headers['content-type'], /text\/html/);
   assert.match(res.headers['content-security-policy'], /default-src 'none'/);
-  assert.ok(res.body.includes(`phonebridge://configure?relay=${encodeURIComponent(base)}`));
+  assert.ok(res.body.includes(`droidhands://configure?relay=${encodeURIComponent(base)}`));
   assert.ok(res.body.includes(`data-relay="${base}"`));
   if (config.apkUrl !== null) assert.ok(res.body.includes(`href="${config.apkUrl}"`), 'install button links APK_URL');
   if (config.accessKey !== null) {
@@ -707,7 +707,7 @@ test('misc: health, banner, unknown paths, device endpoint without upgrade', asy
   assert.deepEqual(JSON.parse(health.body), { ok: true });
   const banner = await http(`${base}/`);
   assert.equal(banner.status, 200);
-  assert.match(banner.body, /PhoneBridge relay/);
+  assert.match(banner.body, /DroidHands relay/);
   assert.equal((await http(`${base}/nope`)).status, 404);
   const device = await http(`${base}/v1/device`);
   assert.equal(device.status, 426);

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build and run the PhoneBridge iOS runner (clients/ios/runner) on a simulator or an iPhone.
+# Build and run the DroidHands iOS runner (clients/ios/runner) on a simulator or an iPhone.
 #
 #   PB_RUNNER_SECRET=... ./scripts/ios-runner.sh --simulator <udid> [--port 8101]
 #   PB_RUNNER_SECRET=... ./scripts/ios-runner.sh --device <udid> --team <TEAMID> [--port 8101]
 #
 # Generates the Xcode project with xcodegen, builds the runner for testing, then runs its single UI test
-# (PhoneBridgeRunner/PhoneBridgeRunnerTests/testRunBridge) in the foreground. While it runs, the runner
+# (DroidHandsRunner/DroidHandsRunnerTests/testRunBridge) in the foreground. While it runs, the runner
 # serves the runner protocol (docs/IOS.md) on the phone's port; stop it with Ctrl-C. The secret is
 # handed to the runner through the environment (TEST_RUNNER_PB_RUNNER_SECRET), never on a command line.
 #
@@ -15,16 +15,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-RUNNER_DIR="${PHONEBRIDGE_RUNNER_SRC:-$REPO_ROOT/clients/ios/runner}"
-readonly SCHEME="PhoneBridgeRunner"
-readonly TEST_ID="PhoneBridgeRunner/PhoneBridgeRunnerTests/testRunBridge"
-readonly DEFAULT_BUNDLE_BASE="dev.phonebridge.runner"
+RUNNER_DIR="${DROIDHANDS_RUNNER_SRC:-$REPO_ROOT/clients/ios/runner}"
+readonly SCHEME="DroidHandsRunner"
+readonly TEST_ID="DroidHandsRunner/DroidHandsRunnerTests/testRunBridge"
+readonly DEFAULT_BUNDLE_BASE="com.droidhands.runner"
 
 usage() {
   cat <<EOF
 Usage: PB_RUNNER_SECRET=<secret> $(basename "$0") (--simulator UDID | --device UDID) [options]
 
-Builds the PhoneBridge iOS runner and runs it until you stop it (Ctrl-C).
+Builds the DroidHands iOS runner and runs it until you stop it (Ctrl-C).
 
   --simulator UDID    Run on this booted simulator ('xcrun simctl list devices booted').
   --device UDID       Run on this iPhone, connected by USB or paired over Wi-Fi ('xcrun devicectl list devices').
@@ -151,13 +151,13 @@ fi
 
 # ------------------------------------------------------------------------------------------ build
 
-say "${C_BOLD}PhoneBridge iOS runner${C_RESET} → $MODE $UDID, port $PORT"
+say "${C_BOLD}DroidHands iOS runner${C_RESET} → $MODE $UDID, port $PORT"
 
 "$XCODEGEN" generate --spec "$RUNNER_DIR/project.yml" --project "$RUNNER_DIR" --quiet ||
   die "xcodegen could not generate the Xcode project."
-ok "Generated PhoneBridgeRunner.xcodeproj"
+ok "Generated DroidHandsRunner.xcodeproj"
 
-PROJECT="$RUNNER_DIR/PhoneBridgeRunner.xcodeproj"
+PROJECT="$RUNNER_DIR/DroidHandsRunner.xcodeproj"
 COMMON=(-project "$PROJECT" -scheme "$SCHEME" -derivedDataPath "$DERIVED_DATA")
 SETTINGS=("PB_BUNDLE_ID_BASE=$BUNDLE_ID")
 if [ "$MODE" = simulator ]; then

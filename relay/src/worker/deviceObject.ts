@@ -143,7 +143,7 @@ export class DeviceObject extends DurableObject<Env> {
       maxAuthFailures: this.cfg.relay.rateLimitAuthFailuresPerMin,
       blockMs: RATE_WINDOW_MS,
     });
-    this.storageKey = createHmac('sha256', this.cfg.relaySecret).update('phonebridge/do-pairings/v1').digest();
+    this.storageKey = createHmac('sha256', this.cfg.relaySecret).update('droidhands/do-pairings/v1').digest();
     // Answered by the runtime itself: heartbeats never wake a hibernated object (§3.4).
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(HEARTBEAT_FRAME, HEARTBEAT_ACK_FRAME));
     this.pairings = new PairingStore({

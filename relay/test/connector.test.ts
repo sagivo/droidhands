@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { UNAUTHORIZED_BODY, connectReady, httpRequest, newIdentity, postMcp, startRelay, tokenFor } from './helpers.js';
 
 const challengeFor = (base: string, deviceId: string): string =>
-  `Bearer realm="phonebridge", resource_metadata="${base}/.well-known/oauth-protected-resource/d/${deviceId}/mcp"`;
+  `Bearer realm="droidhands", resource_metadata="${base}/.well-known/oauth-protected-resource/d/${deviceId}/mcp"`;
 
 test('POST /d/<id>/mcp is tunneled to that device as /mcp', async (t) => {
   const relay = await startRelay(t);
@@ -42,7 +42,7 @@ test('a device-returned 401 on the connector gets resource_metadata (added or re
   const device = await connectReady(relay);
   const { deviceId } = device.identity;
   const token = tokenFor(deviceId);
-  const variants: Array<Record<string, string>> = [{}, { 'www-authenticate': 'Bearer realm="phonebridge"' }, { 'www-authenticate': 'Basic' }];
+  const variants: Array<Record<string, string>> = [{}, { 'www-authenticate': 'Bearer realm="droidhands"' }, { 'www-authenticate': 'Basic' }];
   for (const deviceHeaders of variants) {
     const pending = postMcp(relay, { path: `/d/${deviceId}/mcp`, token });
     const request = await device.nextRequest();
@@ -57,7 +57,7 @@ test('a device-returned 401 on the connector gets resource_metadata (added or re
 test('the legacy /mcp endpoint keeps its plain challenge', async (t) => {
   const relay = await startRelay(t);
   const res = await postMcp(relay);
-  assert.equal(res.headers['www-authenticate'], 'Bearer realm="phonebridge"');
+  assert.equal(res.headers['www-authenticate'], 'Bearer realm="droidhands"');
 });
 
 test('connector: GET and DELETE -> 405; malformed ids -> 404; offline -> 503', async (t) => {

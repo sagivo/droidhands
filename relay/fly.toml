@@ -1,4 +1,4 @@
-# Fly.io deployment of the PhoneBridge relay. From the relay/ directory:
+# Fly.io deployment of the DroidHands relay. From the relay/ directory:
 #
 #   fly launch --copy-config --no-deploy --name <your-app-name>
 #   fly secrets set RELAY_ACCESS_KEY="$(openssl rand -base64 32)" RELAY_SECRET="$(openssl rand -base64 32)"
@@ -8,7 +8,7 @@
 # PUBLIC_URL defaults to https://<app>.fly.dev (from FLY_APP_NAME); set it for a custom domain.
 # Keep exactly one machine: connected phones and pending pairings live in memory.
 
-app = "phonebridge-relay"
+app = "droidhands-relay"
 primary_region = "iad"
 
 [build]

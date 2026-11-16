@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starts PhoneBridge for an iPhone or simulator (docs/IOS.md): the on-phone runner, then the host on this Mac.
+# Starts DroidHands for an iPhone or simulator (docs/IOS.md): the on-phone runner, then the host on this Mac.
 #
 #   ./scripts/ios-host.sh (--simulator [<udid>] | --device <udid>) [--relay URL] [--local-port N] [--new-token NAME]
 #
@@ -20,7 +20,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANDROID_DIR="$REPO_ROOT/clients/android"
-HOST_BIN="$REPO_ROOT/clients/ios/host/build/install/phonebridge-ios-host/bin/phonebridge-ios-host"
+HOST_BIN="$REPO_ROOT/clients/ios/host/build/install/droidhands-ios-host/bin/droidhands-ios-host"
 
 usage() {
   sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
@@ -94,7 +94,7 @@ else
 fi
 export PB_RUNNER_SECRET
 
-runner_log="$(mktemp -t phonebridge-runner)"
+runner_log="$(mktemp -t droidhands-runner)"
 runner_pid=""
 
 cleanup() {

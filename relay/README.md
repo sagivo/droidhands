@@ -1,6 +1,6 @@
-# PhoneBridge relay
+# DroidHands relay
 
-A small Node.js server that lets AI agents reach a PhoneBridge phone from anywhere, and lets you
+A small Node.js server that lets AI agents reach a DroidHands phone from anywhere, and lets you
 connect an AI app by pasting **one URL** and tapping **Allow** on the phone.
 
 ```
@@ -16,7 +16,7 @@ specified in [docs/PROTOCOL.md](../docs/PROTOCOL.md) §2-5.
 
 ## Connect an AI app (one-tap pairing)
 
-1. In the PhoneBridge app, copy **Your connection URL**. It looks like
+1. In the DroidHands app, copy **Your connection URL**. It looks like
    `https://relay.example.com/d/mmg42klgyqzwneiskrelxms3j4/mcp`.
 2. Paste it into your AI app as a remote MCP server / custom connector (see below).
 3. Your browser shows **Approve on your phone** with a 4-character code. The phone shows who is
@@ -32,7 +32,7 @@ it offers to connect again.
 "login" is the prompt on your phone:
 
 * An unauthenticated request to the connection URL gets `401` with
-  `WWW-Authenticate: Bearer realm="phonebridge", resource_metadata="…/.well-known/oauth-protected-resource/d/<id>/mcp"`.
+  `WWW-Authenticate: Bearer realm="droidhands", resource_metadata="…/.well-known/oauth-protected-resource/d/<id>/mcp"`.
   The app discovers the relay's authorization server metadata from there and registers itself
   (dynamic client registration, no secret; the registration is signed into the `client_id`, so the
   relay stores nothing).
@@ -80,7 +80,7 @@ relay address instead of the connection URL, or it predates the MCP authorizatio
 and omits `resource`: use the connection URL, or update the app. (`ALLOW_IMPLICIT_DEVICE=true`
 restores the old behaviour of pairing with the only connected phone; see Configuration.)
 
-Clients without OAuth support can still use a token created by hand in the PhoneBridge app (shown
+Clients without OAuth support can still use a token created by hand in the DroidHands app (shown
 once), sent as a header:
 
 ```sh
@@ -114,10 +114,10 @@ When the relay starts it prints the **setup link** and a QR code:
 
 `/setup` is a mobile-friendly page with:
 
-1. **Install PhoneBridge**: a download link to `APK_URL` (for example the latest GitHub release's
-   `PhoneBridge.apk`) if you set it, otherwise to `relay/public/phonebridge.apk` if you put the APK
-   there (served from `/download/phonebridge.apk`; see [public/README.md](public/README.md)).
-2. **Open in PhoneBridge**: opens the app pre-configured for this relay. The app asks "Connect to
+1. **Install DroidHands**: a download link to `APK_URL` (for example the latest GitHub release's
+   `DroidHands.apk`) if you set it, otherwise to `relay/public/droidhands.apk` if you put the APK
+   there (served from `/download/droidhands.apk`; see [public/README.md](public/README.md)).
+2. **Open in DroidHands**: opens the app pre-configured for this relay. The app asks "Connect to
    relay …?" and connects.
 3. The relay URL (and access key) for manual entry, plus what to do next.
 
@@ -203,13 +203,13 @@ No server and no domain: run the relay on your own computer and publish it with 
 
 The script checks that the `tailscale` CLI is installed and logged in, builds and starts this relay
 (or its image with `--docker`) on `127.0.0.1:8787` (change it with `--port`) with `TRUST_PROXY=true`,
-`DATA_DIR=~/.phonebridge-relay` (with `--docker`, the `phonebridge-relay-data` volume) and `PUBLIC_URL=https://<MagicDNS name>`, then runs
+`DATA_DIR=~/.droidhands-relay` (with `--docker`, the `droidhands-relay-data` volume) and `PUBLIC_URL=https://<MagicDNS name>`, then runs
 `tailscale serve --bg --https=443 http://127.0.0.1:8787` (or `tailscale funnel --bg …` with
 `--public`) and prints the setup link and QR code. `--https-port` picks another port (Funnel: 443,
 8443 or 10000). Running it again reuses or restarts what it started, and it refuses to touch a
 mapping on that port that points somewhere else. `--stop` runs `tailscale serve --https=443 off`
 (after `tailscale funnel --https=443 off` for a Funnel) and stops the relay; the log is
-`~/.phonebridge-relay/relay.log`.
+`~/.droidhands-relay/relay.log`.
 
 * **Tailnet only** (default): your phone (with the Tailscale app) and agents on your own devices
   reach it, nobody else does. claude.ai and ChatGPT can't: they connect from the cloud.
@@ -231,7 +231,7 @@ The same relay also runs on Cloudflare Workers and Durable Objects: see [CLOUDFL
 
 ```sh
 cd relay
-fly launch --copy-config --no-deploy --name my-phonebridge-relay
+fly launch --copy-config --no-deploy --name my-droidhands-relay
 fly secrets set RELAY_ACCESS_KEY="$(openssl rand -base64 32)" RELAY_SECRET="$(openssl rand -base64 32)"
 fly deploy --ha=false             # exactly one machine: state is in memory
 fly logs                          # shows the setup link
@@ -247,23 +247,23 @@ setup link is in the service's logs.
 ### Docker behind Caddy or nginx
 
 ```sh
-docker build -t phonebridge-relay relay/
-docker run -d --name phonebridge-relay --restart unless-stopped \
+docker build -t droidhands-relay relay/
+docker run -d --name droidhands-relay --restart unless-stopped \
   -p 127.0.0.1:8787:8787 \
-  -v phonebridge-data:/data \
+  -v droidhands-data:/data \
   -e PUBLIC_URL=https://relay.example.com \
   -e TRUST_PROXY=true \
   -e RELAY_ACCESS_KEY="$(openssl rand -base64 32)" \
-  phonebridge-relay
-docker logs phonebridge-relay    # shows the setup link
+  droidhands-relay
+docker logs droidhands-relay    # shows the setup link
 ```
 
 The image is multi-stage (`node:22-alpine`), runs as the non-root `node` user, contains only
 production dependencies, keeps the relay secret in the `/data` volume (`DATA_DIR`), and has a
 `HEALTHCHECK` on `/healthz`. To offer the APK from `/setup`, set `APK_URL` (e.g.
-`https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk`), or copy the APK to
+`https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk`), or copy the APK to
 `relay/public/` before building, or mount a directory and set `PUBLIC_DIR`. Every release also
-publishes a ready-made image, `ghcr.io/<owner>/phonebridge-relay:<version>` and `:latest`.
+publishes a ready-made image, `ghcr.io/<owner>/droidhands-relay:<version>` and `:latest`.
 
 **Caddy** (automatic HTTPS, WebSockets and `X-Forwarded-*` out of the box):
 
@@ -314,9 +314,9 @@ itself, so someone who installs the APK never sees a relay step (they can still 
 relay at any time). If you publish builds (the project's releases, or your fork's), you run that
 relay. It is the same relay as above; a few settings matter more because strangers' phones use it.
 
-**1. Deploy the image.** Each release pushes `ghcr.io/<owner>/phonebridge-relay:<version>` and
+**1. Deploy the image.** Each release pushes `ghcr.io/<owner>/droidhands-relay:<version>` and
 `:latest` (see [docs/RELEASING.md](../docs/RELEASING.md)). New GHCR packages are private: make it
-public once (*your profile › Packages › phonebridge-relay › Package settings › Change visibility*),
+public once (*your profile › Packages › droidhands-relay › Package settings › Change visibility*),
 or log the server in with `docker login ghcr.io`.
 
 * **Any VPS with Caddy** (automatic HTTPS): run the container as in
@@ -324,17 +324,17 @@ or log the server in with `docker login ghcr.io`.
   extra variables, and the same two-line Caddyfile:
 
   ```sh
-  docker run -d --name phonebridge-relay --restart unless-stopped \
-    -p 127.0.0.1:8787:8787 -v phonebridge-data:/data \
+  docker run -d --name droidhands-relay --restart unless-stopped \
+    -p 127.0.0.1:8787:8787 -v droidhands-data:/data \
     -e PUBLIC_URL=https://relay.example.com -e TRUST_PROXY=true \
     -e MAX_DEVICES=1000 \
-    -e APK_URL=https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk \
-    ghcr.io/<owner>/phonebridge-relay:latest
+    -e APK_URL=https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk \
+    ghcr.io/<owner>/droidhands-relay:latest
   ```
 
 * **Fly.io**: from `relay/`, `fly launch --copy-config --no-deploy --name <app>`, then
   `fly secrets set RELAY_SECRET="$(openssl rand -base64 32)"`, set `MAX_DEVICES` and `APK_URL` in
-  `fly.toml`'s `[env]`, and `fly deploy --ha=false --image ghcr.io/<owner>/phonebridge-relay:<version>`.
+  `fly.toml`'s `[env]`, and `fly deploy --ha=false --image ghcr.io/<owner>/droidhands-relay:<version>`.
   Raise `[http_service.concurrency]` and the VM's memory together with `MAX_DEVICES`.
 
 **2. Settings for a shared relay.**
@@ -353,15 +353,15 @@ or log the server in with `docker login ghcr.io`.
 The operator of a shared relay can read the traffic it forwards (see [Security model](#security-model)).
 Say who runs it and how, keep it updated, and tell people they can run their own.
 
-**3. Bake its URL into the app.** Set the repository variable `PHONEBRIDGE_RELAY_URL` (*Settings ›
+**3. Bake its URL into the app.** Set the repository variable `DROIDHANDS_RELAY_URL` (*Settings ›
 Secrets and variables › Actions › Variables*) to the relay's public URL, e.g.
 `https://relay.example.com`. The release workflow passes it to the build as
-`PHONEBRIDGE_DEFAULT_RELAY_URL`, which becomes `BuildConfig.DEFAULT_RELAY_URL`: every APK it builds
+`DROIDHANDS_DEFAULT_RELAY_URL`, which becomes `BuildConfig.DEFAULT_RELAY_URL`: every APK it builds
 goes online through that relay on first run. Without the variable, builds have no default relay and
 the app asks for one as before. Changing it later only affects new installs: the app never replaces
 a relay that is already configured.
 
-Local builds can do the same with `-Pphonebridge.defaultRelayUrl=https://relay.example.com` (or the
+Local builds can do the same with `-Pdroidhands.defaultRelayUrl=https://relay.example.com` (or the
 environment variable).
 
 ## Configuration
@@ -377,8 +377,8 @@ All settings are environment variables. Empty values mean "use the default".
 | `RELAY_ACCESS_KEY` | *(unset)* | When set, devices must send it as `hello.accessKey` (compared in constant time, used verbatim). It is included in the setup link's fragment. Otherwise any device can register its self-certifying id. |
 | `RELAY_SECRET` | *(unset)* | Key (at least 32 characters, used verbatim) that signs OAuth client ids. When unset, one is generated into `DATA_DIR/relay-secret`. Changing it disconnects every paired app at its next authorization (they re-pair). |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Where `relay-secret` is created (directory `0700`, file `0600`) when `RELAY_SECRET` is unset. If it cannot be written, the relay uses a temporary secret and logs a warning: apps paired then must reconnect after a restart. |
-| `PUBLIC_DIR` | `relay/public` | Directory served for `/download/phonebridge.apk`. |
-| `APK_URL` | *(unset)* | Where the setup page's **Install PhoneBridge** button downloads the app, e.g. `https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk`. Wins over a file in `PUBLIC_DIR`; `/download/phonebridge.apk` then redirects (`302`) to it. Absolute `http(s)` URL without credentials. |
+| `PUBLIC_DIR` | `relay/public` | Directory served for `/download/droidhands.apk`. |
+| `APK_URL` | *(unset)* | Where the setup page's **Install DroidHands** button downloads the app, e.g. `https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk`. Wins over a file in `PUBLIC_DIR`; `/download/droidhands.apk` then redirects (`302`) to it. Absolute `http(s)` URL without credentials. |
 | `MAX_DEVICES` | `1000` | Phones that may be connected at the same time. A new phone beyond it gets an `error` frame `relay_full` and close code `4013`, and retries with backoff. A phone that is already connected may always reconnect (its new connection replaces the old one). Ignored by the Cloudflare relay ([CLOUDFLARE.md](CLOUDFLARE.md#settings)). |
 | `SETUP_BANNER` | `true` | Print the setup link and QR code to stderr at startup. |
 | `ALLOW_TOKEN_IN_URL` | `false` | Also accept `POST /mcp/<token>` for MCP clients that cannot set headers. The relay moves the token into an `authorization` header before tunneling. URLs end up in client configs, proxy logs and browser history, so prefer OAuth or the header. |
@@ -404,14 +404,14 @@ share the proxy's address and therefore one budget.
 ```sh
 npm run smoke -- https://relay.example.com/d/<deviceId>/mcp pb1....
 # or keep the token out of your shell history:
-PHONEBRIDGE_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
+DROIDHANDS_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 ```
 
 ## HTTP API
 
 | Request | Response |
 |---|---|
-| `POST /d/<deviceId>/mcp` with `Authorization: Bearer <token>` | The device connector URL: tunneled to that device. The token must belong to it. Every `401` (relay- or device-produced) carries `WWW-Authenticate: Bearer realm="phonebridge", resource_metadata="{relay}/.well-known/oauth-protected-resource/d/<deviceId>/mcp"`. |
+| `POST /d/<deviceId>/mcp` with `Authorization: Bearer <token>` | The device connector URL: tunneled to that device. The token must belong to it. Every `401` (relay- or device-produced) carries `WWW-Authenticate: Bearer realm="droidhands", resource_metadata="{relay}/.well-known/oauth-protected-resource/d/<deviceId>/mcp"`. |
 | `POST /mcp` with `Authorization: Bearer <token>` | Tunneled to the device named in the token. |
 | `POST /mcp/<token>` | Same, if `ALLOW_TOKEN_IN_URL=true`; otherwise `404`. |
 | `GET` / `DELETE` on either MCP endpoint | `405`, `Allow: POST` (stateless server, no SSE stream). |
@@ -423,7 +423,7 @@ PHONEBRIDGE_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 | `GET /oauth/pair/<id>?t=<pageToken>` | Pairing status for the page: `{"status":"pending"\|"approved"\|"denied"\|"expired","redirect"?}`. With `&view=html`, the reloadable page (redirects once decided). |
 | `POST /oauth/token` | Authorization code + PKCE verifier → `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. Errors per RFC 6749 §5.2. |
 | `GET /setup` | Phone setup page. |
-| `GET /download/phonebridge.apk` | `302` to `APK_URL` when set; otherwise the APK from `PUBLIC_DIR`, if present (`application/vnd.android.package-archive`). |
+| `GET /download/droidhands.apk` | `302` to `APK_URL` when set; otherwise the APK from `PUBLIC_DIR`, if present (`application/vnd.android.package-archive`). |
 | `POST /setup/qr` | Used by the setup page: `{"key"}` → QR code (SVG path) of the setup link, if the key is the access key. |
 | `GET /healthz` | `200 {"ok":true}` |
 | `GET /` | Short text banner with the setup link. |
@@ -487,7 +487,7 @@ Source layout (`src/`):
 | `config.ts`, `relaySecret.ts`, `encoding.ts`, `token.ts`, `net.ts`, `rateLimit.ts`, `protocol.ts`, `logger.ts`, `text.ts`, `body.ts` | Plumbing |
 
 ```ts
-import { createRelay } from 'phonebridge-relay';
+import { createRelay } from 'droidhands-relay';
 const relay = await createRelay({ port: 0, host: '127.0.0.1', logLevel: 'silent', relaySecret: '…32+ chars…' });
 console.log(relay.url); // http://127.0.0.1:54321
 await relay.close();

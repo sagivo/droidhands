@@ -34,7 +34,7 @@ object ChatNotifications {
 
     fun ensureChannel(context: Context) {
         val channel = NotificationChannel(CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_HIGH)
-        channel.description = "Incoming messages (PhoneBridge test fixture)"
+        channel.description = "Incoming messages (DroidHands test fixture)"
         manager(context).createNotificationChannel(channel)
     }
 

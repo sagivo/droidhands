@@ -1,14 +1,14 @@
 # Publishes a release when a version tag is pushed (git tag v1.2.3 && git push origin v1.2.3):
 #
-#   1. a signed APK on the GitHub Release, as PhoneBridge-1.2.3.apk and PhoneBridge.apk (so
-#      https://github.com/<owner>/<repo>/releases/latest/download/PhoneBridge.apk always serves the
+#   1. a signed APK on the GitHub Release, as DroidHands-1.2.3.apk and DroidHands.apk (so
+#      https://github.com/<owner>/<repo>/releases/latest/download/DroidHands.apk always serves the
 #      newest one), plus SHA256SUMS;
-#   2. the relay image ghcr.io/<owner>/phonebridge-relay:1.2.3 and :latest.
+#   2. the relay image ghcr.io/<owner>/droidhands-relay:1.2.3 and :latest.
 #
 # Needs the signing secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS
 # and ANDROID_KEY_PASSWORD (scripts/make-release-key.sh prints the commands). Without them the
 # workflow fails: a release is never signed with a debug key. The optional repository variable
-# PHONEBRIDGE_RELAY_URL becomes the app's default relay. See docs/RELEASING.md.
+# DROIDHANDS_RELAY_URL becomes the app's default relay. See docs/RELEASING.md.
 name: Release
 
 on:
@@ -88,12 +88,12 @@ jobs:
 
       - name: Default relay
         env:
-          RELAY_URL: ${{ vars.PHONEBRIDGE_RELAY_URL }}
+          RELAY_URL: ${{ vars.DROIDHANDS_RELAY_URL }}
         run: |
           if [ -n "$RELAY_URL" ]; then
-            echo "::notice::This release goes online through $RELAY_URL on first run (repository variable PHONEBRIDGE_RELAY_URL)."
+            echo "::notice::This release goes online through $RELAY_URL on first run (repository variable DROIDHANDS_RELAY_URL)."
           else
-            echo "::notice::No repository variable PHONEBRIDGE_RELAY_URL: this release has no default relay, and users connect their own."
+            echo "::notice::No repository variable DROIDHANDS_RELAY_URL: this release has no default relay, and users connect their own."
           fi
 
       - name: Test and build the signed release APK
@@ -102,20 +102,20 @@ jobs:
           PB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           PB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           PB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          PHONEBRIDGE_DEFAULT_RELAY_URL: ${{ vars.PHONEBRIDGE_RELAY_URL }}
+          DROIDHANDS_DEFAULT_RELAY_URL: ${{ vars.DROIDHANDS_RELAY_URL }}
           # GITHUB_REPOSITORY (set by Actions) becomes BuildConfig.GITHUB_REPO for the in-app update check.
         run: >-
           ./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleRelease
-          -Pphonebridge.versionName=${{ steps.version.outputs.name }}
-          -Pphonebridge.versionCode=${{ steps.version.outputs.code }}
-          -Pphonebridge.requireReleaseSigning=true
+          -Pdroidhands.versionName=${{ steps.version.outputs.name }}
+          -Pdroidhands.versionCode=${{ steps.version.outputs.code }}
+          -Pdroidhands.requireReleaseSigning=true
           --console=plain --stacktrace
 
       - name: Verify the signature and collect the files
         env:
           VERSION: ${{ steps.version.outputs.name }}
         run: |
-          apk="clients/android/app/build/outputs/apk/release/PhoneBridge-$VERSION.apk"
+          apk="clients/android/app/build/outputs/apk/release/DroidHands-$VERSION.apk"
           test -f "$apk" || { echo "::error::$apk was not built"; exit 1; }
           apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
           "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"
@@ -124,21 +124,21 @@ jobs:
             exit 1
           fi
           mkdir -p dist
-          cp "$apk" "dist/PhoneBridge-$VERSION.apk"
-          cp "$apk" dist/PhoneBridge.apk
-          (cd dist && sha256sum "PhoneBridge-$VERSION.apk" PhoneBridge.apk > SHA256SUMS && cat SHA256SUMS)
+          cp "$apk" "dist/DroidHands-$VERSION.apk"
+          cp "$apk" dist/DroidHands.apk
+          (cd dist && sha256sum "DroidHands-$VERSION.apk" DroidHands.apk > SHA256SUMS && cat SHA256SUMS)
           rm -f "$PB_KEYSTORE_PATH"
 
       - name: Publish the GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: PhoneBridge ${{ steps.version.outputs.name }}
+          name: DroidHands ${{ steps.version.outputs.name }}
           generate_release_notes: true
           make_latest: 'true'
           fail_on_unmatched_files: true
           files: |
-            dist/PhoneBridge-${{ steps.version.outputs.name }}.apk
-            dist/PhoneBridge.apk
+            dist/DroidHands-${{ steps.version.outputs.name }}.apk
+            dist/DroidHands.apk
             dist/SHA256SUMS
 
   relay-image:
@@ -173,7 +173,7 @@ jobs:
 
       - name: Image name
         # GHCR names must be lowercase.
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/phonebridge-relay" >> "$GITHUB_ENV"
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/droidhands-relay" >> "$GITHUB_ENV"
 
       - id: meta
         uses: docker/metadata-action@v5
@@ -183,8 +183,8 @@ jobs:
             type=raw,value=${{ needs.apk.outputs.version }}
             type=raw,value=latest
           labels: |
-            org.opencontainers.image.title=phonebridge-relay
-            org.opencontainers.image.description=PhoneBridge relay: lets AI agents reach a PhoneBridge phone from anywhere
+            org.opencontainers.image.title=droidhands-relay
+            org.opencontainers.image.description=DroidHands relay: lets AI agents reach a DroidHands phone from anywhere
 
       - uses: docker/build-push-action@v6
         with:

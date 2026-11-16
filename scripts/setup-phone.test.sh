@@ -61,7 +61,7 @@ device_tool dumpsys 'case "$1" in
     [ -n "${FAKE_NO_DUMPSYS:-}" ] && exit 0
     cat <<OUT
 Packages:
-  Package [dev.phonebridge.android] (1234abc):
+  Package [com.droidhands.android] (1234abc):
     versionName=0.1.0
     requested permissions:
       android.permission.INTERNET
@@ -69,7 +69,7 @@ Packages:
       android.permission.READ_CONTACTS
       android.permission.READ_SMS: restricted=true
       android.permission.ACCESS_BACKGROUND_LOCATION: restricted=true
-      dev.phonebridge.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+      com.droidhands.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
     install permissions:
       android.permission.INTERNET: granted=true
 OUT
@@ -78,7 +78,7 @@ OUT
 esac'
 
 device_tool pm 'case "$3" in
-  android.permission.INTERNET | dev.phonebridge.android.*)
+  android.permission.INTERNET | com.droidhands.android.*)
     echo "Exception occurred while executing '"'"'grant'"'"':" >&2
     echo "java.lang.SecurityException: Permission $3 requested by $2 is not a changeable permission type" >&2
     exit 255 ;;
@@ -167,26 +167,26 @@ test_case() {
 
 # ------------------------------------------------------------------------------------------ tests
 
-A11Y="dev.phonebridge.android/dev.phonebridge.android.access.BridgeAccessibilityService"
+A11Y="com.droidhands.android/com.droidhands.android.access.BridgeAccessibilityService"
 OTHER_A11Y="com.other/com.other.Service"
 
 full_setup_with_relay_and_key() {
   run -- --apk "$WORK/app.apk" --relay "https://relay.example.com/" --key "s3cr+t &x/y'z"
   expect_status 0
   expect_log "adb [-s] [emulator-5554] [install] [-r] [$WORK/app.apk]"
-  expect_log "pm [grant] [dev.phonebridge.android] [android.permission.POST_NOTIFICATIONS]"
-  expect_log "pm [grant] [dev.phonebridge.android] [android.permission.READ_CONTACTS]"
-  expect_log "pm [grant] [dev.phonebridge.android] [android.permission.ACCESS_BACKGROUND_LOCATION]"
+  expect_log "pm [grant] [com.droidhands.android] [android.permission.POST_NOTIFICATIONS]"
+  expect_log "pm [grant] [com.droidhands.android] [android.permission.READ_CONTACTS]"
+  expect_log "pm [grant] [com.droidhands.android] [android.permission.ACCESS_BACKGROUND_LOCATION]"
   expect_out "could not grant: READ_SMS"
   expect_no_out "INTERNET"
-  expect_log "appops [set] [dev.phonebridge.android] [ACCESS_RESTRICTED_SETTINGS] [allow]"
-  expect_log "appops [set] [dev.phonebridge.android] [SYSTEM_ALERT_WINDOW] [allow]"
-  expect_log "cmd [notification] [allow_listener] [dev.phonebridge.android/dev.phonebridge.android.notify.BridgeNotificationListener]"
-  expect_log "cmd [notification] [allow_dnd] [dev.phonebridge.android]"
-  expect_log "dumpsys [deviceidle] [whitelist] [+dev.phonebridge.android]"
+  expect_log "appops [set] [com.droidhands.android] [ACCESS_RESTRICTED_SETTINGS] [allow]"
+  expect_log "appops [set] [com.droidhands.android] [SYSTEM_ALERT_WINDOW] [allow]"
+  expect_log "cmd [notification] [allow_listener] [com.droidhands.android/com.droidhands.android.notify.BridgeNotificationListener]"
+  expect_log "cmd [notification] [allow_dnd] [com.droidhands.android]"
+  expect_log "dumpsys [deviceidle] [whitelist] [+com.droidhands.android]"
   expect_setting enabled_accessibility_services "$A11Y"
   expect_setting accessibility_enabled "1"
-  expect_log "am [start] [-W] [-a] [android.intent.action.VIEW] [-d] [phonebridge://configure?relay=https%3A%2F%2Frelay.example.com&key=s3cr%2Bt%20%26x%2Fy%27z] [-n] [dev.phonebridge.android/.ui.MainActivity]"
+  expect_log "am [start] [-W] [-a] [android.intent.action.VIEW] [-d] [droidhands://configure?relay=https%3A%2F%2Frelay.example.com&key=s3cr%2Bt%20%26x%2Fy%27z] [-n] [com.droidhands.android/.ui.MainActivity]"
   expect_no_out "s3cr+t"
   expect_out "tap Connect on the phone"
   expect_out "Summary"
@@ -208,17 +208,17 @@ rerun_keeps_accessibility_services_unchanged() {
 }
 
 short_form_counts_as_enabled() {
-  given_setting enabled_accessibility_services "dev.phonebridge.android/.access.BridgeAccessibilityService"
+  given_setting enabled_accessibility_services "com.droidhands.android/.access.BridgeAccessibilityService"
   run -- --apk "$WORK/app.apk"
   expect_status 0
-  expect_setting enabled_accessibility_services "dev.phonebridge.android/.access.BridgeAccessibilityService"
+  expect_setting enabled_accessibility_services "com.droidhands.android/.access.BridgeAccessibilityService"
 }
 
 without_relay_just_launches() {
   run -- --apk "$WORK/app.apk"
   expect_status 0
-  expect_log "am [start] [-W] [-n] [dev.phonebridge.android/.ui.MainActivity]"
-  expect_no_log "phonebridge://configure"
+  expect_log "am [start] [-W] [-n] [com.droidhands.android/.ui.MainActivity]"
+  expect_no_log "droidhands://configure"
   expect_out "Relay: not configured"
 }
 
@@ -266,7 +266,7 @@ serial_selects_the_device() {
 incompatible_install_explains_uninstall() {
   run "FAKE_INSTALL=Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]" -- --apk "$WORK/app.apk"
   expect_status 1
-  expect_out "uninstall dev.phonebridge.android"
+  expect_out "uninstall com.droidhands.android"
   expect_no_log "pm [grant]"
 }
 
@@ -279,8 +279,8 @@ failing_appops_is_a_warning() {
 falls_back_to_manifest_permissions() {
   run FAKE_NO_DUMPSYS=1 -- --apk "$WORK/app.apk"
   expect_status 0
-  expect_log "pm [grant] [dev.phonebridge.android] [android.permission.ANSWER_PHONE_CALLS]"
-  expect_log "pm [grant] [dev.phonebridge.android] [android.permission.WRITE_CALENDAR]"
+  expect_log "pm [grant] [com.droidhands.android] [android.permission.ANSWER_PHONE_CALLS]"
+  expect_log "pm [grant] [com.droidhands.android] [android.permission.WRITE_CALENDAR]"
 }
 
 missing_apk() {

@@ -59,8 +59,8 @@ done
 [ -n "$PKG" ] || { usage >&2; exit 2; }
 printf '%s' "$PKG" | grep -Eq "$PACKAGE_PATTERN" || die "'$PKG' is not a package name" "For example: com.spotify.music (adb shell pm list packages lists them)."
 case "$PKG" in
-  dev.phonebridge.fixture.*) ;;
-  dev.phonebridge|dev.phonebridge.*) die "Plugins can't target PhoneBridge itself" ;;
+  com.droidhands.fixture.*) ;;
+  com.droidhands|com.droidhands.*) die "Plugins can't target DroidHands itself" ;;
 esac
 if [ -n "$ID" ]; then
   printf '%s' "$ID" | grep -Eq "$ID_PATTERN" || die "'$ID' is not a valid plugin id" "Ids are lowercase letters, digits and _ (2 to 40 characters), starting with a letter."

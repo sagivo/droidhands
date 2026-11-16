@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "PhoneBridge app plugin",
+  "title": "DroidHands app plugin",
   "description": "One app's actions for AI agents. Format reference: docs/PLUGINS.md. This schema is for editor completion; the validator (./scripts/plugin-check.sh) is authoritative.",
   "type": "object",
   "additionalProperties": false,
@@ -51,14 +51,14 @@
       "required": ["packages"],
       "properties": {
         "packages": {
-          "description": "Package names this plugin applies to; the first installed one is used. Never PhoneBridge itself.",
+          "description": "Package names this plugin applies to; the first installed one is used. Never DroidHands itself.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
           "items": {
             "type": "string",
             "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$",
-            "not": { "pattern": "^dev\\.phonebridge(\\.|$)" }
+            "not": { "pattern": "^com\\.droidhands(\\.|$)" }
           }
         }
       }
@@ -76,7 +76,7 @@
           "items": {
             "type": "string",
             "pattern": "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$",
-            "not": { "pattern": "^dev\\.phonebridge(\\.|$)" }
+            "not": { "pattern": "^com\\.droidhands(\\.|$)" }
           }
         }
       }
@@ -227,7 +227,7 @@
       ]
     },
     "tool": {
-      "description": "Runs a built-in PhoneBridge tool exactly as if the agent had called it.",
+      "description": "Runs a built-in DroidHands tool exactly as if the agent had called it.",
       "type": "object",
       "additionalProperties": false,
       "required": ["name"],

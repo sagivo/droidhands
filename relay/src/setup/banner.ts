@@ -13,7 +13,7 @@ export function setupBanner(url: string, options: { readonly guessed: boolean })
       .join('\n');
   const lines = [
     '',
-    '  PhoneBridge relay is running.',
+    '  DroidHands relay is running.',
     '',
     '  Set up a phone: open this link on it, or scan the QR code with its camera.',
     '',

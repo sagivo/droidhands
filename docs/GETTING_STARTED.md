@@ -8,8 +8,8 @@ Three steps, about five minutes, all on the phone (Android 11 or newer):
 
 ## 1. Install the app
 
-On the phone, download **`PhoneBridge.apk`** from the project website or from the latest GitHub
-release (*Releases › Latest › Assets › PhoneBridge.apk*), then open the downloaded file.
+On the phone, download **`DroidHands.apk`** from the project website or from the latest GitHub
+release (*Releases › Latest › Assets › DroidHands.apk*), then open the downloaded file.
 
 * Chrome warns "File might be harmful" for every APK. Tap **Download anyway**.
 * The first time, Android asks whether your browser (or Files app) may install unknown apps. Tap
@@ -18,7 +18,7 @@ release (*Releases › Latest › Assets › PhoneBridge.apk*), then open the do
   Scan it, or choose **Install anyway**.
 * Optional: each release lists the APK's SHA-256 in `SHA256SUMS`, if you want to check the file.
 
-PhoneBridge is not on the Play Store, so it tells you itself when a new version is out (see
+DroidHands is not on the Play Store, so it tells you itself when a new version is out (see
 [Updates](#updates)).
 
 ## 2. Open it and follow the wizard
@@ -37,7 +37,7 @@ The wizard has four short steps. Every step can be skipped and reopened later fr
    for apps installed from a download until you allow restricted settings. The wizard notices and
    shows a card with the three steps first:
 
-   1. Tap **Open Accessibility** and try to turn PhoneBridge on. Android says it's a restricted
+   1. Tap **Open Accessibility** and try to turn DroidHands on. Android says it's a restricted
       setting: tap **OK**.
    2. Tap **Open App info**, then the three-dot menu (top right), choose **Allow restricted
       settings** and confirm.
@@ -57,7 +57,7 @@ The wizard has four short steps. Every step can be skipped and reopened later fr
 
 ## 3. Connect your AI agent
 
-In PhoneBridge, tap **Connect an AI agent** and copy **your connection URL**
+In DroidHands, tap **Connect an AI agent** and copy **your connection URL**
 (`https://<relay>/d/<id>/mcp`). Then:
 
 | Agent | What to do |
@@ -70,7 +70,7 @@ In PhoneBridge, tap **Connect an AI agent** and copy **your connection URL**
 Your browser opens a page saying **"Approve on your phone"** with a 4-letter code. On the
 phone, check that the code matches and choose what the agent gets (**Give Claude access**):
 
-* **Everything**: every app and everything PhoneBridge can do, without asking you first.
+* **Everything**: every app and everything DroidHands can do, without asking you first.
 * **Only what I choose**: *All apps* or just the apps you pick, and what it can do (read messages
   and notifications, read contacts and calendar, location, see the screen, use apps, send messages,
   make calls, change the calendar, device settings, and an advanced option for developers).
@@ -99,11 +99,11 @@ Now ask your agent: *"Send a WhatsApp to Tania saying I'm running 10 minutes lat
   per-tool Allow / Ask / Block rules (also for single app actions, grouped by app), active hours and
   expiry, or **Revoke** it. Revoking takes effect immediately.
 * **Apps.** Every app on the phone with what agents can do in it: *Integration* (a community
-  plugin), *Local plugin* or *Basic* (what PhoneBridge found by itself), each action with its risk.
+  plugin), *Local plugin* or *Basic* (what DroidHands found by itself), each action with its risk.
   Tap an app for **Block for all agents**, **Request a better integration**, or **Create plugin
   draft** to write one yourself ([CONTRIBUTING.md](../CONTRIBUTING.md)).
 * **Activity.** The full log of every request, filterable by agent and outcome.
-* **Pause.** One switch in the app, or *Pause* in the PhoneBridge notification, stops all agents.
+* **Pause.** One switch in the app, or *Pause* in the DroidHands notification, stops all agents.
 * **Security.** Settings → Security covers the global **never-allow apps** list (banking,
   password managers and authenticators are pre-selected), **hide one-time codes** (on by
   default), and *Revoke all agents*.
@@ -128,7 +128,7 @@ PUBLIC_URL=https://relay.example.com RELAY_ACCESS_KEY=$(openssl rand -hex 16) np
 ```
 
 On startup it prints a **setup link and a QR code**. Each release also publishes a Docker image
-(`ghcr.io/<owner>/phonebridge-relay`), and deploy configs are included for
+(`ghcr.io/<owner>/droidhands-relay`), and deploy configs are included for
 [Fly.io](../relay/fly.toml) and [Render](../relay/render.yaml), as is a
 [Dockerfile](../relay/Dockerfile). For TLS, put it behind Caddy
 (`caddy reverse-proxy --from relay.example.com --to :8787`). See [relay/README.md](../relay/README.md).
@@ -139,7 +139,7 @@ Tailscale, for your tailnet only or, with `--public`, for cloud agents too
 
 Then point the app at it, either way:
 
-* Open the setup link on the phone (or scan the QR code) and tap **Open in PhoneBridge**. The app
+* Open the setup link on the phone (or scan the QR code) and tap **Open in DroidHands**. The app
   asks "Connect to relay …?" and connects.
 * Or in the app: the Connect step's **More ways to connect** › Your own relay, or *Settings › How
   agents reach this phone* › Relay, and paste the URL and access key.
@@ -172,13 +172,13 @@ the other way round): uninstall one first. Building and publishing signed releas
 
 | Symptom | Fix |
 |---|---|
-| "App not installed" when installing the APK | Another PhoneBridge signed with a different key is installed (e.g. a debug build). Uninstall it first. |
+| "App not installed" when installing the APK | Another DroidHands signed with a different key is installed (e.g. a debug build). Uninstall it first. |
 | Accessibility toggle is greyed out ("Restricted setting") | Android 13+ protection for downloaded apps. Try to turn it on once, then open App info → ⋮ → *Allow restricted settings*, and try again. The wizard's card walks you through it. |
 | "App was denied access to SMS" | The same Android 15 protection. Allow restricted settings as above, then App info → Permissions → SMS → Allow. |
-| Agent says the accessibility service is stuck | After an app update Android sometimes leaves it half-connected. Turn PhoneBridge off and on in Settings → Accessibility. |
-| Notifications show "Sensitive notification content hidden" | Android 15 hides content that it classifies as sensitive from apps like PhoneBridge. Replies still work. For SMS the agent uses `sms_list`, and for calls `call_status` / `call_answer`. |
-| Agent can't reach the phone after a while | Exempt PhoneBridge from battery optimization (Settings → Permissions & access). Check that the relay shows the phone as connected. |
+| Agent says the accessibility service is stuck | After an app update Android sometimes leaves it half-connected. Turn DroidHands off and on in Settings → Accessibility. |
+| Notifications show "Sensitive notification content hidden" | Android 15 hides content that it classifies as sensitive from apps like DroidHands. Replies still work. For SMS the agent uses `sms_list`, and for calls `call_status` / `call_answer`. |
+| Agent can't reach the phone after a while | Exempt DroidHands from battery optimization (Settings → Permissions & access). Check that the relay shows the phone as connected. |
 | "Device offline" | The app isn't connected to the relay. Open it and check the status card. |
-| "This relay is full right now" | The relay reached its limit of connected phones. PhoneBridge keeps retrying; to connect now, use your own relay. |
-| "Waiting for Tailscale" | The Tailscale route is on but the phone isn't on your tailnet. Open Tailscale and connect; if it's on, check that PhoneBridge isn't excluded in Tailscale's app settings. |
+| "This relay is full right now" | The relay reached its limit of connected phones. DroidHands keeps retrying; to connect now, use your own relay. |
+| "Waiting for Tailscale" | The Tailscale route is on but the phone isn't on your tailnet. Open Tailscale and connect; if it's on, check that DroidHands isn't excluded in Tailscale's app settings. |
 | claude.ai or ChatGPT can't reach the Tailscale URL | Expected: cloud agents can't reach your tailnet. Use the relay for them (both routes can be on). |

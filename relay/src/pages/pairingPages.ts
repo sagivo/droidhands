@@ -28,13 +28,13 @@ export function waitingPage(input: WaitingPageInput): PageOptions {
   const { pairing, deviceName, pollUrl, pageUrl, now } = input;
   const remaining = Math.max(0, Math.ceil((pairing.expiresAt - now) / 1000));
   return {
-    title: 'Approve on your phone · PhoneBridge',
+    title: 'Approve on your phone · DroidHands',
     head: html`<noscript><meta http-equiv="refresh" content="5;url=${pageUrl}"></noscript>`,
     body: html`<div id="pairing" data-poll="${pollUrl}" data-page="${pageUrl}" data-remaining="${remaining}">
 <h1>Approve on your phone</h1>
 <p><strong>${pairing.clientName}</strong> wants to connect to your phone.</p>
 <div class="card">
-<p>Open PhoneBridge on <strong>${deviceName ?? 'your phone'}</strong> and tap <strong>Allow</strong>.</p>
+<p>Open DroidHands on <strong>${deviceName ?? 'your phone'}</strong> and tap <strong>Allow</strong>.</p>
 <p class="muted">Check that the code shown there is</p>
 <div class="code" id="code">${pairing.displayCode}</div>
 </div>
@@ -61,7 +61,7 @@ export const OFFLINE_PAGE_STATUS = 503;
 export function offlinePage(): PageOptions {
   return messagePage(
     'Your phone is offline',
-    ['Your phone is offline. Open PhoneBridge, make sure it shows Connected, then reload this page.'],
+    ['Your phone is offline. Open DroidHands, make sure it shows Connected, then reload this page.'],
     html`<a class="button" href="">Reload</a>`,
   );
 }
@@ -84,7 +84,7 @@ export function pairingErrorPage(problem: string, hint: string): PageOptions {
 
 /**
  * Polls the status endpoint every 1.5 s (immediately when the tab becomes visible again, e.g. after
- * switching back from the PhoneBridge app) and navigates to the decision's redirect. Static: all
+ * switching back from the DroidHands app) and navigates to the decision's redirect. Static: all
  * data comes from `data-*` attributes; DOM updates use textContent only.
  */
 const WAITING_SCRIPT = `(function () {

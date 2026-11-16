@@ -10,7 +10,7 @@ Known limitation: in January 2024 Microsoft reproduced a bug where Teams for And
 the destination page" for this link
 ([Tech Community thread](https://techcommunity.microsoft.com/discussions/teamsdeveloper/deep-links-do-not-work-in-the-latest-mobile-teams-android/4025398)),
 with no fix announced in that thread. `teams.microsoft.com` publishes no Android app-links file, so the link
-only reaches the app because PhoneBridge pins it to the Teams package. Please test on a device before
+only reaches the app because DroidHands pins it to the Teams package. Please test on a device before
 upgrading the status.
 
 Not tested on a device yet (`status: experimental`).

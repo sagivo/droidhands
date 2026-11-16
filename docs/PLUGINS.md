@@ -1,7 +1,7 @@
 # App plugins
 
-PhoneBridge gives agents a menu of **actions for every app on the phone**. An agent picks the app,
-then the action, and PhoneBridge runs it:
+DroidHands gives agents a menu of **actions for every app on the phone**. An agent picks the app,
+then the action, and DroidHands runs it:
 
 ```
 apps_list                      → [{label: "Spotify", package: "com.spotify.music", actions: ["play", "search", "open", …]}, …]
@@ -14,13 +14,13 @@ Actions come from two places:
 1. **Plugins**: one small YAML file per app, written by the community and reviewed in pull requests.
    They live in [`plugins/<id>/plugin.yaml`](../plugins), ship inside the app, and are written for each app
    (deep links, intents and, if needed, step-by-step screen recipes).
-2. **Discovered actions**: PhoneBridge reads what every installed app declares, from the installed version on this
+2. **Discovered actions**: DroidHands reads what every installed app declares, from the installed version on this
    phone: the links and intents in its own manifest (`open_link`, `compose_mailto`, …), its search, share and text
    actions, launcher shortcuts and App Actions capabilities. Even apps without a plugin get `open` plus whatever
    they support, and an app update changes the menu by itself.
 
 Anything else works through phone use (`screen_observe`, `ui_tap`, …), which needs nothing app-specific. Plugins
-are hints on top: before a plugin action is offered, PhoneBridge checks that the installed app version still accepts
+are hints on top: before a plugin action is offered, DroidHands checks that the installed app version still accepts
 its intent or link (§8.1), and it records which actions fail on which app version (§8.2), so a stale plugin turns
 itself off instead of failing over and over.
 
@@ -133,8 +133,8 @@ actions:
 
 Unknown keys are errors, so typos are caught. A `stable` plugin needs at least one `tested` record and examples
 for every action (with `os: ios` examples for its `ios` recipes, §7). Package names and bundle ids starting with
-`dev.phonebridge` (PhoneBridge itself, any build) are refused, except the emulator-only E2E fixture
-apps (`dev.phonebridge.fixture.*`), which test plugins target.
+`com.droidhands` (DroidHands itself, any build) are refused, except the emulator-only E2E fixture
+apps (`com.droidhands.fixture.*`), which test plugins target.
 
 ## 4. Action fields
 
@@ -181,7 +181,7 @@ params:
 | `minimum` / `maximum` | Numbers. |
 | `pattern` | A regular expression the whole string must match, e.g. `^\+?[0-9]{6,15}$` (≤ 300 chars). |
 
-PhoneBridge turns `params` into the JSON Schema the agent sees, and checks every call against it
+DroidHands turns `params` into the JSON Schema the agent sees, and checks every call against it
 before anything runs (and before any approval prompt). Unknown parameters are refused. Like the
 built-in tools, it accepts `"5"` for an integer, `"true"` for a boolean and a number for a string, and
 treats `null` (and an empty string for a required parameter) as missing.
@@ -224,7 +224,7 @@ android:
       show_ui: true                            # YAML literals keep their type
 ```
 
-PhoneBridge **always pins the intent to the plugin's installed package**, so it can never open
+DroidHands **always pins the intent to the plugin's installed package**, so it can never open
 another app. It refuses call actions (`CALL`, `CALL_PRIVILEGED`, `CALL_EMERGENCY`), and it never adds
 URI-permission flags. Extra types are `string`, `int`, `long`, `double`, `boolean` and
 `string_array` (a YAML list of templates).
@@ -237,13 +237,13 @@ android:
 ```
 
 Opens `ACTION_VIEW` (with `CATEGORY_BROWSABLE`), pinned to the plugin's package. If no activity of
-that package accepts the link as browsable, PhoneBridge tries once more without the category, still
+that package accepts the link as browsable, DroidHands tries once more without the category, still
 only in that package. If that package can't open the link, the call fails. It does not fall back to a
 browser.
 
 ### 6.4 `steps`: a screen recipe
 
-For tasks with no intent or link, a recipe drives the app's UI through PhoneBridge's accessibility
+For tasks with no intent or link, a recipe drives the app's UI through DroidHands's accessibility
 service. It reuses the safety checks of the screen tools: unlock-to-continue, one screen action at a
 time, no taps while an approval prompt is pending, and app-access checks.
 
@@ -292,15 +292,15 @@ than `index`. `id` may be short (`search_src_text`, which gets the app's package
 `text`, `text_contains`, `desc` and `desc_contains`. A text criterion that renders empty (an optional
 parameter left out) matches nothing.
 
-**Confinement:** before every tap, long-press, type, scroll or Back, PhoneBridge checks that the
+**Confinement:** before every tap, long-press, type, scroll or Back, DroidHands checks that the
 plugin's app is in the foreground. If another app is, the action stops with an error naming it. A tap
 or swipe made by coordinates must also land on the app's own window, not on a keyboard, notification or
 other app covering the element.
-Recipes can't press Home, open the notification shade, or touch other apps or PhoneBridge itself.
+Recipes can't press Home, open the notification shade, or touch other apps or DroidHands itself.
 
 **Limits:** 40 steps in total (nested ones included), and 90 s per action.
 
-### 6.5 `tool`: use a built-in PhoneBridge tool
+### 6.5 `tool`: use a built-in DroidHands tool
 
 ```yaml
 - id: send_sms
@@ -353,10 +353,10 @@ What differs on iOS:
 
 * **No `intent`.** iOS has no intents, as a recipe or as a step; use a `url` the app declares, or `steps`.
 * **`url`** is opened only when the installed app declares the link's scheme in its `Info.plist` (or, for
-  `https`, the domain among its associated domains). iOS, not PhoneBridge, picks the app for a link, so this
+  `https`, the domain among its associated domains). iOS, not DroidHands, picks the app for a link, so this
   check is what pins the link to the app. A link the installed version doesn't declare is shown as
   `available: false` and not run, so use the scheme the app vendor documents.
-* **`steps`** run through the PhoneBridge runner on the iPhone (docs/IOS.md), with the same confinement and
+* **`steps`** run through the DroidHands runner on the iPhone (docs/IOS.md), with the same confinement and
   limits. There is no `back` step (iPhone has no Back button: tap the app's own back control, e.g.
   `tap: Back`). In selectors, `id` is the element's accessibility identifier, used exactly as written (no
   package prefix), and `class` is the element type (`Button`, `TextField`, `Cell`).
@@ -395,7 +395,7 @@ Examples run only when the plugin has no other problems.
 
 ## 8. Discovered actions (no plugin needed)
 
-On Android, PhoneBridge scans each launchable app. The scan is refreshed when apps are installed,
+On Android, DroidHands scans each launchable app. The scan is refreshed when apps are installed,
 updated or removed.
 
 | Action id | When | Params | Risk |
@@ -419,7 +419,7 @@ named after their `android:key` (`messageText` → `message_text`); they reach t
 that key, or through its `<url-template>`, of which the RFC 6570 forms `{var}`, `{?a,b}` and `{&a}` are
 supported (a parameter left out gives an empty value there).
 
-**Read from the manifest.** Android has no public API that lists another app's intent filters, so PhoneBridge reads
+**Read from the manifest.** Android has no public API that lists another app's intent filters, so DroidHands reads
 them from the app's own base APK (`AndroidManifest.xml`, compiled; APKs are world-readable and nothing in them is
 run), cached per app version. Only activities that Android says other apps may start count: exported, enabled and
 not guarded by a permission. `open_link`'s description lists the link forms the installed version declares
@@ -435,12 +435,12 @@ the refusal of call actions and forbidden URL schemes) apply to them too.
 
 **On iPhone** the same idea applies to what iOS apps declare: `open` and `open_link` (the URL schemes and
 associated domains in the installed app's `Info.plist` and entitlements), and in `app_actions_list` a `declares`
-object with what the app declares that PhoneBridge can't start (App Intents, Home Screen quick actions, document
+object with what the app declares that DroidHands can't start (App Intents, Home Screen quick actions, document
 types), so the agent knows to do it with phone use. See [IOS.md](IOS.md#discovered-actions-on-ios).
 
 ### 8.1 Checking recipes against the installed app
 
-Before an `intent` or `url` action is offered, PhoneBridge renders it with sample parameters (the first example that
+Before an `intent` or `url` action is offered, DroidHands renders it with sample parameters (the first example that
 validates, else defaults and placeholders) and asks Android whether an exported activity of the installed app
 accepts it, without starting anything. If none does, `app_actions_list` shows the action with `available: false`
 and an `unavailable_reason` ("… has no screen that accepts this action's link (it was written for another version of
@@ -449,7 +449,7 @@ the app) …"), and `app_action_run` refuses it before any approval prompt. The 
 ### 8.2 Action health
 
 When an action runs but the app doesn't do what the recipe expects (no activity of this version takes the intent, or
-a screen recipe's step fails), PhoneBridge records it for that app version. `app_actions_list` then shows
+a screen recipe's step fails), DroidHands records it for that app version. `app_actions_list` then shows
 `health: {status, failures, last_error, note}` (`failed_last_time`, or `failing` after two in a row), and the error of
 a repeated failure says to use phone use instead. A success clears the record; an app update starts clean. Refusals
 (app access, a locked phone, Pause) are not failures. Records stay on the phone (`files/action-health.json`).
@@ -468,8 +468,8 @@ The validator, at build time and when a local plugin is imported, rejects:
 * intents with call actions, a `class` outside the plugin's package, or templates in `action`,
   `type`, `categories`, `class` or extra keys;
 * URL templates whose scheme isn't literal;
-* `android.packages` or `ios.bundle_ids` containing PhoneBridge itself (the E2E fixture apps,
-  `dev.phonebridge.fixture.*`, are not PhoneBridge);
+* `android.packages` or `ios.bundle_ids` containing DroidHands itself (the E2E fixture apps,
+  `com.droidhands.fixture.*`, are not DroidHands);
 * `intent` recipes or steps, and `back` steps, under `ios:` (§6.6).
 
 The word check matches whole words, ignoring case, in the `id` (split at `_`), the `title` and the
@@ -514,7 +514,7 @@ At run time:
 4. Ask your agent to use it, or call `app_action_run` directly, and check the Activity log.
 5. Optionally, add yourself to `tested` with the app version you used. Then open a pull request.
 
-To start from what an app already declares, use *Apps → (app) → Create plugin draft* in PhoneBridge (it
+To start from what an app already declares, use *Apps → (app) → Create plugin draft* in DroidHands (it
 shares a YAML skeleton built from the app's discovered actions: share target, text action, media and web
 search, geo links, launcher shortcuts and App Actions capabilities, each with a `TODO` comment and examples
 that pass), or run `./scripts/plugin-scaffold.sh <package>` over USB (the same standard intents, read from

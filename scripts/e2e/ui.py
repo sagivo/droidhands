@@ -34,7 +34,7 @@ def nodes():
             break
         time.sleep(1)
     if "<hierarchy" not in xml:
-        # uiautomator needs the screen to be still for a second; a ticking countdown (e.g. a PhoneBridge
+        # uiautomator needs the screen to be still for a second; a ticking countdown (e.g. a DroidHands
         # approval prompt in the shade) prevents that.
         sys.exit("could not read the screen (uiautomator found no idle moment)")
     root = ET.fromstring(xml[xml.index("<hierarchy"):])

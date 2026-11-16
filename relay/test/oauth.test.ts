@@ -322,7 +322,7 @@ test('authorize: an unsupported response_type shows an error page and never redi
   });
   // Anyone can register any https redirect URI, then send the victim a link on the relay's domain.
   const landing = 'https://evil.example/landing';
-  const evilClient = await registerClient(relay, { client_name: 'PhoneBridge setup', redirect_uris: [landing] });
+  const evilClient = await registerClient(relay, { client_name: 'DroidHands setup', redirect_uris: [landing] });
   const bare = `${relay.url}/oauth/authorize?client_id=${encodeURIComponent(evilClient)}&response_type=x`;
 
   for (const url of [ownClient, bare]) {
@@ -392,7 +392,7 @@ test('device selection with ALLOW_IMPLICIT_DEVICE: the only online phone, unname
   const single = await openAuthorize(relay, { clientId, pkce, deviceId: null });
   assert.equal((await first.nextFrame<PairRequestFrame>('pair_request')).displayCode, single.displayCode);
   assert.doesNotMatch(single.res.body, /Pixel 8/, 'the phone is not named to someone who did not name it');
-  assert.match(single.res.body, /Open PhoneBridge on <strong>your phone<\/strong>/);
+  assert.match(single.res.body, /Open DroidHands on <strong>your phone<\/strong>/);
   assert.doesNotMatch((await httpRequest(single.pageUrl)).body, /Pixel 8/, 'nor on the reloadable page');
 
   const named = await openAuthorize(relay, { clientId, pkce: newPkce(), deviceId: first.identity.deviceId });
@@ -454,7 +454,7 @@ test('device offline: the authorize page says so and nothing is created', async 
   await waitFor(() => relay.deviceCount() === 0, 'device removal');
   const res = await httpRequest(authorizeUrl(relay, { clientId: await registerClient(relay), pkce: newPkce(), deviceId }));
   assert.equal(res.status, 503);
-  assert.match(res.body, /Your phone is offline\. Open PhoneBridge, make sure it shows Connected, then reload this page\./);
+  assert.match(res.body, /Your phone is offline\. Open DroidHands, make sure it shows Connected, then reload this page\./);
 });
 
 test('a device that disconnects while a pairing is pending ends it as expired', async (t) => {

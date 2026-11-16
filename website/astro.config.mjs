@@ -3,6 +3,6 @@ import { defineConfig } from "astro/config";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  site: "https://phonebridge.dev",
+  site: "https://droidhands.com",
   vite: { plugins: [tailwindcss()] },
 });

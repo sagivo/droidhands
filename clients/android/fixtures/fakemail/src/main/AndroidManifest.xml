@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TEST FIXTURE email app for PhoneBridge E2E tests. Emulators / test devices only. See ../../README.md. -->
+<!-- TEST FIXTURE email app for DroidHands E2E tests. Emulators / test devices only. See ../../README.md. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -52,14 +52,14 @@
             </intent-filter>
         </activity>
 
-        <!-- Test trigger: am broadcast -n dev.phonebridge.fixture.mail/.IncomingEmailReceiver
-             -a dev.phonebridge.fixture.mail.INCOMING with string extras from, subject, body and an
+        <!-- Test trigger: am broadcast -n com.droidhands.fixture.mail/.IncomingEmailReceiver
+             -a com.droidhands.fixture.mail.INCOMING with string extras from, subject, body and an
              optional boolean extra inline (default true; false = Gmail-like Reply that opens the app). -->
         <receiver
             android:name=".IncomingEmailReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="dev.phonebridge.fixture.mail.INCOMING" />
+                <action android:name="com.droidhands.fixture.mail.INCOMING" />
             </intent-filter>
         </receiver>
 

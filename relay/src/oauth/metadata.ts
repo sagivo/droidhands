@@ -25,7 +25,7 @@ export function resourceMetadataUrl(base: string, deviceId: string): string {
 
 /** `WWW-Authenticate` for every 401 on the connector path (§5.1). */
 export function connectorChallenge(base: string, deviceId: string): string {
-  return `Bearer realm="phonebridge", resource_metadata="${resourceMetadataUrl(base, deviceId)}"`;
+  return `Bearer realm="droidhands", resource_metadata="${resourceMetadataUrl(base, deviceId)}"`;
 }
 
 /** RFC 9728 protected resource metadata for a device. */
@@ -34,7 +34,7 @@ export function protectedResourceMetadata(base: string, deviceId: string): Recor
     resource: connectorUrl(base, deviceId),
     authorization_servers: [base],
     bearer_methods_supported: ['header'],
-    resource_name: 'PhoneBridge',
+    resource_name: 'DroidHands',
     scopes_supported: [OAUTH_SCOPE],
   };
 }

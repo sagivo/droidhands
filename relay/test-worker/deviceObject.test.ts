@@ -129,7 +129,7 @@ describe('device socket', () => {
     const missing = await openSocket(newIdentity(), null);
     const error = await missing.next<{ code: string; message: string }>('error');
     expect(error.code).toBe('protocol_version');
-    expect(error.message).toMatch(/Update the PhoneBridge app/);
+    expect(error.message).toMatch(/Update the DroidHands app/);
     expect((await missing.closed).code).toBe(4002);
     const malformed = await openSocket(newIdentity(), 'deviceId=NOT-AN-ID');
     expect((await malformed.next<{ code: string }>('error')).code).toBe('bad_request');
@@ -241,13 +241,13 @@ describe('configuration', () => {
     const cfg = workerConfig({
       RELAY_SECRET: 'x'.repeat(40),
       PUBLIC_URL: 'https://relay.example.com/pb/',
-      APK_URL: 'https://github.com/o/r/releases/latest/download/phonebridge.apk',
+      APK_URL: 'https://github.com/o/r/releases/latest/download/droidhands.apk',
       TRUST_PROXY: 'true',
       MAX_DEVICES: 'lots',
     } as unknown as Env);
     expect(cfg.relay.publicUrl).toBe('https://relay.example.com/pb');
     expect(cfg.prefix).toBe('/pb');
-    expect(cfg.apkUrl).toBe('https://github.com/o/r/releases/latest/download/phonebridge.apk');
+    expect(cfg.apkUrl).toBe('https://github.com/o/r/releases/latest/download/droidhands.apk');
     expect(cfg.relay.trustProxy).toBe(false);
     // MAX_DEVICES can't be enforced across Durable Objects: ignored (even when invalid) and reported.
     expect(cfg.relay.maxDevices).toBe(1000);
@@ -255,11 +255,11 @@ describe('configuration', () => {
     expect(cfg.heartbeatTimeoutMs).toBe(75_000);
   });
 
-  it('the setup page links APK_URL and /download/phonebridge.apk forwards to it', async () => {
+  it('the setup page links APK_URL and /download/droidhands.apk forwards to it', async () => {
     // The test Worker has no APK_URL: no install button and no download.
     const page = await (await SELF.fetch(`${BASE}/setup`)).text();
-    expect(page).toContain('phonebridge://configure?relay=');
-    expect(page).not.toContain('Install PhoneBridge</a>');
-    expect((await SELF.fetch(`${BASE}/download/phonebridge.apk`)).status).toBe(404);
+    expect(page).toContain('droidhands://configure?relay=');
+    expect(page).not.toContain('Install DroidHands</a>');
+    expect((await SELF.fetch(`${BASE}/download/droidhands.apk`)).status).toBe(404);
   });
 });

@@ -87,53 +87,53 @@ test('/setup without an APK: no install link, inline QR of the setup URL, intent
   const res = await httpRequest(`${relay.url}/setup`);
   assert.equal(res.status, 200);
   assertPageHeaders(res);
-  assert.doesNotMatch(res.body, /download\/phonebridge\.apk/);
+  assert.doesNotMatch(res.body, /download\/droidhands\.apk/);
   assert.match(res.body, /<svg class="qr"[^>]*viewBox="0 0 \d+ \d+"/);
   assert.match(
     res.body,
-    /href="intent:\/\/configure\?relay=https%3A%2F%2Frelay\.example\.com#Intent;scheme=phonebridge;package=dev\.phonebridge\.android;end"/,
+    /href="intent:\/\/configure\?relay=https%3A%2F%2Frelay\.example\.com#Intent;scheme=droidhands;package=com\.droidhands\.android;end"/,
   );
   assert.match(res.body, /data-key-required="false"/);
-  assert.equal((await httpRequest(`${relay.url}/download/phonebridge.apk`)).status, 404);
+  assert.equal((await httpRequest(`${relay.url}/download/droidhands.apk`)).status, 404);
 });
 
 test('/setup with an APK: install link and download with the Android content type', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'pb-public-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const apk = Buffer.from('PK\u0003\u0004 fake apk bytes');
-  await writeFile(join(dir, 'phonebridge.apk'), apk);
+  await writeFile(join(dir, 'droidhands.apk'), apk);
   const relay = await startRelay(t, { publicDir: dir });
   const res = await httpRequest(`${relay.url}/setup`);
-  assert.match(res.body, /href="\/download\/phonebridge\.apk"/);
+  assert.match(res.body, /href="\/download\/droidhands\.apk"/);
 
-  const download = await httpRequest(`${relay.url}/download/phonebridge.apk`);
+  const download = await httpRequest(`${relay.url}/download/droidhands.apk`);
   assert.equal(download.status, 200);
   assert.equal(download.headers['content-type'], 'application/vnd.android.package-archive');
   assert.equal(download.headers['content-length'], String(apk.length));
-  assert.equal(download.headers['content-disposition'], 'attachment; filename="phonebridge.apk"');
+  assert.equal(download.headers['content-disposition'], 'attachment; filename="droidhands.apk"');
   assert.equal(download.body, apk.toString('utf8'));
-  const head = await httpRequest(`${relay.url}/download/phonebridge.apk`, { method: 'HEAD' });
+  const head = await httpRequest(`${relay.url}/download/droidhands.apk`, { method: 'HEAD' });
   assert.equal(head.status, 200);
   assert.equal(head.body, '');
   assert.equal((await httpRequest(`${relay.url}/download/other.apk`)).status, 404);
-  assert.equal((await httpRequest(`${relay.url}/download/..%2Fphonebridge.apk`)).status, 404);
+  assert.equal((await httpRequest(`${relay.url}/download/..%2Fdroidhands.apk`)).status, 404);
 });
 
 test('APK_URL: the install link points there (over a local APK) and /download redirects to it', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'pb-public-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  await writeFile(join(dir, 'phonebridge.apk'), Buffer.from('PK\u0003\u0004 local apk'));
-  const apkUrl = 'https://github.com/acme/phonebridge/releases/latest/download/PhoneBridge.apk';
+  await writeFile(join(dir, 'droidhands.apk'), Buffer.from('PK\u0003\u0004 local apk'));
+  const apkUrl = 'https://github.com/acme/droidhands/releases/latest/download/DroidHands.apk';
   const relay = await startRelay(t, { publicDir: dir, apkUrl });
 
   const res = await httpRequest(`${relay.url}/setup`);
   assert.equal(res.status, 200);
   assertPageHeaders(res);
-  assert.match(res.body, /<a class="button" href="https:\/\/github\.com\/acme\/phonebridge\/releases\/latest\/download\/PhoneBridge\.apk"/);
-  assert.doesNotMatch(res.body, /href="\/download\/phonebridge\.apk"/);
+  assert.match(res.body, /<a class="button" href="https:\/\/github\.com\/acme\/droidhands\/releases\/latest\/download\/DroidHands\.apk"/);
+  assert.doesNotMatch(res.body, /href="\/download\/droidhands\.apk"/);
 
   for (const method of ['GET', 'HEAD']) {
-    const download = await httpRequest(`${relay.url}/download/phonebridge.apk`, { method });
+    const download = await httpRequest(`${relay.url}/download/droidhands.apk`, { method });
     assert.equal(download.status, 302, method);
     assert.equal(download.headers.location, apkUrl);
   }

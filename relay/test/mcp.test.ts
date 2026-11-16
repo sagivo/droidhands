@@ -126,11 +126,11 @@ test('device-returned 401 propagates with WWW-Authenticate', async (t) => {
   const request = await device.nextRequest();
   device.respond(request.id, 401, UNAUTHORIZED_BODY, {
     'content-type': 'application/json',
-    'www-authenticate': 'Bearer realm="phonebridge"',
+    'www-authenticate': 'Bearer realm="droidhands"',
   });
   const res = await pending;
   assert.equal(res.status, 401);
-  assert.equal(res.headers['www-authenticate'], 'Bearer realm="phonebridge"');
+  assert.equal(res.headers['www-authenticate'], 'Bearer realm="droidhands"');
   assert.equal(res.body, UNAUTHORIZED_BODY);
 });
 
@@ -151,7 +151,7 @@ test('missing or malformed tokens get 401 without contacting any device', async 
   for (const headers of variants) {
     const res = await postMcp(relay, { headers });
     assert.equal(res.status, 401, JSON.stringify(headers));
-    assert.equal(res.headers['www-authenticate'], 'Bearer realm="phonebridge"');
+    assert.equal(res.headers['www-authenticate'], 'Bearer realm="droidhands"');
     assert.equal(res.headers['content-type'], 'application/json');
     assert.equal(res.body, UNAUTHORIZED_BODY);
     assertCommonHeaders(res);
@@ -396,7 +396,7 @@ test('healthz, root, unknown paths and the device path over plain HTTP', async (
 
   const root = await httpRequest(`${relay.url}/`);
   assert.equal(root.status, 200);
-  assert.match(root.body, /PhoneBridge relay/);
+  assert.match(root.body, /DroidHands relay/);
 
   assert.equal((await httpRequest(`${relay.url}/nope`)).status, 404);
   assert.equal((await httpRequest(`${relay.url}/mcpx`, { method: 'POST' })).status, 404);
@@ -424,7 +424,7 @@ test('device-returned 401s count toward the auth-failure limit', async (t) => {
   for (let i = 0; i < 3; i++) {
     const pending = postMcp(relay, { token });
     const request = await device.nextRequest();
-    device.respond(request.id, 401, UNAUTHORIZED_BODY, { 'www-authenticate': 'Bearer realm="phonebridge"' });
+    device.respond(request.id, 401, UNAUTHORIZED_BODY, { 'www-authenticate': 'Bearer realm="droidhands"' });
     assert.equal((await pending).status, 401);
   }
   assert.equal((await postMcp(relay, { token })).status, 429);

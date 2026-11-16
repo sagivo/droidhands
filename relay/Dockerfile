@@ -19,7 +19,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
-# Optional: put phonebridge.apk into relay/public/ before building and /setup offers it for download.
+# Optional: put droidhands.apk into relay/public/ before building and /setup offers it for download.
 COPY public ./public
 
 # The relay's only state is DATA_DIR/relay-secret (the key that signs OAuth client ids; or set

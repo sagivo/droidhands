@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the key that signs PhoneBridge releases, and prints (does not run) the GitHub CLI
+# Creates the key that signs DroidHands releases, and prints (does not run) the GitHub CLI
 # commands that store it as the secrets the release workflow needs. See docs/RELEASING.md.
 #
 #   ./scripts/make-release-key.sh [--out PATH] [--alias NAME] [--repo OWNER/NAME]
@@ -12,8 +12,8 @@
 # Needs keytool (from a JDK 17+) and openssl. Works with macOS's bash 3.2 and Linux.
 set -euo pipefail
 
-OUT="$HOME/.phonebridge/phonebridge-release.jks"
-ALIAS="phonebridge"
+OUT="$HOME/.droidhands/droidhands-release.jks"
+ALIAS="droidhands"
 REPO="<owner>/<repo>"
 
 usage() {
@@ -83,7 +83,7 @@ printf '%s' "$PB_RELEASE_KEY_PASSWORD" > "$PASSWORD_FILE"
 "$KEYTOOL" -genkeypair -noprompt \
   -keystore "$OUT" -storetype PKCS12 \
   -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 10000 \
-  -dname "CN=PhoneBridge release" \
+  -dname "CN=DroidHands release" \
   -storepass:env PB_RELEASE_KEY_PASSWORD -keypass:env PB_RELEASE_KEY_PASSWORD >/dev/null
 unset PB_RELEASE_KEY_PASSWORD
 chmod 600 "$OUT" "$PASSWORD_FILE"
@@ -99,7 +99,7 @@ Created the release key:
   SHA-256   ${FINGERPRINT:-(see keytool -list)}
 
 Back up both files somewhere safe and offline. Without this key, no update can be installed over
-a released PhoneBridge.
+a released DroidHands.
 
 To let the release workflow sign with it, run these commands yourself (GitHub CLI, logged in with
 access to $REPO). Nothing has been uploaded.
@@ -111,7 +111,7 @@ access to $REPO). Nothing has been uploaded.
 
 Optional, the relay new installs connect to on first run (see relay/README.md):
 
-  gh variable set PHONEBRIDGE_RELAY_URL --repo $REPO --body "https://relay.example.com"
+  gh variable set DROIDHANDS_RELAY_URL --repo $REPO --body "https://relay.example.com"
 
 To sign a release build on this computer instead:
 

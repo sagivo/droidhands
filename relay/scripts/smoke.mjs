@@ -4,7 +4,7 @@
  * initialize → notifications/initialized → tools/list, then prints the tool names.
  *
  *   npm run smoke -- <mcpUrl> <token>
- *   PHONEBRIDGE_TOKEN=pb1.… npm run smoke -- https://relay.example.com/mcp
+ *   DROIDHANDS_TOKEN=pb1.… npm run smoke -- https://relay.example.com/mcp
  *
  * Exits 0 on success, 1 on any failure, 2 on bad usage. The token is never printed.
  */
@@ -13,10 +13,10 @@ const PROTOCOL_VERSION = '2025-06-18';
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS ?? 30_000);
 
 const [mcpUrl, tokenArg] = process.argv.slice(2);
-const token = tokenArg ?? process.env.PHONEBRIDGE_TOKEN;
+const token = tokenArg ?? process.env.DROIDHANDS_TOKEN;
 
 if (!mcpUrl || !token) {
-  console.error('usage: npm run smoke -- <mcpUrl> <token>   (or set PHONEBRIDGE_TOKEN)');
+  console.error('usage: npm run smoke -- <mcpUrl> <token>   (or set DROIDHANDS_TOKEN)');
   process.exit(2);
 }
 try {
@@ -37,7 +37,7 @@ async function post(message) {
     authorization: `Bearer ${token}`,
     'content-type': 'application/json',
     accept: 'application/json, text/event-stream',
-    'user-agent': 'phonebridge-smoke/0.1',
+    'user-agent': 'droidhands-smoke/0.1',
   };
   if (negotiatedVersion) headers['mcp-protocol-version'] = negotiatedVersion;
 
@@ -107,7 +107,7 @@ async function main() {
   const init = await request('initialize', {
     protocolVersion: PROTOCOL_VERSION,
     capabilities: {},
-    clientInfo: { name: 'phonebridge-smoke', version: '0.1.0' },
+    clientInfo: { name: 'droidhands-smoke', version: '0.1.0' },
   });
   const result = init?.result;
   if (!result?.protocolVersion) throw new SmokeError('initialize: missing result.protocolVersion');

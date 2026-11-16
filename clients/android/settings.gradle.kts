@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "phonebridge"
+rootProject.name = "droidhands"
 
 // Platform-neutral bridge core (pure Kotlin/JVM, no Android APIs).
 include(":core")

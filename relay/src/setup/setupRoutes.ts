@@ -13,11 +13,11 @@ import { qrPath, qrSvg } from './qr.js';
 import { setupUrl } from './setupUrl.js';
 
 /**
- * `GET /setup` (docs/PROTOCOL.md §5.5), `GET /download/phonebridge.apk` and `POST /setup/qr`.
+ * `GET /setup` (docs/PROTOCOL.md §5.5), `GET /download/droidhands.apk` and `POST /setup/qr`.
  */
 
 /** File the operator may drop into PUBLIC_DIR. */
-export const APK_FILE_NAME = 'phonebridge.apk';
+export const APK_FILE_NAME = 'droidhands.apk';
 export const APK_PATH = `/download/${APK_FILE_NAME}`;
 export const SETUP_QR_PATH = '/setup/qr';
 

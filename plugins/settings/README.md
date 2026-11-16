@@ -26,6 +26,6 @@ Known limitations:
 * Android warns that "a matching Activity may not exist" for most of these: phone makers may leave a screen out or
   handle it in another app (Samsung, for example, may show battery screens in Device care). Then the action fails
   and nothing opens.
-* `app_notifications` and `app_details` refuse PhoneBridge's own package (`dev.phonebridge…`), so an agent can't
-  open the pages that turn off PhoneBridge's notifications or force-stop it. That check is in the parameter
+* `app_notifications` and `app_details` refuse DroidHands's own package (`com.droidhands…`), so an agent can't
+  open the pages that turn off DroidHands's notifications or force-stop it. That check is in the parameter
   `pattern`; a `package` parameter is not otherwise checked against the agent's app access.

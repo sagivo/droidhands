@@ -138,7 +138,7 @@ actions:
     title: Open an app's notification settings
     description: >-
       Opens the notification settings of one app, by package name (apps_list shows it). It changes nothing by
-      itself. PhoneBridge's own settings can't be opened this way.
+      itself. DroidHands's own settings can't be opened this way.
     keywords: [notifications, alerts, mute, app notifications, notification channels]
     risk: action
     params:
@@ -146,7 +146,7 @@ actions:
         description: The app's package name, e.g. com.whatsapp (apps_list shows it).
         required: true
         max_length: 200
-        pattern: '^(?!dev\.phonebridge(\.|$))[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
+        pattern: '^(?!com\.droidhands(\.|$))[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
     confirm: Open the notification settings of {{package}}
     android:
       intent:
@@ -160,7 +160,7 @@ actions:
             action: android.settings.APP_NOTIFICATION_SETTINGS
             package: com.android.settings
             extras: {android.provider.extra.APP_PACKAGE: com.whatsapp}
-      - params: {package: dev.phonebridge.android}
+      - params: {package: com.droidhands.android}
         expect: {error: package}
       - params: {package: WhatsApp}
         expect: {error: package}
@@ -169,7 +169,7 @@ actions:
     title: Open an app's info page
     description: >-
       Opens the App info page of one app, by package name (apps_list shows it): storage, permissions, battery use,
-      Open and Force stop buttons. It changes nothing by itself. PhoneBridge's own page can't be opened this way.
+      Open and Force stop buttons. It changes nothing by itself. DroidHands's own page can't be opened this way.
     keywords: [app info, app details, permissions, storage, cache, force stop, app settings, uninstall]
     risk: action
     params:
@@ -177,7 +177,7 @@ actions:
         description: The app's package name, e.g. com.spotify.music (apps_list shows it).
         required: true
         max_length: 200
-        pattern: '^(?!dev\.phonebridge(\.|$))[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
+        pattern: '^(?!com\.droidhands(\.|$))[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'
     confirm: Open the App info page of {{package}}
     android:
       intent:
@@ -190,9 +190,9 @@ actions:
             action: android.settings.APPLICATION_DETAILS_SETTINGS
             package: com.android.settings
             data: "package:com.spotify.music"
-      - params: {package: dev.phonebridge}
+      - params: {package: com.droidhands}
         expect: {error: package}
-      - params: {package: dev.phonebridge.android.debug}
+      - params: {package: com.droidhands.android.debug}
         expect: {error: package}
       - params: {}
         expect: {error: package}

@@ -1,6 +1,6 @@
-# PhoneBridge wire protocols
+# DroidHands wire protocols
 
-PhoneBridge has three wire-level contracts. Every device implementation (Android today,
+DroidHands has three wire-level contracts. Every device implementation (Android today,
 iOS/desktop later) and the relay MUST follow them exactly. All JSON is UTF-8.
 
 ```
@@ -187,7 +187,7 @@ requests per device at 32 and answers `429` beyond that.
 Implemented on the device by `McpServer` (core). The relay is a transparent tunnel.
 
 * `POST /mcp`, body = one JSON-RPC 2.0 message **or** a batch array (accepted for older clients).
-* Auth: missing or invalid token → HTTP `401`, header `WWW-Authenticate: Bearer realm="phonebridge"`,
+* Auth: missing or invalid token → HTTP `401`, header `WWW-Authenticate: Bearer realm="droidhands"`,
   body `{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"Unauthorized"}}`.
   Revoked and expired tokens get the same response. No detail leaks. The relay's connector path
   (§5.1) and the local server (§4.1) add `resource_metadata` to the header.
@@ -232,16 +232,16 @@ the relay's, so a client that pairs through the relay pairs here too. Implemente
 
   Any other `Host` (another name, another address, none) gets `421` on every OAuth endpoint (JSON,
   or an HTML page for `/oauth/authorize`), and a `401` from `/mcp` keeps the plain
-  `Bearer realm="phonebridge"`. A web page that rebinds its DNS name to the phone therefore cannot
+  `Bearer realm="droidhands"`. A web page that rebinds its DNS name to the phone therefore cannot
   read metadata or start a pairing.
 * **Discovery.** Resource `{base}/mcp`. Protected resource metadata at
   `/.well-known/oauth-protected-resource/mcp` (and without the `/mcp` suffix), with the relay's
   fields. Authorization server metadata at `/.well-known/oauth-authorization-server` and
   `/.well-known/openid-configuration` (also with `/mcp` appended), issuer `{base}`, endpoints
   `{base}/oauth/authorize|token|register`. A `401` from `/mcp` carries
-  `WWW-Authenticate: Bearer realm="phonebridge", resource_metadata="{base}/.well-known/oauth-protected-resource/mcp"`.
+  `WWW-Authenticate: Bearer realm="droidhands", resource_metadata="{base}/.well-known/oauth-protected-resource/mcp"`.
 * **Registration** (`POST /oauth/register`, at most 16 KiB): the rules and stateless `client_id`
-  format of §5.2. The HMAC key is `HMAC-SHA256(deviceSecret, "phonebridge:local-oauth-clients")`, so
+  format of §5.2. The HMAC key is `HMAC-SHA256(deviceSecret, "droidhands:local-oauth-clients")`, so
   registrations survive app restarts and become invalid when the device identity is reset. No CORS
   headers: there is no browser-based client that could reach the phone, and the `Origin` rule above
   applies.
@@ -281,7 +281,7 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
   gets `401`.
 * Every `401` on this path, whether the relay produced it or the device returned it (for example a
   revoked token), carries
-  `WWW-Authenticate: Bearer realm="phonebridge", resource_metadata="{relay}/.well-known/oauth-protected-resource/d/<deviceId>/mcp"`.
+  `WWW-Authenticate: Bearer realm="droidhands", resource_metadata="{relay}/.well-known/oauth-protected-resource/d/<deviceId>/mcp"`.
   The relay rewrites or adds this header, so MCP clients start (or restart) the OAuth flow.
 * `welcome` gains `"connectUrl": "{relay}/d/<deviceId>/mcp"`. The app shows it as
   **"Your connection URL"**.
@@ -290,7 +290,7 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
 
 | Endpoint | Behaviour |
 |---|---|
-| `GET /.well-known/oauth-protected-resource/d/<id>/mcp` | RFC 9728: `{"resource":"{relay}/d/<id>/mcp","authorization_servers":["{relay}"],"bearer_methods_supported":["header"],"resource_name":"PhoneBridge"}` |
+| `GET /.well-known/oauth-protected-resource/d/<id>/mcp` | RFC 9728: `{"resource":"{relay}/d/<id>/mcp","authorization_servers":["{relay}"],"bearer_methods_supported":["header"],"resource_name":"DroidHands"}` |
 | `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414: `issuer` `{relay}`, `authorization_endpoint` `{relay}/oauth/authorize`, `token_endpoint` `{relay}/oauth/token`, `registration_endpoint` `{relay}/oauth/register`, `response_types_supported` `["code"]`, `grant_types_supported` `["authorization_code"]`, `code_challenge_methods_supported` `["S256"]`, `token_endpoint_auth_methods_supported` `["none"]`, `scopes_supported` `["phone"]` |
 | `POST /oauth/register` | RFC 7591 dynamic registration for **public clients**. `redirect_uris` must be `https://…` or loopback `http://localhost|127.0.0.1|[::1]:<port>/…`. Private-use schemes are allowed (`com.example.app:/cb`, `cursor://…`) except a denylist of schemes that
   execute, read local data or reach other handlers (`javascript:`, `data:`, `file:`, `blob:`, `intent:`, `content:`, `ws:`,
@@ -315,7 +315,7 @@ credentials) so browser-based clients work.
    `resource` is **required**: without it the relay shows an error page. The operator can set
    `ALLOW_IMPLICIT_DEVICE=true` to fall back to the only online device, but that lets anyone who knows the
    relay URL push a pairing prompt to that phone.
-3. If the device is offline, the page says "Your phone is offline. Open PhoneBridge, make sure it
+3. If the device is offline, the page says "Your phone is offline. Open DroidHands, make sure it
    shows Connected, then reload this page."
 4. The relay creates a pending pairing: `id` = `p_` + 16 random bytes in base64url; `displayCode` = 4
    chars from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`; `pageToken` = 16 random bytes; TTL 180 s. At most
@@ -327,7 +327,7 @@ credentials) so browser-based clients work.
    ```
    `clientName` is the registered `client_name`, truncated to 60 chars and stripped of control
    characters. `redirectHost` is the host (and port, for loopback) of `redirect_uri`.
-6. The relay renders an HTML page (no external assets): "Approve on your phone. Open PhoneBridge on
+6. The relay renders an HTML page (no external assets): "Approve on your phone. Open DroidHands on
    **<deviceName>** and tap Allow. Check that the code shown there is **K7Q2**." The page polls
    `GET /oauth/pair/<id>?t=<pageToken>` every 1.5 s. That endpoint returns
    `{"status":"pending"|"approved"|"denied"|"expired","redirect":"…"}`, and `redirect` is present
@@ -397,17 +397,17 @@ the code and sends `pair_abandoned`, so the phone deletes the token.
 
 ### 5.5 Phone setup link
 
-`GET /setup` serves a mobile-friendly page with: (1) "Install PhoneBridge", a link to the relay's
-`APK_URL` (e.g. the latest GitHub release's `PhoneBridge.apk`) if set, otherwise to
-`/download/phonebridge.apk` if the operator put an APK in the relay's `public/` dir; and (2)
-"Open in PhoneBridge", an `intent://configure?relay=<relay>&key=<accessKey>#Intent;scheme=phonebridge;package=dev.phonebridge.android;end`
+`GET /setup` serves a mobile-friendly page with: (1) "Install DroidHands", a link to the relay's
+`APK_URL` (e.g. the latest GitHub release's `DroidHands.apk`) if set, otherwise to
+`/download/droidhands.apk` if the operator put an APK in the relay's `public/` dir; and (2)
+"Open in DroidHands", an `intent://configure?relay=<relay>&key=<accessKey>#Intent;scheme=droidhands;package=com.droidhands.android;end`
 link. The access key is read from the page URL **fragment** (`/setup#key=…`), so it never reaches
 the server or its logs. On startup the relay prints the setup URL, with the fragment when
 `RELAY_ACCESS_KEY` is set, plus a terminal QR code. The app handles
-`phonebridge://configure?relay=…&key=…` (both values percent-encoded) by asking "Connect to relay
+`droidhands://configure?relay=…&key=…` (both values percent-encoded) by asking "Connect to relay
 <host>?" and then saving and connecting. Its **Scan QR code** button (Google Play services' code
 scanner, no camera permission) reads the relay's QR code, i.e. the setup URL `…/setup[#key=…]`, and
-also accepts the `phonebridge://configure` link, its `intent://` form or a bare relay URL; it leads to
+also accepts the `droidhands://configure` link, its `intent://` form or a bare relay URL; it leads to
 the same "Connect to relay?" question, and anything else is refused. When an access key is set, the page draws its QR code
 through `POST /setup/qr` (`{"key"}` → SVG path; a wrong key gets 403 and counts as an auth failure),
 so the key never appears in a page served to someone who doesn't already have it.

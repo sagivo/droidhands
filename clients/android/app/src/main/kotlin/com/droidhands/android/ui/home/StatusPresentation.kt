@@ -1,0 +1,97 @@
+package com.droidhands.android.ui.home
+
+import com.droidhands.android.graph.LocalServerStatus
+import com.droidhands.android.settings.BridgeSettings
+import com.droidhands.android.settings.LocalBind
+import com.droidhands.android.ui.settings.RelayUrls
+import com.droidhands.core.transport.RelayStatus
+
+/** Indicator color class for a status line. */
+enum class StatusLevel { OK, PENDING, WARNING, ERROR, OFF }
+
+/** One row of the Home status card. [urls] are shown copyable. */
+data class StatusLine(val level: StatusLevel, val title: String, val detail: String? = null, val urls: List<String> = emptyList())
+
+/** Pure mapping from bridge state to Home screen text (unit-tested). */
+object StatusPresentation {
+    fun relay(status: RelayStatus, relayEnabled: Boolean): StatusLine = when (status) {
+        is RelayStatus.Connected -> StatusLine(
+            StatusLevel.OK,
+            "Relay connected",
+            if (!status.connectUrl.isNullOrBlank()) "Your connection URL:" else "Agents can reach this phone at:",
+            listOf(connectionUrl(status)),
+        )
+        RelayStatus.Connecting -> StatusLine(StatusLevel.PENDING, "Connecting to relay…")
+        is RelayStatus.Error -> if (status.fatal) {
+            StatusLine(
+                StatusLevel.ERROR,
+                "Relay refused the connection",
+                "${status.message.trimEnd('.')}. Not retrying: check the relay URL and access key in Settings.",
+            )
+        } else {
+            val retry = status.retryInMs?.let { " Retrying in ${secondsText(it)}." } ?: ""
+            StatusLine(StatusLevel.WARNING, "Relay unreachable", "${status.message.trimEnd('.')}.$retry")
+        }
+        RelayStatus.Stopped -> if (relayEnabled) {
+            StatusLine(StatusLevel.WARNING, "Relay not running", "The bridge service isn't running. Tap Restart.")
+        } else {
+            StatusLine(StatusLevel.OFF, "Relay off", "Turn it on in Settings to reach this phone from anywhere.")
+        }
+    }
+
+    /** The local server's line; listening on the tailnet only ([LocalBind.TAILSCALE]) it is the Tailscale route. */
+    fun local(status: LocalServerStatus, enabled: Boolean, bind: LocalBind = LocalBind.LOOPBACK): StatusLine {
+        val name = if (bind == LocalBind.TAILSCALE) "Tailscale" else "Local server"
+        return when (status) {
+            is LocalServerStatus.Running -> if (bind == LocalBind.TAILSCALE) {
+                StatusLine(StatusLevel.OK, "Tailscale ready", "Private to your tailnet, for agents on your own devices:", status.urls)
+            } else {
+                StatusLine(StatusLevel.OK, "Local server running", null, status.urls)
+            }
+            is LocalServerStatus.Error -> StatusLine(StatusLevel.ERROR, "$name failed", status.message)
+            LocalServerStatus.WaitingForTailscale -> StatusLine(
+                StatusLevel.WARNING,
+                "Waiting for Tailscale",
+                "Turn on Tailscale on this phone. Agents on your tailnet can connect as soon as it's on.",
+            )
+            LocalServerStatus.Stopped -> if (enabled) {
+                StatusLine(StatusLevel.WARNING, "$name not running", "The bridge service isn't running. Tap Restart.")
+            } else {
+                StatusLine(StatusLevel.OFF, "Local server off", "Optional: for Tailscale, USB (adb forward) or same-network use.")
+            }
+        }
+    }
+
+    /**
+     * The URL to give agents for a connected relay: the per-device connector URL (one-tap pairing,
+     * docs/PROTOCOL.md §5.1) when the relay supports it, otherwise the plain MCP endpoint.
+     */
+    fun connectionUrl(status: RelayStatus.Connected): String = status.connectUrl?.takeIf { it.isNotBlank() } ?: status.mcpUrl
+
+    /** "mmg42k…s3j4": enough to recognize a device without showing the whole id. */
+    fun shortDeviceId(deviceId: String): String =
+        if (deviceId.length <= 12) deviceId else deviceId.take(6) + "…" + deviceId.takeLast(4)
+
+    /** True if at least one transport is enabled with usable settings. */
+    fun transportConfigured(settings: BridgeSettings): Boolean =
+        (settings.relayEnabled && RelayUrls.mcpUrl(settings.relayUrl) != null) || settings.localServerEnabled
+
+    /**
+     * Like [transportConfigured], but the build's default relay doesn't count: the user didn't set
+     * it up, so a fresh install that is online through it still gets the onboarding wizard.
+     */
+    fun userTransportConfigured(settings: BridgeSettings): Boolean =
+        transportConfigured(settings.copy(relayEnabled = settings.relayEnabled && !settings.relayFromDefault))
+
+    /** Offer "Restart" when an enabled transport is down for a reason a restart can fix. */
+    fun showRestart(relay: RelayStatus, relayEnabled: Boolean, local: LocalServerStatus, localEnabled: Boolean): Boolean {
+        val relayDown = relay == RelayStatus.Stopped || (relay is RelayStatus.Error && relay.fatal)
+        val localDown = local == LocalServerStatus.Stopped || local is LocalServerStatus.Error
+        return (relayEnabled && relayDown) || (localEnabled && localDown)
+    }
+
+    private fun secondsText(ms: Long): String {
+        val s = (ms + 999) / 1000
+        return if (s < 60) "$s s" else "${s / 60} min"
+    }
+}

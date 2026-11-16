@@ -31,10 +31,10 @@
     "CFBundleVersion": "8.9.0.575",
     "Path": "$BUNDLE_ROOT/Spotify.app"
   },
-  "dev.phonebridge.runner.xctrunner": {
+  "com.droidhands.runner.xctrunner": {
     "ApplicationType": "User",
-    "CFBundleDisplayName": "PhoneBridgeRunner-Runner",
-    "CFBundleIdentifier": "dev.phonebridge.runner.xctrunner",
+    "CFBundleDisplayName": "DroidHandsRunner-Runner",
+    "CFBundleIdentifier": "com.droidhands.runner.xctrunner",
     "CFBundleVersion": "1",
     "Path": "/nonexistent/Runner.app"
   }

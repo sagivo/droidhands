@@ -14,7 +14,7 @@ interface RunResult {
 
 function runSmoke(...args: string[]): Promise<RunResult> {
   return new Promise((resolve) => {
-    execFile(process.execPath, [SMOKE, ...args], { env: { ...process.env, PHONEBRIDGE_TOKEN: '' } }, (err, stdout, stderr) => {
+    execFile(process.execPath, [SMOKE, ...args], { env: { ...process.env, DROIDHANDS_TOKEN: '' } }, (err, stdout, stderr) => {
       const code = err === null ? 0 : typeof err.code === 'number' ? err.code : -1;
       resolve({ code, stdout, stderr });
     });
@@ -34,7 +34,7 @@ function fakeMcp(expectedAuth: string) {
     });
     switch (message.method) {
       case 'initialize':
-        return reply({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'PhoneBridge', version: '0.1.0' } });
+        return reply({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'DroidHands', version: '0.1.0' } });
       case 'tools/list':
         return message.params?.cursor === 'page2'
           ? reply({ tools: [{ name: 'screen_observe' }] })
@@ -53,7 +53,7 @@ test('smoke script: initialize + tools/list through the relay', async (t) => {
 
   const result = await runSmoke(`${relay.url}/mcp`, token);
   assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /initialize: ok \(server: PhoneBridge 0\.1\.0, protocol 2025-06-18\)/);
+  assert.match(result.stdout, /initialize: ok \(server: DroidHands 0\.1\.0, protocol 2025-06-18\)/);
   assert.match(result.stdout, /tools\/list: 3 tool\(s\)/);
   for (const name of ['contacts_search', 'device_status', 'screen_observe']) assert.match(result.stdout, new RegExp(`- ${name}`));
   assert.ok(!result.stdout.includes(token) && !result.stderr.includes(token), 'token is never printed');

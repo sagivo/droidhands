@@ -1,6 +1,6 @@
 # App plugins
 
-Every app on the phone gets a menu of actions that AI agents can run with `app_action_run`. PhoneBridge
+Every app on the phone gets a menu of actions that AI agents can run with `app_action_run`. DroidHands
 discovers the basics by itself (open the app, share text into it, its launcher shortcuts and App Actions,
 media and web search, maps links). A **plugin** adds the actions that make an app really useful to an agent,
 such as "play this song" or "navigate home", written for that app and reviewed in a pull request.
@@ -72,12 +72,12 @@ The table is generated: after adding or changing a plugin, run `./scripts/plugin
 is out of date).
 
 Missing an app? [Request an integration](../../../issues/new?template=app-integration.yml), or write the
-plugin yourself: in the PhoneBridge app, *Apps → (the app) → Create plugin draft* shares a starting point made
+plugin yourself: in the DroidHands app, *Apps → (the app) → Create plugin draft* shares a starting point made
 from what the app declares on your phone.
 
 ## Security, in short
 
-Plugins can't add powers PhoneBridge doesn't already have ([docs/PLUGINS.md §9](../docs/PLUGINS.md#9-security-rules)):
+Plugins can't add powers DroidHands doesn't already have ([docs/PLUGINS.md §9](../docs/PLUGINS.md#9-security-rules)):
 intents and links are pinned to the plugin's app, screen recipes act only while that app is in the
 foreground, every action is checked and approved like a tool of its own (`<package>/<action>`), and actions
 that send, post, pay, order, book, call or delete must be `sensitive`, so they ask the user first by default.

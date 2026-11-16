@@ -16,7 +16,7 @@ PASSED=0
 FAILED=0
 
 mkdir -p "$WORK/bin" "$WORK/runner"
-printf 'name: PhoneBridgeRunner\n' >"$WORK/runner/project.yml"
+printf 'name: DroidHandsRunner\n' >"$WORK/runner/project.yml"
 cat >"$WORK/bin/xcodegen" <<'EOF'
 #!/usr/bin/env bash
 printf 'xcodegen%s\n' "$(printf ' [%s]' "$@")" >>"$FAKE_LOG"
@@ -35,7 +35,7 @@ run() {
   : >"$WORK/log"
   local status=0
   OUTPUT="$(env -u PB_RUNNER_SECRET FAKE_LOG="$WORK/log" XCODEGEN="$WORK/bin/xcodegen" XCODEBUILD="$WORK/bin/xcodebuild" \
-    PHONEBRIDGE_RUNNER_SRC="$WORK/runner" NO_COLOR=1 ${SECRET:+PB_RUNNER_SECRET="$SECRET"} \
+    DROIDHANDS_RUNNER_SRC="$WORK/runner" NO_COLOR=1 ${SECRET:+PB_RUNNER_SECRET="$SECRET"} \
     "$SUT" "$@" 2>&1)" || status=$?
   LOG="$(cat "$WORK/log")"
   if [ -n "${SHOW_OUTPUT:-}" ]; then printf '%s\n' "$OUTPUT"; fi
@@ -81,10 +81,10 @@ if run 0 --simulator SIM-1 --port 9000; then
   expect_in "simulator: builds for testing" "$LOG" "xcodebuild [build-for-testing]"
   expect_in "simulator: destination" "$LOG" "[-destination] [platform=iOS Simulator,id=SIM-1]"
   expect_in "simulator: ad-hoc signing" "$LOG" "[CODE_SIGN_IDENTITY=-]"
-  expect_in "simulator: default bundle id" "$LOG" "[PB_BUNDLE_ID_BASE=dev.phonebridge.runner]"
+  expect_in "simulator: default bundle id" "$LOG" "[PB_BUNDLE_ID_BASE=com.droidhands.runner]"
   expect_in "simulator: runs only the runner test" "$LOG" \
-    "xcodebuild [test-without-building] [-project] [$WORK/runner/PhoneBridgeRunner.xcodeproj] [-scheme] [PhoneBridgeRunner]"
-  expect_in "simulator: -only-testing" "$LOG" "[-only-testing:PhoneBridgeRunner/PhoneBridgeRunnerTests/testRunBridge]"
+    "xcodebuild [test-without-building] [-project] [$WORK/runner/DroidHandsRunner.xcodeproj] [-scheme] [DroidHandsRunner]"
+  expect_in "simulator: -only-testing" "$LOG" "[-only-testing:DroidHandsRunner/DroidHandsRunnerTests/testRunBridge]"
   expect_in "simulator: secret and port reach the runner" "$LOG" "env secret=[s3cret-value] port=[9000]"
   expect_not_in "simulator: secret is not an argument" "$(grep -v '^env ' <<<"$LOG")" "s3cret-value"
   expect_not_in "simulator: secret is not printed" "$OUTPUT" "s3cret-value"
@@ -94,7 +94,7 @@ if run 0 --device DEV-1 --team ABCDE12345; then
   expect_in "device: destination" "$LOG" "[-destination] [platform=iOS,id=DEV-1]"
   expect_in "device: automatic signing with the team" "$LOG" "[CODE_SIGN_STYLE=Automatic] [DEVELOPMENT_TEAM=ABCDE12345]"
   expect_in "device: provisioning updates" "$LOG" "[-allowProvisioningUpdates]"
-  expect_in "device: bundle id per team" "$LOG" "[PB_BUNDLE_ID_BASE=dev.phonebridge.runner.abcde12345]"
+  expect_in "device: bundle id per team" "$LOG" "[PB_BUNDLE_ID_BASE=com.droidhands.runner.abcde12345]"
   expect_in "device: default port" "$LOG" "port=[8101]"
   expect_in "device: Developer Mode guidance" "$OUTPUT" "Developer Mode"
   expect_in "device: trust guidance" "$OUTPUT" "VPN & Device"

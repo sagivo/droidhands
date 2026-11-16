@@ -28,9 +28,9 @@ export function sendSetupPage(req: IncomingMessage, res: ServerResponse, input: 
 export function setupPage(input: SetupPageInput): PageOptions {
   const { base, apkUrl, qrEndpoint, accessKeyRequired, qrSvg } = input;
   return {
-    title: 'Set up PhoneBridge',
+    title: 'Set up DroidHands',
     body: html`<div id="setup" data-relay="${base}" data-key-required="${String(accessKeyRequired)}" data-qr="${qrEndpoint}">
-<h1>Set up PhoneBridge</h1>
+<h1>Set up DroidHands</h1>
 <p>Let your AI apps use this Android phone, with your approval.</p>
 <p id="key-missing" class="warn hidden">This link is missing the relay's access key. Open the full setup link
 printed by the relay (it ends with <code>#key=…</code>), or enter the key by hand in step 3.</p>
@@ -39,22 +39,22 @@ printed by the relay (it ends with <code>#key=…</code>), or enter the key by h
 <h2>1. Install the app</h2>
 ${
   apkUrl === null
-    ? html`<p>Install the PhoneBridge app on your phone. Ask whoever runs this relay for the app, or build it from source.</p>`
-    : html`<a class="button" href="${apkUrl}" download>Install PhoneBridge</a>
+    ? html`<p>Install the DroidHands app on your phone. Ask whoever runs this relay for the app, or build it from source.</p>`
+    : html`<a class="button" href="${apkUrl}" download>Install DroidHands</a>
 <p class="muted">Android may ask you to allow installs from your browser. Allow it, install, then come back here.</p>`
 }
 </div>
 
 <div class="card">
 <h2>2. Connect it to this relay</h2>
-<a id="open" class="button" href="${`intent://configure?relay=${encodeURIComponent(base)}#Intent;scheme=phonebridge;package=${ANDROID_PACKAGE};end`}">Open in PhoneBridge</a>
-<p class="muted">PhoneBridge asks you to confirm, then connects. Link not working?
-<a id="open-direct" href="${`phonebridge://configure?relay=${encodeURIComponent(base)}`}">Try this one</a>.</p>
+<a id="open" class="button" href="${`intent://configure?relay=${encodeURIComponent(base)}#Intent;scheme=droidhands;package=${ANDROID_PACKAGE};end`}">Open in DroidHands</a>
+<p class="muted">DroidHands asks you to confirm, then connects. Link not working?
+<a id="open-direct" href="${`droidhands://configure?relay=${encodeURIComponent(base)}`}">Try this one</a>.</p>
 </div>
 
 <div class="card">
 <h2>3. Or enter it by hand</h2>
-<p>In PhoneBridge, open <strong>Settings</strong> and set:</p>
+<p>In DroidHands, open <strong>Settings</strong> and set:</p>
 <p>Relay URL: <code>${base}</code></p>
 <p id="manual-key-row" class="${accessKeyRequired ? '' : 'hidden'}">Access key: <code id="manual-key">(from your setup link)</code></p>
 </div>
@@ -62,7 +62,7 @@ ${
 <div class="card">
 <h2>Then connect your AI app</h2>
 <ol>
-<li>PhoneBridge shows <strong>Your connection URL</strong>. Copy it.</li>
+<li>DroidHands shows <strong>Your connection URL</strong>. Copy it.</li>
 <li>Paste it into your AI app as a custom connector (for example Claude: <em>Settings › Connectors › Add custom connector</em>).</li>
 <li>Your phone asks whether to allow the app. Check the code and tap <strong>Allow</strong>.</li>
 </ol>
@@ -91,8 +91,8 @@ const SETUP_SCRIPT = `(function () {
   var key = new URLSearchParams(location.hash.slice(1)).get('key') || '';
   var query = 'relay=' + encodeURIComponent(relay) + (key ? '&key=' + encodeURIComponent(key) : '');
   document.getElementById('open').href =
-    'intent://configure?' + query + '#Intent;scheme=phonebridge;package=${ANDROID_PACKAGE};end';
-  document.getElementById('open-direct').href = 'phonebridge://configure?' + query;
+    'intent://configure?' + query + '#Intent;scheme=droidhands;package=${ANDROID_PACKAGE};end';
+  document.getElementById('open-direct').href = 'droidhands://configure?' + query;
   if (key) {
     document.getElementById('manual-key').textContent = key;
     document.getElementById('manual-key-row').className = '';

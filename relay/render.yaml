@@ -1,10 +1,10 @@
-# Render Blueprint for the PhoneBridge relay.
+# Render Blueprint for the DroidHands relay.
 # Dashboard: New > Blueprint > pick this repository > Blueprint path: relay/render.yaml.
 # After the first deploy, open the service's Logs: they print the phone setup link.
 # PUBLIC_URL defaults to Render's RENDER_EXTERNAL_URL; set it for a custom domain.
 services:
   - type: web
-    name: phonebridge-relay
+    name: droidhands-relay
     runtime: docker
     dockerfilePath: ./relay/Dockerfile
     dockerContext: ./relay

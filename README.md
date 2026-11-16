@@ -1,4 +1,4 @@
-# PhoneBridge
+# DroidHands
 
 Let **your** AI agents (Claude, or any MCP client) operate **your** phone, securely.
 
@@ -7,18 +7,18 @@ Let **your** AI agents (Claude, or any MCP client) operate **your** phone, secur
 The agent calls `contacts_search("Tania")` (which also says she is on WhatsApp), opens her chat with the message
 typed in using one of WhatsApp's actions, then looks at the screen (`screen_observe`: a screenshot with every
 button numbered) and taps Send, checking that the message went out. It works the same way in any app on any
-phone: PhoneBridge doesn't hard-code apps or Android versions. It reads what each installed app declares, and
+phone: DroidHands doesn't hard-code apps or Android versions. It reads what each installed app declares, and
 for everything else the agent uses the screen like a person would ("phone use", like browser use). It only acts
 inside the access you granted when you connected it, and the live notification lets you watch it and press Stop.
 
-PhoneBridge is an Android app, plus an iPhone host that runs on your Mac ([docs/IOS.md](docs/IOS.md)), that exposes the phone's capabilities as an
+DroidHands is an Android app, plus an iPhone host that runs on your Mac ([docs/IOS.md](docs/IOS.md)), that exposes the phone's capabilities as an
 [MCP](https://modelcontextprotocol.io) server. Agents reach it through a small relay (the one the
 app comes with, or your own self-hosted one; works over LTE and behind NAT) or directly over
 Tailscale, privately and without a relay (also USB / LAN). Routes combine; see
 [docs/CONNECTING.md](docs/CONNECTING.md).
 
 ```
-AI agent ──MCP over HTTPS──► relay (yours) ◄──WebSocket── PhoneBridge app ──► WhatsApp, SMS, contacts,
+AI agent ──MCP over HTTPS──► relay (yours) ◄──WebSocket── DroidHands app ──► WhatsApp, SMS, contacts,
          Bearer pb1.… token                 (outbound)                        calls, notifications, calendar,
                                                                               location, any app's UI…
 ```
@@ -40,7 +40,7 @@ About 40 tools (full list: [docs/TOOLS.md](docs/TOOLS.md)):
 
 ## Apps and plugins
 
-Agents don't have to drive every app by tapping. PhoneBridge gives **every installed app** a menu of
+Agents don't have to drive every app by tapping. DroidHands gives **every installed app** a menu of
 actions, and the agent picks the app, then the action:
 
 ```
@@ -49,7 +49,7 @@ app_actions_list(app="Spotify")    → play(query), search(query), …  with JSO
 app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
 ```
 
-* **Discovered actions, for every app**: PhoneBridge scans what each app declares (sharing text, its
+* **Discovered actions, for every app**: DroidHands scans what each app declares (sharing text, its
   launcher shortcuts and App Actions, media and web search, maps links), so even apps nobody wrote
   anything for get `open` plus whatever they support.
 * **Plugins**: one small YAML file per app in [`plugins/`](plugins), written by the community and
@@ -109,7 +109,7 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
 No computer needed:
 
-1. **Install.** On your Android phone (11 or newer), download **`PhoneBridge.apk`** from the project
+1. **Install.** On your Android phone (11 or newer), download **`DroidHands.apk`** from the project
    site or the [latest GitHub release](../../releases/latest), allow your browser to install apps,
    and install it.
 2. **Open it.** The setup wizard walks you through the permissions (including Android 13+'s

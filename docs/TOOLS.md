@@ -1,4 +1,4 @@
-# PhoneBridge tool catalog (platform-neutral)
+# DroidHands tool catalog (platform-neutral)
 
 Tool names, arguments and semantics are **stable public API** shared by every platform. A platform
 may omit tools it cannot support, but MUST NOT change what a name means. Arguments are `snake_case`.
@@ -17,7 +17,7 @@ Every tool has:
   `tools/list`, and a call is refused at once, never turned into a prompt. Missing scopes are a JSON-RPC
   `-32602` error, apps an `isError` result; both name what is missing and where the user can allow it,
   e.g. *"Claude isn't allowed to make or answer calls ('phone_call' needs that). The user can allow it in
-  PhoneBridge > Agents > Claude > Access."*
+  DroidHands > Agents > Claude > Access."*
 * **confirm**: `pre` means the server asks for approval before running the tool, using a summary
   built from the raw arguments. `internal` means the tool first resolves its targets (for example
   the contact name to a number), then asks for approval with the *resolved* details before any
@@ -34,7 +34,7 @@ an optional leading `+`, and spacing or punctuation). USSD/MMI codes containing 
 * List results are compact JSON, optionally followed by a short plain-text footer (for example
   "more results not shown" or "N apps hidden by app access").
 * `codes_hidden: true` on an item means one-time codes in it were masked as `[code hidden]`.
-* `content_hidden_by_android: true` means Android 15+ hid that notification's content from PhoneBridge.
+* `content_hidden_by_android: true` means Android 15+ hid that notification's content from DroidHands.
 * Long texts are cut with a `[truncated, N chars total]` marker.
 * `url_open` / `intent_start` results may include `chooser: true`. If some candidate apps are blocked,
   the error lists the allowed apps to pass as `package`.
@@ -141,7 +141,7 @@ and check on screen that it went out.
 ## Notifications — scopes `notifications.read`, `notifications.act`
 
 Requires notification access. On Android 15+ the system may hide the *content* (and action titles) of
-notifications it classifies as sensitive from listeners like PhoneBridge ("Sensitive notification content
+notifications it classifies as sensitive from listeners like DroidHands ("Sensitive notification content
 hidden"); replies via `notification_reply` still work, and SMS can be read with `sms_list`. Replies through
 notifications work **even when the phone is locked**, and work for any messaging app with a reply action (WhatsApp, Telegram, Signal,
 Messages, Slack…).
@@ -176,7 +176,7 @@ result. Points may be given in screenshot pixels (`space: "screenshot"`), so age
 what they see. When a screen blocks screenshots (FLAG_SECURE) or an app exposes nothing to accessibility (games,
 Flutter, maps), `screen_observe` says which, and the agent uses the other half. Element refs (`n42`) are
 **per agent** and never reused: a ref from another agent or an older snapshot is rejected, so call
-`screen_read` again. Screen control is paused while a PhoneBridge approval is waiting. Right after an app
+`screen_read` again. Screen control is paused while a DroidHands approval is waiting. Right after an app
 switch, `screen_read` waits briefly for the new window's content instead of returning an empty screen. Subject to the token's
 **app access** (docs/SECURITY.md): refused while a blocked app is in the foreground. Blocked apps'
 windows are omitted. Screenshots are refused when any blocked window is visible, and when the

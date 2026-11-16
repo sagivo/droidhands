@@ -27,7 +27,7 @@ export interface DeviceInfo {
   readonly platform: string | undefined;
   /** For logs. */
   readonly appVersion: string | undefined;
-  /** Shown on the pairing page ("Open PhoneBridge on <deviceName>"); never logged. */
+  /** Shown on the pairing page ("Open DroidHands on <deviceName>"); never logged. */
   readonly deviceName: string | null;
 }
 

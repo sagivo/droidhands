@@ -1,5 +1,5 @@
 /**
- * PhoneBridge relay on Cloudflare Workers + Durable Objects: the same HTTP surface and device
+ * DroidHands relay on Cloudflare Workers + Durable Objects: the same HTTP surface and device
  * protocol as the Node relay (relay/src/relay.ts; docs/PROTOCOL.md §2-5), verified by the shared
  * conformance suite (relay/conformance/).
  *
@@ -58,7 +58,7 @@ export { DeviceObject } from './deviceObject.js';
 export type { Env } from './config.js';
 
 const RATE_WINDOW_MS = 60_000;
-const APK_PATH = '/download/phonebridge.apk';
+const APK_PATH = '/download/droidhands.apk';
 const SETUP_QR_PATH = '/setup/qr';
 /** `{"key": "<access key>"}` is tiny (as in setup/setupRoutes.ts). */
 const MAX_QR_BODY_BYTES = 1024;
@@ -122,8 +122,8 @@ export default {
       cfg = workerConfig(env);
     } catch (err) {
       if (!(err instanceof ConfigError)) throw err;
-      console.error(`phonebridge-relay: invalid configuration: ${err.message}`);
-      return text(500, `phonebridge-relay: invalid configuration: ${err.message}\n`);
+      console.error(`droidhands-relay: invalid configuration: ${err.message}`);
+      return text(500, `droidhands-relay: invalid configuration: ${err.message}\n`);
     }
     const state = isolateState(cfg);
     const url = new URL(request.url);
@@ -235,7 +235,7 @@ function notFound(): Response {
 function bannerText(ctx: Ctx): Response {
   return respond(
     200,
-    `PhoneBridge relay.\nSet up a phone: ${ctx.base}${SETUP_PATH}\nAI apps connect to the connection URL shown in the PhoneBridge app (${ctx.base}/d/<deviceId>/mcp).\n`,
+    `DroidHands relay.\nSet up a phone: ${ctx.base}${SETUP_PATH}\nAI apps connect to the connection URL shown in the DroidHands app (${ctx.base}/d/<deviceId>/mcp).\n`,
     { 'Content-Type': 'text/plain; charset=utf-8' },
   );
 }
@@ -269,7 +269,7 @@ async function handleDeviceSocket(ctx: Ctx): Promise<Response> {
     return refuseSocket(
       'protocol_version',
       CloseCode.PROTOCOL_VERSION,
-      `This relay needs the ${DEVICE_ID_PARAM} parameter on the device URL (protocol version ${PROTOCOL_VERSION} with heartbeats). Update the PhoneBridge app.`,
+      `This relay needs the ${DEVICE_ID_PARAM} parameter on the device URL (protocol version ${PROTOCOL_VERSION} with heartbeats). Update the DroidHands app.`,
     );
   }
   if (!DEVICE_ID_REGEX.test(deviceId)) {
@@ -594,7 +594,7 @@ function handleSetupPage(ctx: Ctx): Response {
   );
 }
 
-/** There is no file system: `/download/phonebridge.apk` forwards to APK_URL when it is set. */
+/** There is no file system: `/download/droidhands.apk` forwards to APK_URL when it is set. */
 function handleApk(ctx: Ctx): Response {
   const notAllowed = methodNotAllowed(ctx.method, 'GET, HEAD');
   if (notAllowed !== null) return notAllowed;

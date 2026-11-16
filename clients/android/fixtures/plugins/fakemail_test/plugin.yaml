@@ -11,7 +11,7 @@ description: Test plugin for the E2E fixture mail app (emulators only).
 category: email
 status: experimental
 android:
-  packages: [dev.phonebridge.fixture.mail]
+  packages: [com.droidhands.fixture.mail]
 
 actions:
   - id: send_email
@@ -53,7 +53,7 @@ actions:
       - params: {to: bob@example.com, subject: Hi}
         expect: {error: body}
 
-  # A link the fixture app doesn't declare: PhoneBridge must report it unavailable instead of trying it.
+  # A link the fixture app doesn't declare: DroidHands must report it unavailable instead of trying it.
   - id: open_folder
     title: Open a folder
     description: Opens a mail folder through a web link the app does not handle. For E2E tests of recipe checks only.
@@ -66,7 +66,7 @@ actions:
       - params: {folder: inbox}
         expect: {url: "https://mail.example.invalid/folders/inbox"}
 
-  # A screen recipe whose element doesn't exist: each run fails, and PhoneBridge records it (action health).
+  # A screen recipe whose element doesn't exist: each run fails, and DroidHands records it (action health).
   - id: archive_all
     title: Archive everything
     description: Taps a button the app doesn't have. For E2E tests of action health only.

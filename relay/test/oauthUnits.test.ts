@@ -137,7 +137,7 @@ test('resource metadata paths and the connector challenge', () => {
   assert.equal(deviceIdFromMetadataPath('/.well-known/oauth-protected-resource', ''), null);
   assert.equal(
     connectorChallenge('https://r.example', id),
-    `Bearer realm="phonebridge", resource_metadata="https://r.example/.well-known/oauth-protected-resource/d/${id}/mcp"`,
+    `Bearer realm="droidhands", resource_metadata="https://r.example/.well-known/oauth-protected-resource/d/${id}/mcp"`,
   );
 });
 

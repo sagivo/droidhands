@@ -1,6 +1,6 @@
 # Third-party notices
 
-PhoneBridge is licensed under the Apache License 2.0 (see [LICENSE](LICENSE)). Some of its files are
+DroidHands is licensed under the Apache License 2.0 (see [LICENSE](LICENSE)). Some of its files are
 adapted from the third-party projects below, under their own licenses. Each such file starts with a
 comment naming its origin.
 
@@ -8,13 +8,13 @@ comment naming its origin.
 
 https://github.com/pingdotgg/t3code, MIT License.
 
-| PhoneBridge file | Adapted from (T3 Code) |
+| DroidHands file | Adapted from (T3 Code) |
 |---|---|
-| `clients/android/app/src/main/kotlin/dev/phonebridge/android/live/AgentActivityPresentation.kt` | `apps/mobile/modules/t3-agent-notifications/android/src/main/java/expo/modules/t3agentnotifications/AgentActivityPresentation.kt` (activity phases, summary and status-bar chip rules) |
-| `clients/android/app/src/main/kotlin/dev/phonebridge/android/live/AgentActivityNotification.kt` | `apps/mobile/modules/t3-agent-notifications/android/src/main/java/expo/modules/t3agentnotifications/AgentNotifications.kt` (the Live Update notification: ongoing, silent, uncolorized, promotion request, short critical text, timeout, dismiss handling) |
-| `clients/android/app/src/test/kotlin/dev/phonebridge/android/live/AgentActivityPresentationTest.kt` | `apps/mobile/modules/t3-agent-notifications/android/src/test/java/expo/modules/t3agentnotifications/AgentNotificationsTest.kt` |
-| `clients/android/app/src/main/kotlin/dev/phonebridge/android/ui/deeplink/SetupQrPayload.kt` | `apps/mobile/src/features/connection/pairing.ts` (tolerant reading of a pairing URL from a QR payload) |
-| `clients/android/app/src/test/kotlin/dev/phonebridge/android/ui/deeplink/SetupQrPayloadTest.kt` | `apps/mobile/src/features/connection/pairing.test.ts` |
+| `clients/android/app/src/main/kotlin/com/droidhands/android/live/AgentActivityPresentation.kt` | `apps/mobile/modules/t3-agent-notifications/android/src/main/java/expo/modules/t3agentnotifications/AgentActivityPresentation.kt` (activity phases, summary and status-bar chip rules) |
+| `clients/android/app/src/main/kotlin/com/droidhands/android/live/AgentActivityNotification.kt` | `apps/mobile/modules/t3-agent-notifications/android/src/main/java/expo/modules/t3agentnotifications/AgentNotifications.kt` (the Live Update notification: ongoing, silent, uncolorized, promotion request, short critical text, timeout, dismiss handling) |
+| `clients/android/app/src/test/kotlin/com/droidhands/android/live/AgentActivityPresentationTest.kt` | `apps/mobile/modules/t3-agent-notifications/android/src/test/java/expo/modules/t3agentnotifications/AgentNotificationsTest.kt` |
+| `clients/android/app/src/main/kotlin/com/droidhands/android/ui/deeplink/SetupQrPayload.kt` | `apps/mobile/src/features/connection/pairing.ts` (tolerant reading of a pairing URL from a QR payload) |
+| `clients/android/app/src/test/kotlin/com/droidhands/android/ui/deeplink/SetupQrPayloadTest.kt` | `apps/mobile/src/features/connection/pairing.test.ts` |
 
 ```
 MIT License

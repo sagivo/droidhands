@@ -1,4 +1,4 @@
-# Opened from the PhoneBridge app too: Apps > (an app) > "Request a better integration" prefills the title and the
+# Opened from the DroidHands app too: Apps > (an app) > "Request a better integration" prefills the title and the
 # `app` and `package` fields below through the URL (?template=app-integration.yml&app=...&package=...), so keep
 # those ids.
 name: App integration
@@ -9,7 +9,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Every app already gets basic actions that PhoneBridge discovers by itself (open it, share text into it, its
+        Every app already gets basic actions that DroidHands discovers by itself (open it, share text into it, its
         shortcuts). An **integration** is a small plugin file that adds the actions that make an app really useful,
         such as "play this song" or "navigate home". Anyone can write one, no code needed:
         [Add an app in 5 minutes](../blob/HEAD/CONTRIBUTING.md#add-an-app-in-5-minutes) and the
@@ -26,7 +26,7 @@ body:
     id: package
     attributes:
       label: Android package
-      description: PhoneBridge shows it under Apps → (the app). It is also the `id=` in the app's Play Store link.
+      description: DroidHands shows it under Apps → (the app). It is also the `id=` in the app's Play Store link.
       placeholder: com.spotify.music
     validations:
       required: true

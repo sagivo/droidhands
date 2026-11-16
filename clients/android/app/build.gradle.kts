@@ -28,33 +28,33 @@ fun input(property: String, env: String? = null): String? =
 /** A Java string literal for buildConfigField. */
 fun literal(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-val pbVersionName: String = input("phonebridge.versionName") ?: "0.1.0"
-val pbVersionCode: Int = input("phonebridge.versionCode")?.let { raw ->
+val pbVersionName: String = input("droidhands.versionName") ?: "0.1.0"
+val pbVersionCode: Int = input("droidhands.versionCode")?.let { raw ->
     raw.toIntOrNull()?.takeIf { it in 1..2_100_000_000 }
-        ?: throw GradleException("phonebridge.versionCode must be a positive integer, got \"$raw\"")
+        ?: throw GradleException("droidhands.versionCode must be a positive integer, got \"$raw\"")
 } ?: 1
 if (!Regex("^\\d+\\.\\d+\\.\\d+([-+][0-9A-Za-z.+-]+)?$").matches(pbVersionName)) {
-    throw GradleException("phonebridge.versionName must look like 1.2.3 (optionally with a -suffix), got \"$pbVersionName\"")
+    throw GradleException("droidhands.versionName must look like 1.2.3 (optionally with a -suffix), got \"$pbVersionName\"")
 }
 
 /** Relay the app connects to on first run when the user has none configured (empty = no default relay). */
-val defaultRelayUrl: String = (input("phonebridge.defaultRelayUrl", "PHONEBRIDGE_DEFAULT_RELAY_URL") ?: "").trimEnd('/')
+val defaultRelayUrl: String = (input("droidhands.defaultRelayUrl", "DROIDHANDS_DEFAULT_RELAY_URL") ?: "").trimEnd('/')
 if (defaultRelayUrl.isNotEmpty() && !Regex("^https?://[^\\s/?#@\"\\\\]+(/[^\\s?#\"\\\\]*)?$").matches(defaultRelayUrl)) {
     throw GradleException(
-        "phonebridge.defaultRelayUrl / PHONEBRIDGE_DEFAULT_RELAY_URL must be an http(s) base URL such as " +
+        "droidhands.defaultRelayUrl / DROIDHANDS_DEFAULT_RELAY_URL must be an http(s) base URL such as " +
             "https://relay.example.com, got \"$defaultRelayUrl\"",
     )
 }
 
 /** "owner/name" of the GitHub repository whose releases the in-app update check reads (empty = no check). */
-val githubRepo: String = input("phonebridge.githubRepo", "GITHUB_REPOSITORY") ?: ""
+val githubRepo: String = input("droidhands.githubRepo", "GITHUB_REPOSITORY") ?: ""
 if (githubRepo.isNotEmpty() && !Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").matches(githubRepo)) {
-    throw GradleException("phonebridge.githubRepo / GITHUB_REPOSITORY must be \"owner/name\", got \"$githubRepo\"")
+    throw GradleException("droidhands.githubRepo / GITHUB_REPOSITORY must be \"owner/name\", got \"$githubRepo\"")
 }
 
 /**
  * Release signing: all four values, or none. With none, release builds fall back to the debug key
- * (with a warning) so local sideloading keeps working. `-Pphonebridge.requireReleaseSigning=true`
+ * (with a warning) so local sideloading keeps working. `-Pdroidhands.requireReleaseSigning=true`
  * (used by the release workflow) makes a missing key an error, so a published APK is never
  * debug-signed.
  */
@@ -66,17 +66,17 @@ if (!releaseSigningConfigured) {
     if (signingInputs.values.any { it != null }) {
         throw GradleException("Release signing is only partly configured. Also set: $missing (see docs/RELEASING.md)")
     }
-    if (input("phonebridge.requireReleaseSigning")?.toBoolean() == true) {
+    if (input("droidhands.requireReleaseSigning")?.toBoolean() == true) {
         throw GradleException("Release signing is required but not configured. Set $missing (see docs/RELEASING.md)")
     }
 }
 
 android {
-    namespace = "dev.phonebridge.android"
+    namespace = "com.droidhands.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.phonebridge.android"
+        applicationId = "com.droidhands.android"
         minSdk = 30
         targetSdk = 35
         versionCode = pbVersionCode
@@ -125,10 +125,10 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.all { test ->
-            test.systemProperty("phonebridge.fixturePluginsDir", fixturePluginsDir.absolutePath)
+            test.systemProperty("droidhands.fixturePluginsDir", fixturePluginsDir.absolutePath)
             test.inputs.dir(fixturePluginsDir).withPropertyName("fixturePlugins").withPathSensitivity(PathSensitivity.RELATIVE)
             // BundledPluginToolsTest checks the bundled plugins' tool recipes against the Android tools.
-            test.systemProperty("phonebridge.pluginsDir", repoPluginsDir.absolutePath)
+            test.systemProperty("droidhands.pluginsDir", repoPluginsDir.absolutePath)
             test.inputs.dir(repoPluginsDir).withPropertyName("plugins").withPathSensitivity(PathSensitivity.RELATIVE)
         }
     }
@@ -176,9 +176,9 @@ kotlin {
 
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->
-        // PhoneBridge-1.2.3.apk, the file the release workflow publishes.
+        // DroidHands-1.2.3.apk, the file the release workflow publishes.
         variant.outputs.forEach { output ->
-            (output as? VariantOutputImpl)?.outputFileName?.set("PhoneBridge-$pbVersionName.apk")
+            (output as? VariantOutputImpl)?.outputFileName?.set("DroidHands-$pbVersionName.apk")
         }
     }
 }

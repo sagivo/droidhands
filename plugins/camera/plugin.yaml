@@ -28,7 +28,7 @@ actions:
     title: Open the camera for a photo
     description: >-
       Opens the camera app ready to take a photo. It does NOT take a picture: nothing is captured until someone
-      presses the shutter. Photos stay in the camera app and gallery; PhoneBridge does not receive them.
+      presses the shutter. Photos stay in the camera app and gallery; DroidHands does not receive them.
     keywords: [camera, photo, picture, selfie, snapshot, shoot, capture]
     risk: action
     android:
@@ -43,7 +43,7 @@ actions:
     title: Open the camera for a video
     description: >-
       Opens the camera app ready to record a video. It does NOT start recording: nothing is captured until someone
-      presses the record button. Videos stay in the camera app and gallery; PhoneBridge does not receive them.
+      presses the record button. Videos stay in the camera app and gallery; DroidHands does not receive them.
     keywords: [camera, video, record, recording, film, clip, capture]
     risk: action
     android:

@@ -3,7 +3,7 @@
 Both actions are Android's documented "open the camera" intents
 (<https://developer.android.com/guide/components/intents-common>, "Start a camera app in still image mode" and
 "... in video mode"): `android.media.action.STILL_IMAGE_CAMERA` and `android.media.action.VIDEO_CAMERA`. They only
-open the camera. The plugin does not use `IMAGE_CAPTURE`, so PhoneBridge never receives a photo or video.
+open the camera. The plugin does not use `IMAGE_CAPTURE`, so DroidHands never receives a photo or video.
 
 Package names come from the OEM camera list of the Android system app database
 (<https://sysapps.bayton.org/bundles/oem-camera-apps>). The plugin applies to the first one installed, so the

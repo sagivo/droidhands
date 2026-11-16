@@ -1,8 +1,8 @@
-# Contributing to PhoneBridge
+# Contributing to DroidHands
 
 Thanks for helping! There are two ways in:
 
-* **Teach PhoneBridge an app** (no code): one small YAML file per app gives every AI agent ready-made actions
+* **Teach DroidHands an app** (no code): one small YAML file per app gives every AI agent ready-made actions
   for it, such as "play this song" or "navigate home". This is the most useful contribution, and the
   quickest.
 * **Work on the code**: the Android app, the platform-neutral Kotlin core and the relay.
@@ -11,7 +11,7 @@ Security problems are not reported as issues: see [Reporting security issues](#r
 
 ## Add an app in 5 minutes
 
-Agents pick an app and one of its actions (`apps_list` → `app_actions_list` → `app_action_run`). PhoneBridge
+Agents pick an app and one of its actions (`apps_list` → `app_actions_list` → `app_action_run`). DroidHands
 already discovers the basics of every app by itself (open it, share text into it, its launcher shortcuts); a
 **plugin** adds the actions written for that app. The full format is in [docs/PLUGINS.md](docs/PLUGINS.md); this
 is the short way.
@@ -23,8 +23,8 @@ cp -r plugins/_template plugins/spotify                       # from the templat
 ./scripts/plugin-scaffold.sh --write --name Spotify com.spotify.music   # from what the app declares (phone over USB)
 ```
 
-or, on the phone, open PhoneBridge → **Apps** → the app → **Create plugin draft** and share the file to your
-computer. The scaffold and the draft fill in what PhoneBridge can see (share targets, text actions, media and
+or, on the phone, open DroidHands → **Apps** → the app → **Create plugin draft** and share the file to your
+computer. The scaffold and the draft fill in what DroidHands can see (share targets, text actions, media and
 web search, maps links, shortcuts) and mark everything to check with `TODO`. The app's package name is on
 its page in the Apps tab.
 
@@ -46,7 +46,7 @@ doesn't), `risk`, `params` and one recipe:
 ```
 
 Prefer, in this order: a `tool` (reuse a built-in platform tool such as `sms_send` or `calendar_event_create`), an
-`intent`, a `url` deep link, and only then `steps` (a screen recipe). First check what PhoneBridge already discovers
+`intent`, a `url` deep link, and only then `steps` (a screen recipe). First check what DroidHands already discovers
 for the app (*Apps → (app)*): it reads the app's own links, intents and shortcuts, so a plugin is only worth adding
 for what discovery can't express. Plugin recipes are checked against the installed app version on every phone, so
 an outdated plugin hides itself instead of failing. Anything that sends, posts, pays, orders, books, calls or
@@ -60,7 +60,7 @@ deletes must be `risk: sensitive`, so the user approves it on the phone; the che
 
 It validates the file, runs its `examples` and points at the exact field when something is wrong.
 
-**4. Try it on your phone**, without rebuilding the app. In PhoneBridge, turn on **Settings → Developer →
+**4. Try it on your phone**, without rebuilding the app. In DroidHands, turn on **Settings → Developer →
 Local plugins**, tap **Import plugin** and pick your `plugin.yaml`. With a debug build connected over USB, this
 does the same:
 
@@ -86,7 +86,7 @@ Not up for writing it? [Request an integration](../../issues/new?template=app-in
 * **Try a link before writing it down**: `adb shell am start -a android.intent.action.VIEW -d "spotify:search:daft%20punk" com.spotify.music`.
 * **`completes: false`** for actions that open a screen where someone still has to tap (a filled-in compose
   screen): agents are then told to finish with the screen tools or ask the user.
-* Plugins can't do anything PhoneBridge can't already do: intents and links are pinned to the plugin's app,
+* Plugins can't do anything DroidHands can't already do: intents and links are pinned to the plugin's app,
   screen recipes act only inside it, and every action is approved, rate-limited and audited like any tool
   ([docs/PLUGINS.md §9](docs/PLUGINS.md#9-security-rules)).
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command USB setup of a PhoneBridge developer build on an Android 11+ phone or emulator.
+# One-command USB setup of a DroidHands developer build on an Android 11+ phone or emulator.
 #
 #   ./scripts/setup-phone.sh [--apk path] [--relay URL] [--key ACCESSKEY] [--serial SERIAL]
 #
@@ -14,7 +14,7 @@
 # and the usual SDK locations. Set NO_COLOR=1 to disable colors.
 set -euo pipefail
 
-readonly PKG="dev.phonebridge.android"
+readonly PKG="com.droidhands.android"
 readonly ACCESSIBILITY_SERVICE="$PKG/$PKG.access.BridgeAccessibilityService"
 readonly ACCESSIBILITY_SERVICE_SHORT="$PKG/.access.BridgeAccessibilityService"
 readonly NOTIFICATION_LISTENER="$PKG/$PKG.notify.BridgeNotificationListener"
@@ -31,7 +31,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [--apk path] [--relay URL] [--key ACCESSKEY] [--serial SERIAL]
 
-Installs and fully sets up PhoneBridge on a USB-connected Android 11+ device (USB debugging on).
+Installs and fully sets up DroidHands on a USB-connected Android 11+ device (USB debugging on).
 
   --apk PATH        Install this APK instead of building clients/android (debug build).
   --relay URL       Relay base URL (http:// or https://). Opens the app's "Connect to relay?" prompt.
@@ -250,7 +250,7 @@ RELEASE="$(dsh "getprop ro.build.version.release")"
 MODEL="$(dsh "getprop ro.product.model")"
 [ -n "$SDK" ] || die "Could not read the Android version of $SERIAL"
 if [ "$SDK" -lt "$MIN_SDK" ]; then
-  die "$MODEL runs Android $RELEASE (API $SDK); PhoneBridge needs Android 11 (API $MIN_SDK) or newer"
+  die "$MODEL runs Android $RELEASE (API $SDK); DroidHands needs Android 11 (API $MIN_SDK) or newer"
 fi
 record ok "Device: $MODEL, Android $RELEASE (API $SDK), serial $SERIAL"
 
@@ -280,10 +280,10 @@ else
   printf '%s\n' "$INSTALL_OUT" | tail -5 | while IFS= read -r line; do info "$line"; done
   case "$INSTALL_OUT" in
     *INSTALL_FAILED_UPDATE_INCOMPATIBLE*)
-      die "Install failed: a PhoneBridge signed with another key is installed" \
+      die "Install failed: a DroidHands signed with another key is installed" \
         "Uninstall it first (this deletes its agents and settings): adb -s $SERIAL uninstall $PKG" ;;
     *INSTALL_FAILED_VERSION_DOWNGRADE*)
-      die "Install failed: a newer PhoneBridge is installed" "Uninstall it first: adb -s $SERIAL uninstall $PKG" ;;
+      die "Install failed: a newer DroidHands is installed" "Uninstall it first: adb -s $SERIAL uninstall $PKG" ;;
     *INSTALL_FAILED_USER_RESTRICTED* | *INSTALL_FAILED_ABORTED*)
       die "Install failed: the phone refused the USB install" "Accept the install prompt on the phone, or enable Developer options > Install via USB." ;;
     *) die "Install failed" "See the adb output above." ;;
@@ -312,7 +312,7 @@ done
 if [ ${#FAILED[@]} -eq 0 ]; then
   record ok "Granted ${#GRANTED[@]} runtime permissions${GRANTED[0]+: ${GRANTED[*]}}"
 else
-  record warn "Granted ${#GRANTED[@]} runtime permissions; could not grant: ${FAILED[*]} (grant them in PhoneBridge > Setup)"
+  record warn "Granted ${#GRANTED[@]} runtime permissions; could not grant: ${FAILED[*]} (grant them in DroidHands > Setup)"
 fi
 
 step "Special access"
@@ -320,7 +320,7 @@ if [ "$SDK" -ge 33 ]; then
   if dsh_checked "appops set $PKG ACCESS_RESTRICTED_SETTINGS allow" >/dev/null; then
     record ok "Restricted settings allowed (Android 13+ sideload restriction)"
   else
-    record warn "Could not allow restricted settings; on the phone: Settings > Apps > PhoneBridge > ⋮ > Allow restricted settings"
+    record warn "Could not allow restricted settings; on the phone: Settings > Apps > DroidHands > ⋮ > Allow restricted settings"
   fi
 else
   record skip "Restricted settings: not needed before Android 13"
@@ -340,13 +340,13 @@ if dsh_checked "settings put secure enabled_accessibility_services $(shq "$NEW_A
   esac; then
   record ok "Accessibility service enabled (other services kept)"
 else
-  record fail "Could not enable the accessibility service; on the phone: Settings > Accessibility > PhoneBridge agent control"
+  record fail "Could not enable the accessibility service; on the phone: Settings > Accessibility > DroidHands agent control"
 fi
 
 if dsh_checked "cmd notification allow_listener $NOTIFICATION_LISTENER" >/dev/null; then
   record ok "Notification access granted"
 else
-  record fail "Could not grant notification access; on the phone: Settings > Notifications > Device & app notifications > PhoneBridge"
+  record fail "Could not grant notification access; on the phone: Settings > Notifications > Device & app notifications > DroidHands"
 fi
 
 if dsh_checked "cmd notification allow_dnd $PKG" >/dev/null; then
@@ -358,7 +358,7 @@ fi
 if dsh_checked "dumpsys deviceidle whitelist +$PKG" >/dev/null; then
   record ok "Battery optimization exemption (keeps the relay connection alive in Doze)"
 else
-  record warn "Could not exempt from battery optimization; allow it in PhoneBridge > Setup"
+  record warn "Could not exempt from battery optimization; allow it in DroidHands > Setup"
 fi
 
 if dsh_checked "appops set $PKG SYSTEM_ALERT_WINDOW allow" >/dev/null; then
@@ -369,24 +369,24 @@ fi
 
 step "Launch"
 if [ -n "$RELAY" ]; then
-  URI="phonebridge://configure?relay=$(urlencode "$RELAY")"
+  URI="droidhands://configure?relay=$(urlencode "$RELAY")"
   [ -n "$KEY" ] && URI="$URI&key=$(urlencode "$KEY")"
   if dsh_checked "am start -W -a android.intent.action.VIEW -d $(shq "$URI") -n $MAIN_ACTIVITY" >/dev/null; then
     record ok "Opened the relay setup for $RELAY${KEY:+ (with access key)}: tap Connect on the phone"
   else
-    record fail "Could not open the relay setup link; enter the relay in PhoneBridge > Settings"
+    record fail "Could not open the relay setup link; enter the relay in DroidHands > Settings"
   fi
 else
   if dsh_checked "am start -W -n $MAIN_ACTIVITY" >/dev/null; then
-    record ok "PhoneBridge launched"
+    record ok "DroidHands launched"
   else
-    record warn "Could not launch PhoneBridge; open it from the app drawer"
+    record warn "Could not launch DroidHands; open it from the app drawer"
   fi
-  record skip "Relay: not configured (pass --relay URL [--key KEY], or set it in PhoneBridge > Settings)"
+  record skip "Relay: not configured (pass --relay URL [--key KEY], or set it in DroidHands > Settings)"
 fi
 
 print_summary
-printf '\nNext: in PhoneBridge, copy "Your connection URL" and paste it into your AI agent, then tap Allow on the phone.\n'
+printf '\nNext: in DroidHands, copy "Your connection URL" and paste it into your AI agent, then tap Allow on the phone.\n'
 for ((i = 0; i < ${#CHECK_STATUS[@]}; i++)); do
   [ "${CHECK_STATUS[$i]}" = "fail" ] && exit 1
 done

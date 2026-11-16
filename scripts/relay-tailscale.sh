@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run your own PhoneBridge relay on this computer, reachable through Tailscale.
+# Run your own DroidHands relay on this computer, reachable through Tailscale.
 #
 #   ./scripts/relay-tailscale.sh [--public] [--https-port N] [--port N] [--docker] [--access-key KEY]
 #   ./scripts/relay-tailscale.sh --stop
@@ -17,18 +17,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-RELAY_DIR="${PHONEBRIDGE_RELAY_SRC:-$REPO_ROOT/relay}"
-readonly CONTAINER="phonebridge-relay-tailscale"
-readonly IMAGE="phonebridge-relay"
-readonly VOLUME="phonebridge-relay-data"
-readonly CONFIG_LABEL="dev.phonebridge.relay-config"
+RELAY_DIR="${DROIDHANDS_RELAY_SRC:-$REPO_ROOT/relay}"
+readonly CONTAINER="droidhands-relay-tailscale"
+readonly IMAGE="droidhands-relay"
+readonly VOLUME="droidhands-relay-data"
+readonly CONFIG_LABEL="com.droidhands.relay-config"
 
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [options]
        $(basename "$0") --stop
 
-Runs your own PhoneBridge relay on this computer and publishes it over Tailscale HTTPS.
+Runs your own DroidHands relay on this computer and publishes it over Tailscale HTTPS.
 
   --public            Publish with Tailscale Funnel: anyone on the internet can reach the relay.
                       Needed for cloud agents (claude.ai, ChatGPT). Use an --access-key with it.
@@ -37,7 +37,7 @@ Runs your own PhoneBridge relay on this computer and publishes it over Tailscale
   --docker            Run the relay's Docker image instead of Node.js.
   --access-key KEY    Phones must present this key (RELAY_ACCESS_KEY; it goes into the setup link).
                       Default: \$RELAY_ACCESS_KEY, if set.
-  --data-dir DIR      Where the relay keeps its secret, log and state (default ~/.phonebridge-relay).
+  --data-dir DIR      Where the relay keeps its secret, log and state (default ~/.droidhands-relay).
   --stop              Remove the Tailscale mapping this script made, and stop the relay.
   -h, --help          Show this help.
 
@@ -72,7 +72,7 @@ PORT=8787
 DOCKER=0
 STOP=0
 ACCESS_KEY="${RELAY_ACCESS_KEY:-}"
-DATA_DIR="${PHONEBRIDGE_RELAY_DATA:-$HOME/.phonebridge-relay}"
+DATA_DIR="${DROIDHANDS_RELAY_DATA:-$HOME/.droidhands-relay}"
 
 need_value() { [ $# -ge 2 ] && [ -n "$2" ] || die "$1 needs a value (see --help)"; }
 
@@ -193,7 +193,7 @@ unpublish() {
 
 # ----------------------------------------------------------------------------------------- relay
 
-# Something answers PhoneBridge's /healthz on our local port.
+# Something answers DroidHands's /healthz on our local port.
 relay_healthy() { curl -fsS --max-time 2 "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; }
 
 wait_healthy() {
@@ -455,7 +455,7 @@ else
   say "(Claude Code, Codex, Claude Desktop) work; cloud agents (claude.ai, ChatGPT) need --public."
 fi
 say ""
-say "Next: in PhoneBridge on the phone, tap \"Scan QR code\" (Your own relay) and scan the code above,"
-say "or open the setup link there and tap \"Open in PhoneBridge\". Confirm \"Connect to relay?\", then copy"
+say "Next: in DroidHands on the phone, tap \"Scan QR code\" (Your own relay) and scan the code above,"
+say "or open the setup link there and tap \"Open in DroidHands\". Confirm \"Connect to relay?\", then copy"
 say "the connection URL the app shows into your agent."
 say "Stop with: $0 --stop"

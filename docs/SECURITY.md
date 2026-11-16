@@ -1,11 +1,11 @@
-# PhoneBridge security model
+# DroidHands security model
 
-PhoneBridge gives software running elsewhere the ability to act as you on your phone. The design
+DroidHands gives software running elsewhere the ability to act as you on your phone. The design
 goal is that **the phone is the only authority**: every request is authenticated, checked against
 the access you gave that agent, rate-limited, and logged on the device itself.
 
 **The grant is the control.** You choose an agent's access once, when you connect it: **Everything**,
-or **Only what I choose** (which apps, and what it can do there). After that PhoneBridge does not
+or **Only what I choose** (which apps, and what it can do there). After that DroidHands does not
 interrupt you: requests inside the grant run without a prompt, and requests outside it are refused at
 once. Approval prompts exist only where you ask for them (see [Access](#access-the-grant)). Recommend
 **Only what I choose** for any agent you don't fully trust, and keep its apps and abilities to what
@@ -64,9 +64,9 @@ apply to the agent's next request.
 **Outside the grant: refused, never prompted.** A tool whose scope the agent lacks is hidden from
 `tools/list` and refused (`DENIED_SCOPE`); an app outside its apps is hidden and refused (`DENIED_APP`).
 The error names what is missing and where the user can add it, for example *"Claude isn't allowed to
-use WhatsApp (com.whatsapp). The user can allow it in PhoneBridge > Agents > Claude > Access."* or
+use WhatsApp (com.whatsapp). The user can allow it in DroidHands > Agents > Claude > Access."* or
 *"Claude isn't allowed to make or answer calls ('phone_call' needs that). The user can allow it in
-PhoneBridge > Agents > Claude > Access."* Both are audited as before. Agents learn their grant up front:
+DroidHands > Agents > Claude > Access."* Both are audited as before. Agents learn their grant up front:
 the MCP `initialize` instructions and `bridge_capabilities` (`token.access`) list their apps, what they
 may and may not do, and that actions inside the grant run without asking the user.
 
@@ -131,7 +131,7 @@ access is part of the grant, in **Agents > (agent) > Access**).
 | Control | Effect | Enforced in |
 |---|---|---|
 | **App access** (part of the grant) | `ALL` (all apps), `ALLOWLIST` (only the chosen apps), or, for agents created before the grant screen, `BLOCKLIST` (every app except the selected ones). | Tools, through `CallContext.appAccess` (see below) |
-| **Never-allow apps** (*global*) | Apps no agent can touch, whatever its own app access, **Everything** included. First run pre-selects installed banking, payments, password-manager and authenticator apps (heuristics plus a known-package list). PhoneBridge itself is always blocked. Edited in Settings > Security > Never-allow apps, or per app with **Apps > (app) > Block for all agents** (turning that off asks first). | Same as app access |
+| **Never-allow apps** (*global*) | Apps no agent can touch, whatever its own app access, **Everything** included. First run pre-selects installed banking, payments, password-manager and authenticator apps (heuristics plus a known-package list). DroidHands itself is always blocked. Edited in Settings > Security > Never-allow apps, or per app with **Apps > (app) > Block for all agents** (turning that off asks first). | Same as app access |
 | **Per-tool rules** | Each tool can be set to `ALLOW` (never ask, though still rate-limited), `ASK` (always confirm on the phone) or `BLOCK` (hidden from `tools/list` and refused). These override the confirmation policy. Only the user sets them, here; the grant never creates them. The same rules apply to single app actions (`<package>/<action>`, listed per app under *App action rules*); an action that runs a built-in tool offers only `BLOCK`, because that tool's own rule decides its approval. | `PolicyEngine` and `McpServer` (core) |
 | **Active hours** | The agent may act only within a daily local-time window, for example 08:00–23:00 (an overnight window like 22:00–06:00 also works). Outside it, calls are refused with an explanation. | `PolicyEngine` (core) |
 | **Hide one-time codes** (*global*, default ON) | Verification and 2FA codes are masked as `[code hidden]` in SMS and notification text before agents see them. | Tools, through `CallContext.redactOneTimeCodes`, using the core `OneTimeCodes.redact()` |
@@ -149,14 +149,14 @@ access is part of the grant, in **Agents > (agent) > Access**).
 When Android would show its app chooser and some candidate apps are blocked, `url_open` and
 `intent_start` pin the intent to the single allowed app, or refuse and list the allowed apps. The
 chooser is never shown with blocked apps in it. After a `ui_*` action that brings a blocked app to the
-foreground, PhoneBridge presses Home and the call fails. Under app restrictions, screenshots are also
+foreground, DroidHands presses Home and the call fails. Under app restrictions, screenshots are also
 refused on the lock screen, in Quick Settings, and while any blocked app's notification is visible
 (for example a heads-up). System UI, the home app, keyboards, framework dialogs, the chooser and
 permission dialogs are part of the OS, not apps. They stay usable under an allowlist unless named in
 a blocklist or the never-allow list.
 
 Approval and pairing screens use `FLAG_SECURE`, hide other apps' overlays (Android 12+) and ignore
-obscured touches. PhoneBridge's own screens and notification buttons cannot be read or tapped by
+obscured touches. DroidHands's own screens and notification buttons cannot be read or tapped by
 its screen tools, so an agent cannot approve its own requests.
 
 Data scopes such as `contacts.read`, `messages.send` (SMS through the system API) and `calendar.*` are governed by **scopes**, not by app access, because they go through Android system APIs rather than an app's UI.
@@ -178,11 +178,11 @@ Data scopes such as `contacts.read`, `messages.send` (SMS through the system API
   subjects or codes; that line is cleaned like prompt text and passes through *Hide one-time codes*
   when it is on. It is `VISIBILITY_PRIVATE` (the lock screen shows only "An agent is using your
   phone"), silent, local-only, and can be turned off (*Settings* › "Show when agents are working").
-  Like every PhoneBridge notification it is hidden from `screen_read` and its buttons can't be tapped
+  Like every DroidHands notification it is hidden from `screen_read` and its buttons can't be tapped
   by screen tools, but it does not pause screen control: only approval and pairing prompts do.
 * **No self-approval.** While any approval or pairing prompt is pending or on screen, every screen-control
   gesture is refused. The check runs right before each tap, and hit-testing fails closed on windows that
-  Android hides from accessibility. PhoneBridge's own notifications (including heads-up prompts) are removed
+  Android hides from accessibility. DroidHands's own notifications (including heads-up prompts) are removed
   from `screen_read` output, so an agent can neither see nor tap another agent's prompt.
 * **Read-only means read-only.** Agents created with the older *Read-only* preset are capped at `READ` tools
   (`maxRisk`). Tools that change anything are hidden and refused, whatever the scopes say, until the user
@@ -242,7 +242,7 @@ refused with an `isError` result and are audit-logged.
 * In Doze, Android may delay network access for apps that aren't exempt from battery
   optimization. Grant the exemption in the setup screen. Push wakeups (FCM) are future work.
 * *Scan QR code* (relay setup) uses Google Play services' code scanner: Play services shows the
-  camera and hands PhoneBridge only the decoded text, so PhoneBridge has no camera permission. The
+  camera and hands DroidHands only the decoded text, so DroidHands has no camera permission. The
   ML Kit client library it brings may send Google anonymous usage and diagnostics data under Google's
   ML Kit terms. A scanned code is never applied without the "Connect to relay?" confirmation.
 * Accessibility gives the app broad power over every app. That is how "control any app" works,

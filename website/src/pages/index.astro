@@ -51,7 +51,7 @@ const capabilities = [
 const steps = [
   {
     title: "Install the app",
-    body: "Download PhoneBridge for Android. It walks you through each permission, one tap per step.",
+    body: "Download DroidHands for Android. It walks you through each permission, one tap per step.",
   },
   {
     title: "Paste one URL into your agent",
@@ -68,11 +68,11 @@ const agents = ["Claude", "Claude Code", "ChatGPT", "Any MCP client"];
 const faqs = [
   {
     q: "Does my data go through your servers?",
-    a: "There are no PhoneBridge servers. Agents reach your phone through a small relay that you run yourself (one-click configs for Fly.io, Render and Docker are included), or directly over USB, your local network or Tailscale. The relay is only a tunnel: it can't create or check access tokens, and it keeps nothing from your phone.",
+    a: "There are no DroidHands servers. Agents reach your phone through a small relay that you run yourself (one-click configs for Fly.io, Render and Docker are included), or directly over USB, your local network or Tailscale. The relay is only a tunnel: it can't create or check access tokens, and it keeps nothing from your phone.",
   },
   {
     q: "Is it really free?",
-    a: "Yes. PhoneBridge is open source with no paid tier, no ads and no tracking. You only pay for your own relay hosting if you choose to put one on the internet, and many free hosting tiers are enough.",
+    a: "Yes. DroidHands is open source with no paid tier, no ads and no tracking. You only pay for your own relay hosting if you choose to put one on the internet, and many free hosting tiers are enough.",
   },
   {
     q: "What stops an agent from doing something I don't want?",
@@ -90,15 +90,15 @@ const faqs = [
 ---
 
 <Layout
-  title="PhoneBridge: let your AI use your phone, privately"
-  description="PhoneBridge lets Claude, ChatGPT or any MCP agent use your Android phone, only the apps you allow. Completely private, completely free, open source."
+  title="DroidHands: let your AI use your phone, privately"
+  description="DroidHands lets Claude, ChatGPT or any MCP agent use your Android phone, only the apps you allow. Completely private, completely free, open source."
 >
   <!-- Nav -->
   <header class="sticky top-0 z-50 border-b border-slate-200/60 bg-white/80 backdrop-blur-lg">
     <nav class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
       <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
         <img src="/favicon.svg" alt="" class="size-8" />
-        PhoneBridge
+        DroidHands
       </a>
       <div class="hidden items-center gap-8 text-sm text-slate-600 md:flex">
         <a href="#demo" class="hover:text-slate-900">Demo</a>
@@ -144,7 +144,7 @@ const faqs = [
           </h1>
 
           <p class="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-slate-600">
-            PhoneBridge lets Claude, ChatGPT or any MCP agent send messages, read notifications and use your apps:
+            DroidHands lets Claude, ChatGPT or any MCP agent send messages, read notifications and use your apps:
             only the apps you choose, and only after you tap <strong class="font-semibold text-slate-900">Allow</strong>.
           </p>
 
@@ -203,7 +203,7 @@ const faqs = [
           <p class="text-sm font-semibold text-brand-600">Built different</p>
           <h2 class="mt-2 text-4xl font-semibold tracking-tight text-balance">Your phone stays yours</h2>
           <p class="mt-4 text-lg text-slate-600">
-            Giving an AI your phone is a big deal. PhoneBridge is built so you never have to trust anyone but yourself.
+            Giving an AI your phone is a big deal. DroidHands is built so you never have to trust anyone but yourself.
           </p>
         </div>
 
@@ -384,7 +384,7 @@ const faqs = [
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-10 text-sm text-slate-500 sm:flex-row">
       <div class="flex items-center gap-2.5">
         <img src="/favicon.svg" alt="" class="size-6" />
-        <span>PhoneBridge · open source</span>
+        <span>DroidHands · open source</span>
       </div>
       <p>No cookies, no trackers. Not on this site either.</p>
       <div class="flex gap-6">

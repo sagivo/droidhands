@@ -24,7 +24,7 @@ export type McpRoute =
 export const OFFLINE_RETRY_AFTER_SEC = 30;
 
 export const UNAUTHORIZED_BODY = jsonRpcError(RpcCode.UNAUTHORIZED, 'Unauthorized');
-export const PLAIN_CHALLENGE = 'Bearer realm="phonebridge"';
+export const PLAIN_CHALLENGE = 'Bearer realm="droidhands"';
 
 /** For requests refused before anything was sent to the phone. */
 export const SHUTTING_DOWN_MESSAGE ='Relay is shutting down; retry shortly';

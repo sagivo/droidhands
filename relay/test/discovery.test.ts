@@ -14,7 +14,7 @@ test('protected resource metadata (RFC 9728) for any well-formed device id', asy
     resource: `https://relay.example.com/d/${deviceId}/mcp`,
     authorization_servers: ['https://relay.example.com'],
     bearer_methods_supported: ['header'],
-    resource_name: 'PhoneBridge',
+    resource_name: 'DroidHands',
     scopes_supported: ['phone'],
   });
   for (const path of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/d/BAD/mcp']) {

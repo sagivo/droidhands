@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tries a plugin on a phone without rebuilding PhoneBridge: pushes it to a DEBUG build as a local plugin
+# Tries a plugin on a phone without rebuilding DroidHands: pushes it to a DEBUG build as a local plugin
 # (docs/PLUGINS.md §10).
 #
 #   ./scripts/plugin-push.sh plugins/myapp              # a plugin folder (its plugin.yaml)
@@ -7,7 +7,7 @@
 #   ./scripts/plugin-push.sh --remove myapp             # delete a pushed plugin
 #   ... [--serial SERIAL]                               # when several devices are connected
 #
-# It writes files/local-plugins/<id>.yaml in PhoneBridge's private storage with `adb shell run-as`, which
+# It writes files/local-plugins/<id>.yaml in DroidHands's private storage with `adb shell run-as`, which
 # Android only allows for debuggable builds; with a release build, use Settings > Developer > Import plugin.
 # The app picks the file up on the next app-action call (no restart). Local plugins are off by default: turn
 # on Settings > Developer > Local plugins. Their actions always ask for approval on the phone, and the app
@@ -18,7 +18,7 @@
 # usual SDK locations.
 set -euo pipefail
 
-readonly PKG="dev.phonebridge.android"
+readonly PKG="com.droidhands.android"
 readonly DIR="files/local-plugins"
 readonly ID_PATTERN='^[a-z][a-z0-9_]{1,39}$'
 
@@ -27,7 +27,7 @@ usage() {
 Usage: $(basename "$0") [--serial SERIAL] plugins/<id> | path/to/plugin.yaml
        $(basename "$0") [--serial SERIAL] --remove <id>
 
-Pushes a plugin to a PhoneBridge debug build as a local plugin (Settings > Developer > Local plugins must be on).
+Pushes a plugin to a DroidHands debug build as a local plugin (Settings > Developer > Local plugins must be on).
 EOF
 }
 
@@ -107,8 +107,8 @@ as_app() {
 
 PROBE="$(as_app 'echo ok' || true)"
 if [ "$PROBE" != "ok" ]; then
-  die "Can't write to PhoneBridge's storage on $SERIAL ($PROBE)" \
-    "This needs a debug build of PhoneBridge (./scripts/setup-phone.sh installs one). With another build, use Settings > Developer > Import plugin."
+  die "Can't write to DroidHands's storage on $SERIAL ($PROBE)" \
+    "This needs a debug build of DroidHands (./scripts/setup-phone.sh installs one). With another build, use Settings > Developer > Import plugin."
 fi
 
 # ------------------------------------------------------------------------------------------ push
@@ -125,10 +125,10 @@ LOCAL_BYTES="$(wc -c < "$FILE" | tr -d ' ')"
 PUSHED_BYTES="$( { as_app "wc -c < $DIR/$ID.yaml" || true; } | tr -dc '0-9')"
 [ "$LOCAL_BYTES" = "$PUSHED_BYTES" ] || die "The pushed file has $PUSHED_BYTES bytes instead of $LOCAL_BYTES" "Check the USB connection and run this again."
 
-echo "Pushed '$ID' to $SERIAL as a local plugin ($DIR/$ID.yaml); PhoneBridge loads it on the next app-action call."
+echo "Pushed '$ID' to $SERIAL as a local plugin ($DIR/$ID.yaml); DroidHands loads it on the next app-action call."
 if as_app 'cat shared_prefs/bridge_settings.xml 2>/dev/null' | grep -q 'name="local_plugins_enabled" value="true"'; then
   echo "Local plugins are on. Every action of this plugin asks for your approval on the phone."
 else
-  echo "Reminder: turn on Settings > Developer > Local plugins in the PhoneBridge app, or agents won't see this plugin."
+  echo "Reminder: turn on Settings > Developer > Local plugins in the DroidHands app, or agents won't see this plugin."
 fi
 echo "Problems with the file show in Settings > Developer. Try it: app_actions_list(app=\"<app>\"), then app_action_run."

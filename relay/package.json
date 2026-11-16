@@ -1,8 +1,8 @@
 {
-  "name": "phonebridge-relay",
+  "name": "droidhands-relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Stateless relay that exposes PhoneBridge devices to MCP clients by tunneling Streamable HTTP over a device WebSocket.",
+  "description": "Stateless relay that exposes DroidHands devices to MCP clients by tunneling Streamable HTTP over a device WebSocket.",
   "type": "module",
   "main": "dist/relay.js",
   "types": "dist/relay.d.ts",
@@ -13,7 +13,7 @@
     }
   },
   "bin": {
-    "phonebridge-relay": "dist/server.js"
+    "droidhands-relay": "dist/server.js"
   },
   "engines": {
     "node": ">=20"

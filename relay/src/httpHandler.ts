@@ -125,7 +125,7 @@ function banner(deps: HttpDeps, req: IncomingMessage, res: ServerResponse): void
     res,
     200,
     'text/plain; charset=utf-8',
-    `PhoneBridge relay.\nSet up a phone: ${base}${SETUP_PATH}\nAI apps connect to the connection URL shown in the PhoneBridge app (${base}/d/<deviceId>/mcp).\n`,
+    `DroidHands relay.\nSet up a phone: ${base}${SETUP_PATH}\nAI apps connect to the connection URL shown in the DroidHands app (${base}/d/<deviceId>/mcp).\n`,
   );
 }
 

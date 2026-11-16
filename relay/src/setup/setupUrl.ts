@@ -8,8 +8,8 @@ import type { NetworkInterfaceInfo } from 'node:os';
 /** Path of the setup page. */
 export const SETUP_PATH = '/setup';
 
-/** Android package that handles `phonebridge://configure`. */
-export const ANDROID_PACKAGE = 'dev.phonebridge.android';
+/** Android package that handles `droidhands://configure`. */
+export const ANDROID_PACKAGE = 'com.droidhands.android';
 
 /**
  * `{base}/setup`, with `#key=<accessKey>` when the relay requires one. The key travels in the

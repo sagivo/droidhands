@@ -141,9 +141,9 @@ test('setup page script: builds the app links with the key from the fragment and
   const query = `relay=${encodeURIComponent(relay.url)}&key=${encodeURIComponent(accessKey)}`;
   assert.equal(
     browser.elements.get('open')?.href,
-    `intent://configure?${query}#Intent;scheme=phonebridge;package=dev.phonebridge.android;end`,
+    `intent://configure?${query}#Intent;scheme=droidhands;package=com.droidhands.android;end`,
   );
-  assert.equal(browser.elements.get('open-direct')?.href, `phonebridge://configure?${query}`);
+  assert.equal(browser.elements.get('open-direct')?.href, `droidhands://configure?${query}`);
   assert.equal(browser.elements.get('manual-key')?.textContent, accessKey);
   assert.notEqual(browser.elements.get('key-missing')?.className, 'warn', 'no missing-key warning');
 
@@ -159,5 +159,5 @@ test('setup page script: warns when the relay needs a key and the link has none'
   const page = await httpRequest(`${relay.url}/setup`);
   const browser = runPageScript(page.body, 'setup', relay.url);
   assert.equal(browser.elements.get('key-missing')?.className, 'warn');
-  assert.equal(browser.elements.get('open-direct')?.href, `phonebridge://configure?relay=${encodeURIComponent(relay.url)}`);
+  assert.equal(browser.elements.get('open-direct')?.href, `droidhands://configure?relay=${encodeURIComponent(relay.url)}`);
 });
