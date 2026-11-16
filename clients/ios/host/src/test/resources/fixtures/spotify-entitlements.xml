@@ -1,0 +1,20 @@
+Executable=/Users/me/Library/Developer/CoreSimulator/Devices/UDID/data/Containers/Bundle/Application/2222/Spotify.app/Spotify
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>application-identifier</key>
+	<string>ABCDE12345.com.spotify.client</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:open.spotify.com</string>
+		<string>applinks:*.spotify.link?mode=developer</string>
+		<string>webcredentials:accounts.spotify.com</string>
+		<string>applinks:not a domain</string>
+	</array>
+	<key>aps-environment</key>
+	<string>production</string>
+	<key>get-task-allow</key>
+	<false/>
+</dict>
+</plist>

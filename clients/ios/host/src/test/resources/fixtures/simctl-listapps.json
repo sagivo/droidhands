@@ -1,0 +1,41 @@
+{
+  "com.apple.mobilesafari": {
+    "ApplicationType": "System",
+    "Bundle": "file:///Library/Developer/CoreSimulator/Volumes/iOS_22A3351/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS%2018.0.simruntime/Contents/Resources/RuntimeRoot/Applications/MobileSafari.app/",
+    "CFBundleDisplayName": "Safari",
+    "CFBundleExecutable": "MobileSafari",
+    "CFBundleIdentifier": "com.apple.mobilesafari",
+    "CFBundleName": "Safari",
+    "CFBundleVersion": "8619.1.26.10.5",
+    "DataContainer": "file:///Users/me/Library/Developer/CoreSimulator/Devices/UDID/data/Containers/Data/Application/1111/",
+    "GroupContainers": {},
+    "Path": "/Library/Developer/CoreSimulator/Volumes/iOS_22A3351/Applications/MobileSafari.app",
+    "SBAppTags": []
+  },
+  "com.apple.webapp": {
+    "ApplicationType": "System",
+    "CFBundleDisplayName": "Web App",
+    "CFBundleIdentifier": "com.apple.webapp",
+    "CFBundleVersion": "1.0",
+    "Path": "/nonexistent/WebApp.app",
+    "SBAppTags": ["hidden"]
+  },
+  "com.spotify.client": {
+    "ApplicationType": "User",
+    "Bundle": "file://$BUNDLE_ROOT/Spotify.app/",
+    "CFBundleDisplayName": "Spotify",
+    "CFBundleExecutable": "Spotify",
+    "CFBundleIdentifier": "com.spotify.client",
+    "CFBundleName": "Spotify",
+    "CFBundleShortVersionString": "8.9.0",
+    "CFBundleVersion": "8.9.0.575",
+    "Path": "$BUNDLE_ROOT/Spotify.app"
+  },
+  "dev.phonebridge.runner.xctrunner": {
+    "ApplicationType": "User",
+    "CFBundleDisplayName": "PhoneBridgeRunner-Runner",
+    "CFBundleIdentifier": "dev.phonebridge.runner.xctrunner",
+    "CFBundleVersion": "1",
+    "Path": "/nonexistent/Runner.app"
+  }
+}

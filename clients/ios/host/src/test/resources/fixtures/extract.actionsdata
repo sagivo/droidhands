@@ -1,0 +1,33 @@
+{
+  "actions": {
+    "PlayPlaylistIntent": {
+      "identifier": "PlayPlaylistIntent",
+      "title": { "key": "Play Playlist", "alternatives": [] },
+      "descriptionMetadata": { "descriptionText": { "key": "Plays one of your playlists" } },
+      "isDiscoverable": true,
+      "openAppWhenRun": false,
+      "parameters": [
+        { "name": "playlist", "title": { "key": "Playlist" }, "isOptional": false, "valueType": { "entity": { "_0": "PlaylistEntity" } } },
+        { "name": "shuffle", "title": "Shuffle", "isOptional": true }
+      ]
+    },
+    "InternalIntent": {
+      "identifier": "InternalIntent",
+      "title": { "key": "Internal" },
+      "isDiscoverable": false
+    },
+    "NoTitleIntent": { "identifier": "NoTitleIntent" }
+  },
+  "autoShortcuts": [
+    {
+      "actionIdentifier": "PlayPlaylistIntent",
+      "phraseTemplates": [{ "key": "Play ${playlist} in ${applicationName}" }, { "key": "Start ${applicationName} playlist" }],
+      "shortTitle": { "key": "Play Playlist" },
+      "systemImageName": "play"
+    }
+  ],
+  "entities": {},
+  "enums": [],
+  "generator": { "name": "xcode-tools", "version": "16.0" },
+  "version": 1
+}
