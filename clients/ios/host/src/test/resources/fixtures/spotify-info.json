@@ -1,0 +1,18 @@
+{
+  "CFBundleIdentifier": "com.spotify.client",
+  "CFBundleDisplayName": "Spotify",
+  "CFBundleShortVersionString": "8.9.0",
+  "CFBundleVersion": "8.9.0.575",
+  "CFBundleURLTypes": [
+    { "CFBundleURLName": "com.spotify.client", "CFBundleURLSchemes": ["spotify", "Spotify-Action"] },
+    { "CFBundleURLSchemes": ["javascript", "https", "fb1234567890"] }
+  ],
+  "UIApplicationShortcutItems": [
+    { "UIApplicationShortcutItemType": "com.spotify.search", "UIApplicationShortcutItemTitle": "SHORTCUT_SEARCH" },
+    { "UIApplicationShortcutItemType": "com.spotify.liked", "UIApplicationShortcutItemTitle": "Liked Songs", "UIApplicationShortcutItemSubtitle": "Your favourites" },
+    { "UIApplicationShortcutItemTitle": "no type, skipped" }
+  ],
+  "CFBundleDocumentTypes": [
+    { "CFBundleTypeName": "Audio", "CFBundleTypeRole": "Viewer", "LSItemContentTypes": ["public.mp3", "public.mpeg-4-audio"] }
+  ]
+}
