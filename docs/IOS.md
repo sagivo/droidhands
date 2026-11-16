@@ -110,3 +110,6 @@ Limits on iPhone, each reported to the agent in plain words when it applies: the
 reachable (USB, or the same Wi-Fi); a locked iPhone can't be operated; screens that block capture (passwords, some
 banking apps) come back black, so the agent works from the element list; there is no Back button (use the
 app's own back control, or swipe from the left edge).
+
+Not yet handled: XCUITest reports no occlusion, so elements hidden behind another view of the same app or under the
+keyboard can still be listed (their boxes then sit on what covers them); the screenshot shows what is really there.

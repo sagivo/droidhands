@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Starts PhoneBridge for an iPhone or simulator (docs/IOS.md): the on-phone runner, then the host on this Mac.
 #
-#   ./scripts/ios-host.sh (--simulator [<udid>] | --device <udid>) [--relay URL] [--local-port N]
+#   ./scripts/ios-host.sh (--simulator [<udid>] | --device <udid>) [--relay URL] [--local-port N] [--new-token NAME]
 #
 # Generates a fresh random runner secret (PB_RUNNER_SECRET) for this session, starts
 # scripts/ios-runner.sh with the same target in the background, waits until the runner answers
 # GET /status with that secret, then builds and runs the host (:ios-host:installDist). Stopping the
 # host (Ctrl-C) stops the runner too. Without --relay or --local-port, agents on this Mac connect at
-# http://127.0.0.1:8765/mcp. --simulator without a udid uses the booted simulator.
+# http://127.0.0.1:8765/mcp. --simulator without a udid uses the booted simulator. --new-token prints a
+# full-access token for an agent that can't pair (shown once).
 #
 # Environment: PB_RUNNER_PORT (default 8101), PB_RUNNER_URL (default http://127.0.0.1:$PB_RUNNER_PORT),
 # PB_RUNNER_WAIT (seconds to wait for the runner, default 600: the first build takes a while),
@@ -22,7 +23,7 @@ ANDROID_DIR="$REPO_ROOT/clients/android"
 HOST_BIN="$REPO_ROOT/clients/ios/host/build/install/phonebridge-ios-host/bin/phonebridge-ios-host"
 
 usage() {
-  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 die() {
@@ -34,6 +35,7 @@ target=""
 udid=""
 relay=""
 local_port=""
+new_token=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --simulator)
@@ -54,6 +56,11 @@ while [ $# -gt 0 ]; do
     --local-port)
       [ $# -gt 1 ] || die "--local-port needs a port"
       local_port="$2"
+      shift
+      ;;
+    --new-token)
+      [ $# -gt 1 ] || die "--new-token needs the agent's name"
+      new_token="$2"
       shift
       ;;
     -h | --help)
@@ -127,4 +134,5 @@ echo "ios-host: runner is up" >&2
 args=("$target" "$udid" --runner-url "$runner_url")
 if [ -n "$relay" ]; then args+=(--relay "$relay"); fi
 if [ -n "$local_port" ]; then args+=(--local-port "$local_port"); fi
+if [ -n "$new_token" ]; then args+=(--new-token "$new_token"); fi
 "$HOST_BIN" "${args[@]}"

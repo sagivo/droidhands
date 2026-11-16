@@ -120,18 +120,31 @@ internal class ScreenOps(
         c.blockedForeground == null && !c.locked &&
             (c.primaryRoot == null || c.visibleNodes().none { ScreenFormat.isInformative(it.el) } || ScreenMarks.thinTree(c))
 
-    /** A capture once the screen has settled: re-read (up to [attempts] times) while it looks like it is loading. */
-    suspend fun settled(ctx: CallContext, attempts: Int = (timing.settleAttempts + 1) / 2, waitFirst: Boolean = true, mask: Boolean = true): Capture {
+    /**
+     * A capture once the screen has settled: re-read (up to [attempts] times) while it looks like it is loading, or until
+     * [until] holds (an action's effect can take a moment to show, e.g. the animation back to the Home Screen).
+     */
+    suspend fun settled(
+        ctx: CallContext,
+        attempts: Int = (timing.settleAttempts + 1) / 2,
+        waitFirst: Boolean = true,
+        mask: Boolean = true,
+        until: ((Capture) -> Boolean)? = null,
+    ): Capture {
         if (waitFirst) delay(timing.settleMs)
         var capture = capture(ctx, mask)
         var attempt = 1
-        while (attempt < attempts && loading(capture)) {
+        while (attempt < attempts && (loading(capture) || until?.invoke(capture) == false)) {
             delay(timing.retryMs)
             attempt++
             capture = capture(ctx, mask)
         }
         return capture
     }
+
+    /** True if anything an agent would notice differs between [before] and [after] (what [report] describes). */
+    fun changed(before: Capture, after: Capture): Boolean =
+        ScreenChange.describe(ScreenSignature.of(before), ScreenSignature.of(after)) != ScreenTexts.NO_CHANGE
 
     /**
      * The result line of an action: [message], the foreground app, and what changed since [before] ([noChange] replaces

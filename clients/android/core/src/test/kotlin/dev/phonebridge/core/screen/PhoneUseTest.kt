@@ -195,6 +195,23 @@ class PhoneUseTest {
     }
 
     @Test
+    fun homeWaitsForTheAppToLeaveBeforeReporting() = runTest {
+        val driver = FakeScreenDriver(messagesScreen())
+        val tools = tools(driver)
+        val home = ScreenSnapshot("com.apple.springboard", PHONE, el("Application", "SpringBoard", Rect(0, 0, 393, 852), children = listOf(
+            el("Icon", "Messages", Rect(20, 100, 60, 60), actionable = true),
+        )))
+        // The Home animation: the next two reads still show Messages (one with a status-bar tick), then the Home Screen.
+        driver.onGlobal = {
+            driver.upcoming += messagesScreen()
+            driver.upcoming += messagesScreen(extraText = "17%")
+            driver.screen = home
+        }
+        val text = tools.call("ui_global_action", ctx(), "action" to "home").text()
+        assertTrue("Foreground app: com.apple.springboard" in text, text)
+    }
+
+    @Test
     fun typeFocusesTheFieldThenTypesAndSubmits() = runTest {
         val driver = FakeScreenDriver(messagesScreen())
         val tools = tools(driver)

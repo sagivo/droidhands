@@ -67,18 +67,15 @@ final class Bridge {
     // MARK: - Endpoints
 
     private func status() -> [String: Any] {
-        let screen = UIScreen.main
+        var screen = Bridge.screenSize()
+        screen["scale"] = Double(UIScreen.main.scale)
         var result: [String: Any] = [
             "runner_version": Bridge.runnerVersion,
             "os": "ios",
             "os_version": UIDevice.current.systemVersion,
             "model": Bridge.modelIdentifier(),
             "name": UIDevice.current.name,
-            "screen": [
-                "width": Double(screen.bounds.width),
-                "height": Double(screen.bounds.height),
-                "scale": Double(screen.scale),
-            ],
+            "screen": screen,
         ]
         if let locked = PrivateXCTest.isScreenLocked() { result["locked"] = locked }
         return result
@@ -139,10 +136,16 @@ final class Bridge {
     }
 
     private func tap(_ body: Body) throws -> [String: Any] {
-        let point = Bridge.screenCoordinate(x: try body.double("x"), y: try body.double("y"))
+        let x = try body.double("x"), y = try body.double("y")
+        let point = Bridge.screenCoordinate(x: x, y: y)
         let durationMs = max(try body.optionalDouble("duration_ms") ?? 0, 0)
+        // System alerts (permission prompts) ignore taps synthesized at a screen point; XCTest delivers them when it
+        // taps the alert's button element, so a tap that lands on one goes to the element.
+        let alertButton = durationMs > 0 ? nil : Bridge.alertButton(at: CGPoint(x: x, y: y))
         try interact(durationMs > 0 ? "The long press" : "The tap") {
-            if durationMs > 0 {
+            if let alertButton {
+                alertButton.tap()
+            } else if durationMs > 0 {
                 point.press(forDuration: durationMs / 1000)
             } else {
                 point.tap()
@@ -311,6 +314,22 @@ final class Bridge {
     }
 
     /// SpringBoard alerts (permission prompts and other system dialogs) drawn over the app in front.
+    /// The button of a SpringBoard alert under [point] (screen points), or nil.
+    private static func alertButton(at point: CGPoint) -> XCUIElement? {
+        var found: XCUIElement?
+        _ = PBCatchException {
+            let alerts = XCUIApplication(bundleIdentifier: springboard).alerts
+            for a in 0..<min(alerts.count, maxAlertOverlays) {
+                let buttons = alerts.element(boundBy: a).buttons
+                for b in 0..<buttons.count where buttons.element(boundBy: b).frame.contains(point) {
+                    found = buttons.element(boundBy: b)
+                    return
+                }
+            }
+        }
+        return found
+    }
+
     private func springboardAlerts(maxDepth: Int) -> [[String: Any]] {
         let alerts = XCUIApplication(bundleIdentifier: Bridge.springboard).alerts
         let count = alerts.count
@@ -395,8 +414,12 @@ final class Bridge {
             .withOffset(CGVector(dx: x, dy: y))
     }
 
+    /// The screen in points, from SpringBoard's frame: this process's own `UIScreen.main` is wrong when iOS runs the
+    /// runner app in a compatibility size (320×480 without a launch screen), so it is only the fallback.
     private static func screenSize() -> [String: Double] {
-        let bounds = UIScreen.main.bounds
+        var frame = CGRect.zero
+        _ = PBCatchException { frame = XCUIApplication(bundleIdentifier: springboard).frame }
+        let bounds = frame.width > 0 && frame.height > 0 ? frame : UIScreen.main.bounds
         return ["width": Double(bounds.width), "height": Double(bounds.height)]
     }
 

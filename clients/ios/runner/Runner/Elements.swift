@@ -31,11 +31,11 @@ enum Elements {
         return element
     }
 
-    /// Keyboard focus: the public `hasFocus` (tvOS-style focus, usually false on iPhone) or XCTest's
-    /// `hasKeyboardFocus` attribute, read only when the snapshot object answers to it.
+    /// Keyboard focus: XCTest's `hasKeyboardFocus` attribute (read only when the snapshot object answers to it), or the
+    /// public `hasFocus` on a text input. `hasFocus` alone is not trusted: web views set it on every element of the page.
     static func isFocused(_ snapshot: XCUIElementSnapshot) -> Bool {
-        if snapshot.hasFocus { return true }
-        return PrivateXCTest.hasKeyboardFocus(snapshot) ?? false
+        if PrivateXCTest.hasKeyboardFocus(snapshot) == true { return true }
+        return snapshot.hasFocus && textInputTypes.contains(snapshot.elementType)
     }
 
     /// Depth-first search over the whole snapshot (no depth limit).

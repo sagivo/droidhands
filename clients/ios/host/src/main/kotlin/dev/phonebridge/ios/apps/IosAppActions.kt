@@ -69,7 +69,9 @@ class IosAppActions(
 
     val limits get() = inventory.limits
 
-    override suspend fun installedApps(): List<InstalledApp> = apps().map(::installed)
+    /** The apps a user opens: SpringBoard is the Home Screen itself (ui_global_action home), not one of them. */
+    override suspend fun installedApps(): List<InstalledApp> =
+        apps().filter { it.bundleId != RunnerScreenDriver.SPRINGBOARD }.map(::installed)
 
     override suspend fun resolveApp(query: String, access: AppAccess): AppResolution =
         AppMatcher.resolve(query, installedApps(), access::isAllowed)

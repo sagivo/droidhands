@@ -17,12 +17,16 @@ class FakeScreenDriver(
     var onLaunch: (String) -> Unit = {}
     var failWith: ScreenException? = null
 
+    /** Shown by the next snapshots, one each, before [screen] again (a screen that takes a moment to change). */
+    val upcoming = ArrayDeque<ScreenSnapshot>()
+    var onGlobal: (String) -> Unit = {}
+
     private fun record(call: String) {
         failWith?.let { throw it }
         calls += call
     }
 
-    override suspend fun snapshot(): ScreenSnapshot = screen
+    override suspend fun snapshot(): ScreenSnapshot = upcoming.removeFirstOrNull() ?: screen
 
     override suspend fun screenshot(): Screenshot = shot
 
@@ -44,7 +48,10 @@ class FakeScreenDriver(
 
     override suspend fun pressKey(key: String) = record("key $key")
 
-    override suspend fun globalAction(action: String) = record("global $action")
+    override suspend fun globalAction(action: String) {
+        record("global $action")
+        onGlobal(action)
+    }
 
     override suspend fun launchApp(appId: String) {
         record("launch $appId")

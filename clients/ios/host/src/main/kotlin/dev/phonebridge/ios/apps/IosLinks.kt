@@ -5,6 +5,8 @@ import dev.phonebridge.ios.inventory.IosApp
 import dev.phonebridge.ios.inventory.arr
 import dev.phonebridge.ios.inventory.strings
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import java.net.URI
 import java.util.Locale
 
@@ -40,21 +42,35 @@ object IosLinks {
     private val BARE_HOST = Regex("^(localhost|[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,})(:\\d{1,5})?([/?#].*)?$")
     private val DOMAIN = Regex("^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
-    /** What an app opens: custom [schemes] and the [domains] of its universal links (`*.` = any subdomain). */
-    data class LinkForms(val schemes: List<String>, val domains: List<String>) {
-        val isEmpty: Boolean get() = schemes.isEmpty() && domains.isEmpty()
+    /**
+     * What an app opens: custom [schemes], the [domains] of its universal links (`*.` = any subdomain), and any web link
+     * when it declares the `http`/`https` schemes itself ([web], browsers).
+     */
+    data class LinkForms(val schemes: List<String>, val domains: List<String>, val web: Boolean = false) {
+        val isEmpty: Boolean get() = schemes.isEmpty() && domains.isEmpty() && !web
 
         /** For descriptions: `spotify:` plus a star for each scheme, then `https://open.spotify.com/` plus a star for each domain. */
-        val patterns: List<String> get() = schemes.map { "$it:*" } + domains.map { "https://$it/*" }
+        val patterns: List<String> get() =
+            (if (web) listOf("any http(s) web link") else emptyList()) + schemes.map { "$it:*" } + domains.map { "https://$it/*" }
     }
 
-    fun forms(app: IosApp): LinkForms = LinkForms(urlSchemes(app), appLinkDomains(app))
+    fun forms(app: IosApp): LinkForms = LinkForms(urlSchemes(app), appLinkDomains(app), declaresWeb(app))
 
-    /** The custom schemes of `CFBundleURLTypes`, lowercased (iOS compares schemes case-insensitively), in order. */
-    fun urlSchemes(app: IosApp): List<String> = app.infoPlist.arr("CFBundleURLTypes")
-        .flatMap { (it as? JsonObject)?.strings("CFBundleURLSchemes").orEmpty() }
+    /** True if the app lists `http` or `https` among its public `CFBundleURLTypes` schemes (a browser). */
+    fun declaresWeb(app: IosApp): Boolean = publicSchemes(app).any { it in WEB }
+
+    /**
+     * The custom schemes of `CFBundleURLTypes`, lowercased (iOS compares schemes case-insensitively), in order. Types the
+     * app marks `CFBundleURLIsPrivate` are its own internal links, not offered to other apps, so they are left out.
+     */
+    fun urlSchemes(app: IosApp): List<String> = publicSchemes(app).filter { it !in WEB }
+
+    private fun publicSchemes(app: IosApp): List<String> = app.infoPlist.arr("CFBundleURLTypes")
+        .mapNotNull { it as? JsonObject }
+        .filterNot { (it["CFBundleURLIsPrivate"] as? JsonPrimitive)?.booleanOrNull == true }
+        .flatMap { it.strings("CFBundleURLSchemes") }
         .map { it.lowercase(Locale.ROOT) }
-        .filter { SCHEME.matches(it) && it !in FORBIDDEN_SCHEMES && it !in WEB }
+        .filter { SCHEME.matches(it) && it !in FORBIDDEN_SCHEMES }
         .distinct()
 
     /** The `applinks:` domains of the associated-domains entitlement, lowercased, `?mode=…` dropped. */
@@ -72,8 +88,8 @@ object IosLinks {
     fun declares(app: IosApp, link: CheckedUrl): Boolean = declares(forms(app), link)
 
     fun declares(forms: LinkForms, link: CheckedUrl): Boolean = when (link.scheme) {
-        "https" -> link.host?.let { h -> forms.domains.any { hostMatches(h, it) } } == true
-        "http" -> false
+        "https" -> forms.web || link.host?.let { h -> forms.domains.any { hostMatches(h, it) } } == true
+        "http" -> forms.web
         else -> link.scheme in forms.schemes
     }
 
@@ -117,6 +133,6 @@ object IosLinks {
         return checked
     }
 
-    /** The installed apps that declare [link], as iOS would consider them (a browser is never listed: none declares https). */
+    /** The installed apps that declare [link]: its scheme's apps, those with its domain, and browsers for web links. */
     fun handlers(apps: List<IosApp>, link: CheckedUrl): List<IosApp> = apps.filter { declares(it, link) }
 }

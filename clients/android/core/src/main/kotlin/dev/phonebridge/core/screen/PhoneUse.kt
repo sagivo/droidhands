@@ -542,7 +542,7 @@ internal class PhoneUse(private val ops: ScreenOps, private val marker: Screensh
                     tapPoint(ctx, before, sx, sy, longPress)
                 }
             }
-            ops.report(ctx, message, before, ops.settled(ctx))
+            ops.report(ctx, message, before, ops.settled(ctx, until = { ops.changed(before, it) }))
         }
     }
 
@@ -713,7 +713,7 @@ internal class PhoneUse(private val ops: ScreenOps, private val marker: Screensh
             }
             val message = ops.scrollWith(ctx, before, direction, container)
             ops.report(
-                ctx, message, before, ops.settled(ctx),
+                ctx, message, before, ops.settled(ctx, until = { ops.changed(before, it) }),
                 noChange = "The content did not move: it is already at the end in that direction, or this area does not scroll that way.",
             )
         }
@@ -755,7 +755,7 @@ internal class PhoneUse(private val ops: ScreenOps, private val marker: Screensh
             // The whole gesture goes to the window under its starting point.
             ops.checkPoint(ctx, before, x1, y1)
             ops.act(ctx) { driver.swipe(x1.toDouble(), y1.toDouble(), x2.toDouble(), y2.toDouble(), duration) }
-            ops.report(ctx, "Swiped from ($x1,$y1) to ($x2,$y2) in ${duration}ms.", before, ops.settled(ctx))
+            ops.report(ctx, "Swiped from ($x1,$y1) to ($x2,$y2) in ${duration}ms.", before, ops.settled(ctx, until = { ops.changed(before, it) }))
         }
     }
 
@@ -787,7 +787,9 @@ internal class PhoneUse(private val ops: ScreenOps, private val marker: Screensh
             action(args, ctx, "Pressing ${name.replace('_', ' ')}", allowLocked = name == "lock_screen") { before ->
                 if (before.locked) return@action "The phone is already locked."
                 ops.act(ctx) { driver.globalAction(name) }
-                ops.report(ctx, "Performed '$name'.", before, ops.settled(ctx))
+                // System navigation leaves the app or locks the phone: wait for that, not the first status-bar tick.
+                val after = ops.settled(ctx, attempts = ops.timing.settleAttempts) { it.foreground != before.foreground || it.locked != before.locked }
+                ops.report(ctx, "Performed '$name'.", before, after)
             }
         }
     }

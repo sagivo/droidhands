@@ -51,6 +51,26 @@ class LinksTest {
     }
 
     @Test
+    fun `an app that declares http and https opens any web link, private schemes are left out`() {
+        val browser = app("com.apple.mobilesafari", "Safari", schemes = listOf("http", "https", "x-web-search"))
+        val forms = IosLinks.forms(browser)
+        assertEquals(listOf("x-web-search"), forms.schemes)
+        assertEquals("any http(s) web link", forms.patterns.first())
+        assertTrue(IosLinks.declares(browser, IosLinks.check("https://en.wikipedia.org/wiki/Paris")))
+        assertTrue(IosLinks.declares(browser, IosLinks.check("http://example.com")))
+        assertFalse(IosLinks.declares(spotify, IosLinks.check("https://en.wikipedia.org/wiki/Paris")))
+
+        val private = app("com.apple.Maps", "Maps", schemes = listOf("maps")).let { a ->
+            a.copy(
+                infoPlist = Json.parseToJsonElement(
+                    """{"CFBundleURLTypes":[{"CFBundleURLIsPrivate":true,"CFBundleURLSchemes":["x-maps-reopen"]},{"CFBundleURLSchemes":["maps"]}]}""",
+                ) as JsonObject,
+            )
+        }
+        assertEquals(listOf("maps"), IosLinks.urlSchemes(private))
+    }
+
+    @Test
     fun `an app declares its schemes and https on its domains, never http`() {
         assertTrue(IosLinks.declares(spotify, IosLinks.check("spotify:album:1")))
         assertTrue(IosLinks.declares(spotify, IosLinks.check("https://open.spotify.com/track/1")))
