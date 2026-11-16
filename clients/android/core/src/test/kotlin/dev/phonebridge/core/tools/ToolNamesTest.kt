@@ -15,7 +15,7 @@ class ToolNamesTest {
 
     @Test
     fun recipesMayUseOrdinaryToolsOnly() {
-        for (ok in listOf("whatsapp_send", "email_send", "sms_send", "phone_call", "calendar_event_create", "alarm_set", "url_open")) {
+        for (ok in listOf("sms_send", "phone_call", "calendar_event_create", "alarm_set", "url_open")) {
             assertNull(ToolNames.recipeRefusal(ok), ok)
         }
         for (refused in listOf(

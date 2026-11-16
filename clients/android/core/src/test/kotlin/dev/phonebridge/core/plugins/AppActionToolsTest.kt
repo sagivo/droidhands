@@ -62,6 +62,7 @@ class AppActionToolsTest {
         val unavailable = HashMap<String, String>()
         val executed: MutableList<ActionRequest> = Collections.synchronizedList(mutableListOf())
         var failure: String? = null
+        var integrationFailure: String? = null
 
         override suspend fun installedApps() = apps
 
@@ -84,6 +85,7 @@ class AppActionToolsTest {
         override suspend fun execute(request: ActionRequest, ctx: CallContext): ActionResult {
             ctx.ensureStillAllowed()
             failure?.let { throw ToolException(it) }
+            integrationFailure?.let { throw IntegrationException(it) }
             executed += request
             return ActionResult(buildJsonObject { put("handled_by", request.app.packageName) })
         }
@@ -157,11 +159,11 @@ class AppActionToolsTest {
               message: {description: Text, required: true}
             android:
               tool:
-                name: whatsapp_send
+                name: sms_send
                 args: {contact: "{{contact}}", message: "{{message}}"}
             examples:
               - params: {message: hi}
-                expect: {tool: {name: whatsapp_send, args: {message: hi}}}
+                expect: {tool: {name: sms_send, args: {message: hi}}}
     """.trimIndent()
 
     private val mapsYaml = """
@@ -188,7 +190,7 @@ class AppActionToolsTest {
               message: {description: Text, required: true}
             android:
               tool:
-                name: whatsapp_send
+                name: sms_send
                 args: {to: "+15550100", message: "{{message}}"}
     """.trimIndent()
 
@@ -206,7 +208,7 @@ class AppActionToolsTest {
     init {
         registry.register(
             tool(
-                name = "whatsapp_send", title = "Send WhatsApp message", description = "d", scope = Scopes.MESSAGES_SEND,
+                name = "sms_send", title = "Send WhatsApp message", description = "d", scope = Scopes.MESSAGES_SEND,
                 risk = Risk.SENSITIVE, confirmsInternally = true,
             ) { args, ctx ->
                 ctx.requireConfirmation("Send '${args.reqString("message")}' on WhatsApp")
@@ -219,7 +221,7 @@ class AppActionToolsTest {
             PluginAction("open", "Open", "Opens the app.", risk = Risk.ACTION, android = IntentRecipe("android.intent.action.MAIN")),
             PluginAction("share_text", "Share", "Discovered share.", risk = Risk.ACTION, android = IntentRecipe("android.intent.action.SEND")),
             PluginAction("Bad Id", "Bad", "Bad.", risk = Risk.ACTION, android = UrlRecipe("https://x")),
-            PluginAction("sneaky", "Sneaky", "A discovered tool recipe.", android = ToolRecipe("whatsapp_send")),
+            PluginAction("sneaky", "Sneaky", "A discovered tool recipe.", android = ToolRecipe("sms_send")),
         )
         platform.discovered["com.notes"] = listOf(
             PluginAction("open", "Open", "Opens the app.", risk = Risk.ACTION, android = IntentRecipe("android.intent.action.MAIN")),
@@ -347,9 +349,9 @@ class AppActionToolsTest {
         assertEquals("Opens https://maps.example/dir?to=Paris. Plugin says: Show directions to Paris", local.describeCall(buildJsonObject { put("to", "Paris") }))
 
         // Tool recipes run the built-in tool itself, marked unreviewed for local plugins.
-        assertEquals("whatsapp_send", catalog.toolFor(catalog.action(whatsapp, "send_message")!!)!!.name)
+        assertEquals("sms_send", catalog.toolFor(catalog.action(whatsapp, "send_message")!!)!!.name)
         val unreviewed = catalog.toolFor(catalog.action(maps, "message_owner")!!)!!
-        assertEquals("whatsapp_send", unreviewed.name)
+        assertEquals("sms_send", unreviewed.name)
         assertTrue(unreviewed.alwaysConfirm)
         assertEquals("Send WhatsApp message (unreviewed plugin)", unreviewed.title)
         assertTrue(unreviewed.confirmsInternally)
@@ -495,7 +497,7 @@ class AppActionToolsTest {
         assertEquals(RenderedUrl("spotify:search:daft%20punk", "com.spotify.music"), platform.executed.single().recipe)
         assertEquals(false, json["done"]!!.jsonPrimitive.boolean)
         assertEquals(true, json["opened"]!!.jsonPrimitive.boolean)
-        assertTrue("screen_read" in json["next"]!!.jsonPrimitive.content && "ask the user" in json["next"]!!.jsonPrimitive.content)
+        assertTrue("screen_observe" in json["next"]!!.jsonPrimitive.content && "ask the user" in json["next"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -505,9 +507,9 @@ class AppActionToolsTest {
         assertEquals("sent", result.texts()[0])
         assertEquals(buildJsonObject { put("contact", "Tania"); put("message", "hi") }, whatsappCalls.single())
         val prompt = prompts.single()
-        assertEquals("whatsapp_send", prompt.toolName)
+        assertEquals("sms_send", prompt.toolName)
         assertEquals("Send 'hi' on WhatsApp", prompt.summary)
-        assertEquals("whatsapp_send", lastAudit().tool)
+        assertEquals("sms_send", lastAudit().tool)
         assertEquals("""{"contact":"Tania","message":"hi"}""", lastAudit().argsPreview)
         assertEquals("approved by user; via app_action_run (com.whatsapp/send_message)", lastAudit().detail)
         assertTrue(platform.executed.isEmpty())
@@ -519,9 +521,9 @@ class AppActionToolsTest {
         val refused = call(noSend, "app_action_run", """{"app":"WhatsApp","action":"send_message","params":{"message":"hi"}}""")
         assertTrue(refused.isError())
         assertEquals(AuditOutcome.DENIED_SCOPE, lastAudit().outcome)
-        assertEquals("whatsapp_send", lastAudit().tool)
+        assertEquals("sms_send", lastAudit().tool)
 
-        val blocked = issue { it.copy(toolRules = mapOf("whatsapp_send" to ToolRule.BLOCK)) }
+        val blocked = issue { it.copy(toolRules = mapOf("sms_send" to ToolRule.BLOCK)) }
         assertTrue(call(blocked, "app_action_run", """{"app":"WhatsApp","action":"send_message","params":{"message":"hi"}}""").isError())
         assertEquals(AuditOutcome.DENIED_POLICY, lastAudit().outcome)
 
@@ -544,7 +546,7 @@ class AppActionToolsTest {
 
         call(token, "app_action_run", """{"app":"Maps","action":"message_owner","params":{"message":"hello"}}""")
         assertEquals("Send WhatsApp message (unreviewed plugin)", prompts[1].toolTitle)
-        assertEquals("whatsapp_send", lastAudit().tool)
+        assertEquals("sms_send", lastAudit().tool)
         assertEquals(buildJsonObject { put("to", "+15550100"); put("message", "hello") }, whatsappCalls.single())
     }
 
@@ -663,5 +665,50 @@ class AppActionToolsTest {
         assertFalse(call(token, "app_action_run", """{"app":"Notes","action":"new_note"}""").isError())
         assertEquals(RenderedUrl("notes://new", "com.notes"), platform.executed.single().recipe)
         assertEquals(JsonPrimitive(true), JsonPrimitive(prompts.single().toolTitle.endsWith("(unreviewed plugin)")))
+    }
+
+    // Health and discovered links
+
+    @Test
+    fun integrationFailuresAreRecordedPerAppVersionAndReported() = runTest {
+        platform.integrationFailure = "Spotify has no screen for this action on this phone."
+        val token = issue()
+        val first = call(token, "app_action_run", """{"app":"Spotify","action":"search","params":{"query":"x"}}""")
+        assertTrue(first.isError())
+        assertTrue("has now failed once on Spotify version 8.9" in first.texts()[0], first.texts()[0])
+        val second = call(token, "app_action_run", """{"app":"Spotify","action":"search","params":{"query":"x"}}""")
+        assertTrue("2 times in a row" in second.texts()[0], second.texts()[0])
+        val listed = call(token, "app_actions_list", """{"app":"Spotify"}""").json()["actions"]!!.jsonArray
+            .map { it.jsonObject }.single { it["action"]!!.jsonPrimitive.content == "search" }
+        val health = listed["health"]!!.jsonObject
+        assertEquals("failing", health["status"]!!.jsonPrimitive.content)
+        assertEquals(2, health["failures"]!!.jsonPrimitive.content.toInt())
+        // A success clears it.
+        platform.integrationFailure = null
+        assertFalse(call(token, "app_action_run", """{"app":"Spotify","action":"search","params":{"query":"x"}}""").isError())
+        assertNull(catalog.health.status(spotify, "search"))
+    }
+
+    @Test
+    fun refusalsAndOtherErrorsAreNotRecorded() = runTest {
+        platform.failure = "The phone is locked."
+        call(issue(), "app_action_run", """{"app":"Spotify","action":"search","params":{"query":"x"}}""")
+        assertNull(catalog.health.status(spotify, "search"))
+    }
+
+    @Test
+    fun discoveredLinksMayOnlyRunUrlOpenPinnedToTheApp() = runTest {
+        fun link(pkg: String, extra: Map<String, ValueSpec> = emptyMap()) = PluginAction(
+            "open_link", "Open a link", "Opens links.", params = listOf(ParamSpec("url", "Link", required = true)),
+            android = ToolRecipe("url_open", linkedMapOf("url" to ValueSpec.Template("{{url}}"), "package" to ValueSpec.Template(pkg)) + extra),
+        )
+        platform.discovered["com.maps"] = listOf(link("com.maps"))
+        platform.discovered["com.notes"] = listOf(link("com.other"))
+        platform.discovered["com.notes.pro"] = listOf(link("com.notes.pro", mapOf("x" to ValueSpec.Template("y"))))
+        assertEquals(listOf("open_link"), catalog.actions(maps).filter { it.plugin == null }.map { it.action.id })
+        assertTrue(catalog.actions(notes).none { it.action.id == "open_link" })
+        assertTrue(catalog.actions(notesPro).none { it.action.id == "open_link" })
+        // And never another tool (the "sneaky" sms_send recipe above).
+        assertTrue(catalog.actions(spotify).none { it.action.id == "sneaky" })
     }
 }

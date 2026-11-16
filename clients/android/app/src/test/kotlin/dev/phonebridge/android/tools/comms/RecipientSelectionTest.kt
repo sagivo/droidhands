@@ -2,7 +2,6 @@ package dev.phonebridge.android.tools.comms
 
 import dev.phonebridge.android.tools.support.ContactMatch
 import dev.phonebridge.android.tools.support.PhoneEntry
-import dev.phonebridge.android.tools.support.WhatsAppEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -17,8 +16,7 @@ class RecipientSelectionTest {
         name: String,
         score: Double,
         phones: List<PhoneEntry> = listOf(mobile("+97254000000$id")),
-        whatsapp: List<WhatsAppEntry> = emptyList(),
-    ) = ContactMatch(id, name, phones, emptyList(), whatsapp, starred = false, score = score)
+    ) = ContactMatch(id, name, phones, emptyList(), starred = false, score = score)
 
     private fun chosen(choice: ContactChoice): ContactMatch = (choice as ContactChoice.Chosen).match
 
@@ -113,49 +111,15 @@ class RecipientSelectionTest {
     // --- chooseNumber ---
 
     @Test
-    fun whatsappNumberPreferredWhenAsked() {
-        val match = contact(1, "Tania", 1.0, whatsapp = listOf(WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp")))
-        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match, preferWhatsApp = true))
-        assertEquals(NumberChoice.Chosen("+972540000001"), RecipientSelection.chooseNumber(match, preferWhatsApp = false))
-    }
-
-    @Test
-    fun sameWhatsappNumberInBothAppsIsOneNumber() {
-        val match = contact(
-            1, "Tania", 1.0,
-            whatsapp = listOf(
-                WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp"),
-                WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp.w4b"),
-            ),
-        )
-        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match, preferWhatsApp = true))
-    }
-
-    @Test
-    fun severalWhatsappNumbersAreAmbiguous() {
-        val match = contact(
-            1, "Tania", 1.0,
-            whatsapp = listOf(
-                WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp"),
-                WhatsAppEntry("972501112233", "972501112233@s.whatsapp.net", "com.whatsapp"),
-            ),
-        )
-        val choice = RecipientSelection.chooseNumber(match, preferWhatsApp = true) as NumberChoice.Ambiguous
-        assertEquals("WhatsApp numbers", choice.kind)
-        assertEquals(listOf("+972541234567 (WhatsApp)", "+972501112233 (WhatsApp)"), choice.options)
-    }
-
-    @Test
-    fun withoutWhatsappFallsBackToMobile() {
+    fun mobileIsPreferred() {
         val match = contact(1, "Tania", 1.0, phones = listOf(PhoneEntry("03-1234567", "+97231234567", "home"), mobile("+972541234567")))
-        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match, preferWhatsApp = true))
-        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match, preferWhatsApp = false))
+        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match))
     }
 
     @Test
     fun severalMobilesAreAmbiguous() {
         val match = contact(1, "Tania", 1.0, phones = listOf(mobile("+972541234567"), PhoneEntry("050-111 2233", "+972501112233", "work mobile")))
-        val choice = RecipientSelection.chooseNumber(match, preferWhatsApp = false) as NumberChoice.Ambiguous
+        val choice = RecipientSelection.chooseNumber(match) as NumberChoice.Ambiguous
         assertEquals("mobile numbers", choice.kind)
         assertEquals(listOf("+972541234567 (mobile)", "+972501112233 (work mobile)"), choice.options)
     }
@@ -163,13 +127,13 @@ class RecipientSelectionTest {
     @Test
     fun theSameNumberStoredTwiceIsNotAmbiguous() {
         val match = contact(1, "Tania", 1.0, phones = listOf(mobile("+972541234567"), PhoneEntry("054-123-4567", "+972541234567", "mobile")))
-        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match, preferWhatsApp = false))
+        assertEquals(NumberChoice.Chosen("+972541234567"), RecipientSelection.chooseNumber(match))
     }
 
     @Test
     fun withoutMobileASingleNumberOfAnyTypeIsUsed() {
         val match = contact(1, "Office", 1.0, phones = listOf(PhoneEntry("03-1234567", "+97231234567", "work")))
-        assertEquals(NumberChoice.Chosen("+97231234567"), RecipientSelection.chooseNumber(match, preferWhatsApp = false))
+        assertEquals(NumberChoice.Chosen("+97231234567"), RecipientSelection.chooseNumber(match))
     }
 
     @Test
@@ -178,12 +142,12 @@ class RecipientSelectionTest {
             1, "Office", 1.0,
             phones = listOf(PhoneEntry("03-1234567", "+97231234567", "work"), PhoneEntry("03-7654321", "+97237654321", "home")),
         )
-        assertEquals("phone numbers", (RecipientSelection.chooseNumber(match, preferWhatsApp = false) as NumberChoice.Ambiguous).kind)
+        assertEquals("phone numbers", (RecipientSelection.chooseNumber(match) as NumberChoice.Ambiguous).kind)
     }
 
     @Test
     fun noPhoneIsNoNumber() {
-        assertSame(NumberChoice.NoNumber, RecipientSelection.chooseNumber(contact(1, "Tania", 1.0, phones = emptyList()), preferWhatsApp = true))
+        assertSame(NumberChoice.NoNumber, RecipientSelection.chooseNumber(contact(1, "Tania", 1.0, phones = emptyList())))
     }
 
     @Test
@@ -203,8 +167,6 @@ class RecipientSelectionTest {
             phones = listOf(PhoneEntry("03-1", "+97231111111", "home"), mobile("+972541234567"), mobile("+972501112233")),
         )
         assertEquals("Tania (+972541234567, +972501112233, …)", RecipientSelection.describeCandidate(many))
-        val whatsappOnly = contact(1, "Tania", 1.0, emptyList(), listOf(WhatsAppEntry("972541234567", "972541234567@s.whatsapp.net", "com.whatsapp")))
-        assertEquals("Tania (+972541234567)", RecipientSelection.describeCandidate(whatsappOnly))
     }
 
     @Test

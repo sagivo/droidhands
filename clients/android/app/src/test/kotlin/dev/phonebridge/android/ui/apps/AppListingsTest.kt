@@ -43,7 +43,7 @@ class AppListingsTest {
     fun toolRecipesTakeTheBuiltInToolsRiskAndScope() = runTest {
         val whatsapp = AppListings.load(AppTestData.catalog()).first { it.packageName == WHATSAPP }
         val send = whatsapp.actions.first { it.id == "send_message" }
-        assertEquals("whatsapp_send", send.builtInTool)
+        assertEquals("sms_send", send.builtInTool)
         assertEquals(Risk.SENSITIVE, send.risk)
         assertEquals(Scopes.MESSAGES_SEND, send.scope)
         assertEquals("com.whatsapp/send_message", send.toolName)

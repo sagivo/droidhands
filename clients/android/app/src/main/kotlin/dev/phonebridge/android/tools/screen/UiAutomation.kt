@@ -19,7 +19,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * State shared by every tool that drives the screen (ui_*, whatsapp_*, email_send): a single [Mutex] so only
+ * State shared by every tool that drives the screen (ui_*, screen recipes): a single [Mutex] so only
  * one gesture/action sequence runs at a time, plus common preconditions (unlock, app access, service health)
  * and result helpers.
  */

@@ -80,8 +80,8 @@ class AppsPresentationTest {
         val local = action("p.q", "x", unreviewed = true)
         assertTrue(AppsPresentation.needsApproval(local))
         assertTrue(AppsPresentation.approvalNote(local)!!.contains("unreviewed"))
-        val viaTool = action("com.whatsapp", "send_message", risk = Risk.SENSITIVE, builtInTool = "whatsapp_send")
-        assertTrue(AppsPresentation.approvalNote(viaTool)!!.contains("whatsapp_send tool"))
+        val viaTool = action("com.whatsapp", "send_message", risk = Risk.SENSITIVE, builtInTool = "sms_send")
+        assertTrue(AppsPresentation.approvalNote(viaTool)!!.contains("sms_send tool"))
         assertEquals("Sensitive", AppsPresentation.riskLabel(Risk.SENSITIVE))
     }
 

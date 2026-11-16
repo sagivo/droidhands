@@ -39,7 +39,7 @@ class AndroidToolCatalogTest {
 
     @Test
     fun toolNamesEqualTheCoreCatalog() {
-        val tools = AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps) { null })
+        val tools = AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps, builtInTool = { null }))
         val names = tools.map { it.name }
         assertEquals("duplicate tool names: $names", names.size, names.toSet().size)
         // Registered like BridgeGraph does: bridge_capabilities first, then the Android catalog.
@@ -51,7 +51,7 @@ class AndroidToolCatalogTest {
 
     @Test
     fun appActionToolsFollowTheAppTools() {
-        val names = AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps) { null }).map { it.name }
+        val names = AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps, builtInTool = { null })).map { it.name }
         val urlOpen = names.indexOf("url_open")
         assertEquals(listOf(ToolNames.APP_ACTIONS_LIST, ToolNames.APP_ACTION_RUN), names.subList(urlOpen + 1, urlOpen + 3))
     }

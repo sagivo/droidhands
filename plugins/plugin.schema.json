@@ -190,8 +190,8 @@
         "name": {
           "enum": [
             "device_status", "flashlight_set", "volume_set", "ringer_mode_set", "media_control", "clipboard_set", "speak",
-            "alarm_set", "timer_set", "app_open", "url_open", "whatsapp_open_chat", "contacts_search", "sms_list",
-            "call_log_list", "sms_send", "whatsapp_send", "phone_call", "call_status", "call_answer", "call_end", "email_send",
+            "alarm_set", "timer_set", "app_open", "url_open", "contacts_search", "sms_list",
+            "call_log_list", "sms_send", "phone_call", "call_status", "call_answer", "call_end",
             "notifications_list", "notification_reply", "notification_action", "notification_dismiss", "calendar_list",
             "calendar_events_list", "calendar_event_create", "location_get"
           ]

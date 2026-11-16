@@ -9,77 +9,13 @@ android:
   packages: [com.whatsapp, com.whatsapp.w4b]
 
 actions:
-  - id: send_message
-    title: Send a message
-    description: >-
-      Sends a WhatsApp message to a phone number (to) or a contact saved on the phone (contact), using the
-      built-in whatsapp_send tool. The user may have to approve it on the phone. With PhoneBridge accessibility
-      on, it taps Send and confirms the message went out (sent=true). Without it, the chat opens with the text
-      typed in and the result has sent=false: the user must tap Send. If several contacts match the name,
-      nothing is sent and the candidates are returned so you can ask the user.
-    keywords: [text, message, chat, dm, msg, write, reply]
-    params:
-      to:
-        description: Phone number in international format, e.g. +15551234567. Pass either to or contact.
-        max_length: 40
-      contact:
-        description: Name of a contact saved on the phone, e.g. Dana Levi (instead of to)
-        max_length: 100
-      message:
-        description: The message text
-        required: true
-        max_length: 10000
-      business:
-        type: boolean
-        description: true to send from WhatsApp Business instead of WhatsApp (when both are installed)
-    android:
-      tool:
-        name: whatsapp_send
-        args: {to: "{{to}}", contact: "{{contact}}", message: "{{message}}", business: "{{business}}"}
-    examples:
-      - params: {to: "+15551234567", message: Running 10 minutes late}
-        expect:
-          tool: {name: whatsapp_send, args: {to: "+15551234567", message: Running 10 minutes late}}
-      - params: {contact: Dana Levi, message: "Happy birthday!", business: true}
-        expect:
-          tool: {name: whatsapp_send, args: {contact: Dana Levi, message: "Happy birthday!", business: true}}
-      - params: {to: "+15551234567"}
-        expect: {error: message}
-
-  - id: open_chat
-    title: Open a chat
-    description: >-
-      Opens the WhatsApp chat with a phone number (to) or a contact saved on the phone (contact), without
-      typing or sending anything, using the built-in whatsapp_open_chat tool. With PhoneBridge accessibility on,
-      it also checks that the chat appeared and fails if the number is not on WhatsApp.
-    keywords: [chat, conversation, open, show, dm]
-    params:
-      to:
-        description: Phone number in international format, e.g. +15551234567. Pass either to or contact.
-        max_length: 40
-      contact:
-        description: Name of a contact saved on the phone (instead of to)
-        max_length: 100
-      business:
-        type: boolean
-        description: true to use WhatsApp Business instead of WhatsApp (when both are installed)
-    android:
-      tool:
-        name: whatsapp_open_chat
-        args: {to: "{{to}}", contact: "{{contact}}", business: "{{business}}"}
-    examples:
-      - params: {contact: Dana Levi}
-        expect: {tool: {name: whatsapp_open_chat, args: {contact: Dana Levi}}}
-      - params: {to: "+15551234567", business: false}
-        expect: {tool: {name: whatsapp_open_chat, args: {to: "+15551234567", business: false}}}
-
   - id: draft_message
     title: Open a chat with a message typed in
     description: >-
       Opens the WhatsApp chat with a phone number and types the message into the text box, using WhatsApp's
-      click-to-chat link. Nothing is sent: the user (or you, with screen_read and ui_tap) must tap Send. Use
-      this when the user wants to review the message first; use send_message to send it. If the number is not
-      on WhatsApp, WhatsApp shows an error instead of a chat.
+      click-to-chat link. Nothing is sent yet: to send, use screen_observe, tap Send (ui_tap) and check that the
+      message shows as sent; or leave it for the user to review. If the number is not on WhatsApp, WhatsApp shows
+      an error instead of a chat. To reply to a message that just arrived, notification_reply is simpler.
     keywords: [draft, prefill, compose, write, message, text]
     risk: action
     params:
@@ -107,7 +43,7 @@ actions:
     title: Share text
     description: >-
       Opens WhatsApp's chat picker with the text ready to share. Nothing is sent until the user picks one or
-      more chats and taps Send. Use send_message to message a known person directly.
+      more chats and taps Send. Use draft_message to message a known phone number directly.
     keywords: [share, forward, text, link]
     risk: action
     params:

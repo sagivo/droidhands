@@ -35,7 +35,7 @@ actions:
     description: >-
       Opens Waze to drive from the current location to an address or place. Waze looks the destination up and
       usually starts navigating to the best match, but if it is unsure (or the lookup fails) it shows search results
-      instead and someone has to pick one, so check with screen_read. Give a full address for the best match; use
+      instead and someone has to pick one, so check with screen_observe. Give a full address for the best match; use
       navigate_to_coordinates when you have exact coordinates.
     keywords: [navigation, navigate, drive, driving, directions, route, take me, go to, gps, traffic]
     risk: action

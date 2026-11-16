@@ -37,7 +37,7 @@ actions:
     title: Open a chat with a message typed in
     description: >-
       Opens the Telegram chat with a public username and types the text into the message box. Nothing is sent:
-      the user (or you, with screen_read and ui_tap) must tap Send. Works for chats with people and bots; groups
+      the user (or you, with screen_observe and ui_tap) must tap Send. Works for chats with people and bots; groups
       and channels open without the text.
     keywords: [draft, prefill, compose, write, message, text]
     risk: action

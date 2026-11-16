@@ -13,7 +13,7 @@ actions:
     title: Add a task
     description: >-
       Opens Todoist's add-task screen filled in with the task, due date and priority. The task is NOT saved until
-      the user (or you, with screen_read and ui_tap) taps Add. The due date can be natural language, e.g.
+      the user (or you, with screen_observe and ui_tap) taps Add. The due date can be natural language, e.g.
       "tomorrow 5pm" or "every monday".
     keywords: [task, todo, to-do, reminder, remember, list, add]
     risk: action

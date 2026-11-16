@@ -15,8 +15,6 @@ object AndroidToolCatalog {
         return contactTools(app) +
             messagingTools(app) +
             callControlTools(app) +
-            whatsAppTools(app) +
-            emailTools(app) +
             notificationTools(app) +
             appTools(app, actions) +
             appActionTools(actions) +

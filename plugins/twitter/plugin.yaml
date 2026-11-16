@@ -13,7 +13,7 @@ actions:
     title: Compose a tweet
     description: >-
       Opens X's composer with the text filled in, using X's "post" web intent link. Nothing is published until
-      the user (or you, with screen_read and ui_tap) taps Post, so make sure the user wants it public first. Links
+      the user (or you, with screen_observe and ui_tap) taps Post, so make sure the user wants it public first. Links
       and hashtags can go in the text.
     keywords: [tweet, post, publish, write, status, update, share, x]
     risk: action

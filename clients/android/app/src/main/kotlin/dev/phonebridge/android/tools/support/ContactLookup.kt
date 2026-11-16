@@ -7,7 +7,6 @@ import dev.phonebridge.android.tools.comms.ContactsRepository
 import dev.phonebridge.android.tools.comms.E164Formatter
 import dev.phonebridge.android.tools.comms.PhoneText
 import dev.phonebridge.android.tools.comms.RecipientResolver
-import dev.phonebridge.android.tools.comms.WhatsAppRows
 import dev.phonebridge.android.tools.comms.withProviderAccess
 import dev.phonebridge.core.tools.ToolException
 import kotlinx.serialization.json.JsonObject
@@ -26,13 +25,17 @@ data class PhoneEntry(
     val type: String,
 )
 
-data class WhatsAppEntry(
-    /** International digits without '+', e.g. 972541234567. */
-    val number: String,
-    /** e.g. 972541234567@s.whatsapp.net */
-    val jid: String,
-    /** WhatsApp package that synced it: com.whatsapp or com.whatsapp.w4b. */
+/**
+ * An app the contact can be reached in: an installed app that syncs its own raw contact into the address book
+ * (messaging and calling apps do: WhatsApp, Telegram, Signal, Viber…), with the entries it adds, as the Contacts app
+ * shows them ("Message +1 555 123 4567", "Voice call …"). Read generically from the contacts provider: nothing here
+ * knows a particular app.
+ */
+data class ContactAppEntry(
     val packageName: String,
+    /** The app's name, if it could be read. */
+    val label: String?,
+    val entries: List<String>,
 )
 
 data class ContactMatch(
@@ -40,7 +43,8 @@ data class ContactMatch(
     val name: String,
     val phones: List<PhoneEntry>,
     val emails: List<String>,
-    val whatsapp: List<WhatsAppEntry>,
+    /** Apps that synced this contact ([ContactAppEntry]). */
+    val apps: List<ContactAppEntry> = emptyList(),
     val starred: Boolean,
     /** 0..1 relevance (1 = exact). */
     val score: Double,
@@ -56,7 +60,7 @@ data class Recipient(
 )
 
 /**
- * Contact search + recipient resolution shared by contacts/SMS/call/WhatsApp tools.
+ * Contact search + recipient resolution shared by the contacts, SMS and call tools.
  *
  * All functions block on ContentResolver IPC: call them from `Dispatchers.IO`. Failures the agent
  * can act on (missing permission, no or several matching contacts, no usable number) are thrown
@@ -77,16 +81,13 @@ object ContactLookup {
     /**
      * Resolves a target from tool args. Exactly one of [to] (phone number) / [contact] (name) must be
      * non-null. For names: exactly one contact must match (else ToolException listing candidates);
-     * that contact must have a usable number (prefers WhatsApp numbers when [preferWhatsApp], else mobile;
-     * ambiguous multiple mobiles → ToolException listing them so the agent can pass `to`).
+     * that contact must have a usable number (mobile first; ambiguous multiple mobiles → ToolException listing them so
+     * the agent can pass `to`).
      */
-    fun resolveRecipient(context: Context, to: String?, contact: String?, preferWhatsApp: Boolean = false): Recipient =
-        RecipientResolver(context).resolve(to, contact, preferWhatsApp)
+    fun resolveRecipient(context: Context, to: String?, contact: String?): Recipient =
+        RecipientResolver(context).resolve(to, contact)
 
-    /**
-     * `{id,name,phones:[{number,type,normalized}],emails,whatsapp:[{number,jid,business?}],starred}`.
-     * WhatsApp numbers are given with '+' so they can be passed back as `to` unambiguously.
-     */
+    /** `{id,name,phones:[{number,type,normalized}],emails,apps:[{package,app?,entries}],starred}`. */
     fun toJson(match: ContactMatch): JsonObject = buildJsonObject {
         put("id", match.id)
         put("name", match.name)
@@ -100,12 +101,14 @@ object ContactLookup {
             }
         }
         putJsonArray("emails") { match.emails.forEach { add(it) } }
-        putJsonArray("whatsapp") {
-            for (entry in match.whatsapp) {
-                addJsonObject {
-                    put("number", "+" + entry.number)
-                    put("jid", entry.jid)
-                    if (entry.packageName == WhatsAppRows.BUSINESS_PACKAGE) put("business", true)
+        if (match.apps.isNotEmpty()) {
+            putJsonArray("apps") {
+                for (app in match.apps) {
+                    addJsonObject {
+                        put("package", app.packageName)
+                        app.label?.let { put("app", it) }
+                        putJsonArray("entries") { app.entries.forEach { add(it) } }
+                    }
                 }
             }
         }
@@ -118,11 +121,4 @@ object PhoneNumbers {
     /** Best-effort E.164 ("+972541234567") or null if it can't be determined. */
     fun toE164(context: Context, raw: String): String? = E164Formatter.toE164(context, raw)
 
-    /**
-     * International digits without '+' (WhatsApp wa.me format), or null. Like call and SMS targets,
-     * only plain phone numbers are accepted ([PhoneText.cleanDialable]: no `*`/`#` codes, letters or
-     * extensions).
-     */
-    fun toWhatsAppDigits(context: Context, raw: String): String? =
-        PhoneText.cleanDialable(raw)?.let { toE164(context, it) }?.removePrefix("+")
 }

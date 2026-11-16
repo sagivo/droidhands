@@ -33,7 +33,7 @@ documentation or a quick test), `beta`, or `stable` (every action was run on a r
 | [Discord](discord/plugin.yaml) | `com.discord` | messaging | experimental | 2: Open a server channel, Open a server invite |
 | [Facebook](facebook/plugin.yaml) | `com.facebook.katana` | social | experimental | 2: Open a profile or Page, Share a link |
 | [Firefox](firefox/plugin.yaml) | `org.mozilla.firefox` | browser | experimental | 2: Open a web page, Search Google |
-| [Gmail](gmail/plugin.yaml) | `com.google.android.gm` | email | experimental | 2: Send an email, Write an email |
+| [Gmail](gmail/plugin.yaml) | `com.google.android.gm` | email | experimental | 1: Write an email |
 | [Google](google_search/plugin.yaml) | `com.google.android.googlequicksearchbox` | browser | experimental | 1: Search the web |
 | [Google Calendar](google_calendar/plugin.yaml) | `com.google.android.calendar` | productivity | experimental | 2: Create an event, Open a new event form |
 | [Google Chrome](chrome/plugin.yaml) | `com.android.chrome` | browser | experimental | 2: Open a web page, Search Google |
@@ -46,7 +46,7 @@ documentation or a quick test), `beta`, or `stable` (every action was run on a r
 | [Instagram](instagram/plugin.yaml) | `com.instagram.android` | social | experimental | 1: Open a profile |
 | [LinkedIn](linkedin/plugin.yaml) | `com.linkedin.android` | social | experimental | 2: Open a person's profile, Open a company page |
 | [Messenger](messenger/plugin.yaml) | `com.facebook.orca` | messaging | experimental | 1: Open a chat |
-| [Microsoft Outlook](outlook/plugin.yaml) | `com.microsoft.office.outlook` | email | experimental | 2: Send an email, Write an email |
+| [Microsoft Outlook](outlook/plugin.yaml) | `com.microsoft.office.outlook` | email | experimental | 1: Write an email |
 | [Microsoft Teams](teams/plugin.yaml) | `com.microsoft.teams` | messaging | experimental | 1: Start a chat with a message typed in |
 | [Netflix](netflix/plugin.yaml) | `com.netflix.mediaclient` | video | experimental | 2: Search Netflix, Open a movie or show |
 | [Notion](notion/plugin.yaml) | `notion.id` | productivity | experimental | 1: Open a page |
@@ -62,7 +62,7 @@ documentation or a quick test), `beta`, or `stable` (every action was run on a r
 | [Uber](uber/plugin.yaml) | `com.ubercab` | rides | experimental | 1: Set up a ride to a place |
 | [Viber](viber/plugin.yaml) | `com.viber.voip` | messaging | experimental | 1: Open a chat with a business or bot |
 | [Waze](waze/plugin.yaml) | `com.waze` | maps | experimental | 4: Search in Waze, Drive to a place, Drive to coordinates, Drive home or to work |
-| [WhatsApp](whatsapp/plugin.yaml) | `com.whatsapp`<br>`com.whatsapp.w4b` | messaging | experimental | 4: Send a message, Open a chat, Open a chat with a message typed in, Share text |
+| [WhatsApp](whatsapp/plugin.yaml) | `com.whatsapp`<br>`com.whatsapp.w4b` | messaging | experimental | 2: Open a chat with a message typed in, Share text |
 | [X (Twitter)](twitter/plugin.yaml) | `com.twitter.android` | social | experimental | 2: Compose a tweet, Open a profile |
 | [YouTube](youtube/plugin.yaml) | `com.google.android.youtube` | video | experimental | 3: Search videos, Play a video, Play a video by its ID |
 | [Zoom](zoom/plugin.yaml) | `us.zoom.videomeetings`<br>`us.zoom.videomeetings4intune` | productivity | experimental | 1: Join a meeting |

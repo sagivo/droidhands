@@ -68,16 +68,10 @@ internal object RecipientSelection {
         match.phones.mapTo(HashSet()) { it.normalized ?: PhoneText.comparableDigits(it.number) }
 
     /**
-     * WhatsApp numbers first when [preferWhatsApp] (falling back to phones if the contact has none),
-     * else the single mobile number, else the single number of any type. Several distinct
-     * candidates at the deciding step are ambiguous.
+     * The single mobile number, else the single number of any type. Several distinct candidates at the deciding step
+     * are ambiguous.
      */
-    fun chooseNumber(match: ContactMatch, preferWhatsApp: Boolean): NumberChoice {
-        if (preferWhatsApp) {
-            val whatsapp = match.whatsapp.map { "+" + it.number }.distinct()
-            if (whatsapp.size == 1) return NumberChoice.Chosen(whatsapp.single())
-            if (whatsapp.size > 1) return NumberChoice.Ambiguous(whatsapp.map { "$it (WhatsApp)" }, "WhatsApp numbers")
-        }
+    fun chooseNumber(match: ContactMatch): NumberChoice {
         val phones = distinctPhones(match.phones)
         val mobiles = phones.filter { PhoneTypes.isMobile(it.type) }
         return when {
@@ -100,7 +94,7 @@ internal object RecipientSelection {
     /** "Tania Cohen (+972541234567)", "Tania Cohen (+972541234567, +97231234567)" or "Tania Cohen (no phone number)". */
     fun describeCandidate(match: ContactMatch): String {
         val phones = distinctPhones(match.phones).sortedByDescending { PhoneTypes.isMobile(it.type) }
-        val numbers = phones.map(::dialable).ifEmpty { match.whatsapp.map { "+" + it.number }.distinct() }
+        val numbers = phones.map(::dialable)
         val detail = when {
             numbers.isEmpty() -> "no phone number"
             numbers.size > NUMBERS_PER_CANDIDATE -> numbers.take(NUMBERS_PER_CANDIDATE).joinToString(", ") + ", …"

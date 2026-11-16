@@ -78,7 +78,7 @@ actions:
     title: Open a new event form
     description: >-
       Opens Google Calendar's new-event screen filled in with the title, times, place and notes. Nothing is saved
-      until the user (or you, with screen_read and ui_tap) taps Save, and the user can pick the calendar and add
+      until the user (or you, with screen_observe and ui_tap) taps Save, and the user can pick the calendar and add
       guests there. Times are Unix epoch milliseconds (UTC); without them Calendar suggests a time.
     keywords: [event, meeting, appointment, schedule, draft, review, calendar, new]
     risk: action

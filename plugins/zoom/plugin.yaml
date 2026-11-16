@@ -15,7 +15,7 @@ actions:
     description: >-
       Joins a Zoom meeting by its meeting ID, with the user's approval, so other participants may see and hear
       the user. Zoom may first ask for the passcode, the user's name, or whether to turn video and audio on, and
-      may put the user in a waiting room: check with screen_read and ask the user. The meeting ID is the 9 to 11
+      may put the user in a waiting room: check with screen_observe and ask the user. The meeting ID is the 9 to 11
       digits in the invite (zoom.us/j/<ID>).
     keywords: [meeting, video, conference, join, zoom, webinar, videoconference]
     risk: sensitive

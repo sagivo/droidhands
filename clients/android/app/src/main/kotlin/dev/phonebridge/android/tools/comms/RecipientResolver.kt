@@ -16,7 +16,7 @@ import dev.phonebridge.core.tools.ToolException
 internal class RecipientResolver(private val context: Context) {
     private val contacts by lazy(LazyThreadSafetyMode.NONE) { ContactsRepository(context) }
 
-    fun resolve(to: String?, contact: String?, preferWhatsApp: Boolean): Recipient {
+    fun resolve(to: String?, contact: String?): Recipient {
         val number = to?.trim()?.takeIf { it.isNotEmpty() }
         val name = contact?.trim()?.takeIf { it.isNotEmpty() }
         return when {
@@ -26,7 +26,7 @@ internal class RecipientResolver(private val context: Context) {
             number != null -> forNumber(number, arg = "to")
             // A number passed as 'contact' means that number, not "some number of whoever has it".
             name != null && PhoneText.looksLikePhoneNumber(name) -> forNumber(name, arg = "contact")
-            name != null -> forContact(name, preferWhatsApp)
+            name != null -> forContact(name)
             else -> throw ToolException("Missing recipient: pass 'to' (phone number) or 'contact' (contact name).")
         }
     }
@@ -46,9 +46,9 @@ internal class RecipientResolver(private val context: Context) {
         }
     }
 
-    private fun forContact(name: String, preferWhatsApp: Boolean): Recipient {
+    private fun forContact(name: String): Recipient {
         val match = resolveContact(name, numberArg = "to")
-        return when (val choice = RecipientSelection.chooseNumber(match, preferWhatsApp)) {
+        return when (val choice = RecipientSelection.chooseNumber(match)) {
             is NumberChoice.Chosen -> Recipient(displayName = match.name, number = choice.number, contact = match)
             is NumberChoice.Ambiguous -> throw ToolException(RecipientSelection.ambiguousNumberMessage(match, choice, "to"))
             NumberChoice.NoNumber -> throw ToolException(RecipientSelection.noNumberMessage(match, "to"))

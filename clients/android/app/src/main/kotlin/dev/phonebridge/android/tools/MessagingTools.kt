@@ -221,7 +221,7 @@ private suspend fun addressFilter(context: Context, args: JsonObject): AddressFi
     if (contact == null) return null
     if (PhoneText.looksLikePhoneNumber(contact)) return AddressFilter.forAddress(contact)
     val match = withContext(Dispatchers.IO) { RecipientResolver(context).resolveContact(contact, numberArg = "address") }
-    val numbers = match.phones.flatMap { listOfNotNull(it.number, it.normalized) } + match.whatsapp.map { "+" + it.number }
+    val numbers = match.phones.flatMap { listOfNotNull(it.number, it.normalized) }
     if (numbers.isEmpty()) {
         throw ToolException(
             "Contact \"${match.name}\" has no phone number saved, so nothing can be matched by contact. " +

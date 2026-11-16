@@ -235,25 +235,25 @@ class PluginValidationTest {
     fun toolRecipes() {
         fun tool(body: String, extra: String = "") =
             doc(action("$extra\nparams: {to: {description: T}, text: {description: M, required: true}}\nandroid:\n  tool:\n" + body.trimIndent().prependIndent("    ")))
-        val plugin = assertValid(tool("name: whatsapp_send\nargs: {to: \"{{to}}\", message: \"{{text}}\", business: false}"))
+        val plugin = assertValid(tool("name: sms_send\nargs: {to: \"{{to}}\", message: \"{{text}}\"}"))
         val recipe = plugin.actions.single().android as ToolRecipe
-        assertEquals("whatsapp_send", recipe.name)
+        assertEquals("sms_send", recipe.name)
         assertNull(plugin.actions.single().risk)
         assertEquals(true, plugin.actions.single().completesTask)
-        assertProblem(tool("name: whatsapp_send", extra = "risk: sensitive"), "actions[0].risk: remove it: a tool recipe takes the built-in tool's risk")
-        assertProblem(tool("name: whatsapp_send", extra = "scope: apps"), "actions[0].scope: remove it: a tool recipe takes the built-in tool's scope")
+        assertProblem(tool("name: sms_send", extra = "risk: sensitive"), "actions[0].risk: remove it: a tool recipe takes the built-in tool's risk")
+        assertProblem(tool("name: sms_send", extra = "scope: apps"), "actions[0].scope: remove it: a tool recipe takes the built-in tool's scope")
         assertProblem(tool("name: nope_tool"), "android.tool.name: 'nope_tool' is not a PhoneBridge tool")
         assertProblem(tool("name: intent_start"), "use an intent recipe, which is pinned to the app")
         assertProblem(tool("name: ui_tap"), "use a steps recipe, which is confined to the app")
         assertProblem(tool("name: screen_read"), "use a steps recipe")
         assertProblem(tool("name: app_action_run"), "plugin actions can't list or run other actions")
-        assertProblem(tool("name: whatsapp_send\nargs: {to: {a: b}}"), "android.tool.args.to: must be text, a number, a boolean or a list of those")
-        assertProblem(tool("name: whatsapp_send\nargs: {Bad-Name: x}"), "'Bad-Name' is not a valid argument name")
-        assertProblem(tool("name: whatsapp_send\nargs: {to: \"{{nope}}\"}"), "android.tool.args.to: {{nope}} is not declared in params")
+        assertProblem(tool("name: sms_send\nargs: {to: {a: b}}"), "android.tool.args.to: must be text, a number, a boolean or a list of those")
+        assertProblem(tool("name: sms_send\nargs: {Bad-Name: x}"), "'Bad-Name' is not a valid argument name")
+        assertProblem(tool("name: sms_send\nargs: {to: \"{{nope}}\"}"), "android.tool.args.to: {{nope}} is not declared in params")
         assertProblem(tool("args: {}"), "android.tool.name: required")
         // The validator can be given another platform's tool list.
-        val result = PluginLoader.load(tool("name: whatsapp_send"), folder = "demo", toolNames = setOf("sms_send"))
-        assertTrue(result.errors.any { "'whatsapp_send' is not a PhoneBridge tool" in it }, result.errors.toString())
+        val result = PluginLoader.load(tool("name: phone_call"), folder = "demo", toolNames = setOf("sms_send"))
+        assertTrue(result.errors.any { "'phone_call' is not a PhoneBridge tool" in it }, result.errors.toString())
     }
 
     @Test

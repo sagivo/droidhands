@@ -146,7 +146,7 @@ object ActivityFilters {
 
     fun dayOf(timestamp: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()
 
-    /** Lowercase, with `_` and `-` read as spaces, so "whatsapp send" finds `whatsapp_send`. */
+    /** Lowercase, with `_` and `-` read as spaces, so "sms send" finds `sms_send`. */
     private fun normalize(text: String): String =
         text.trim().lowercase().replace('_', ' ').replace('-', ' ').replace(Regex("\\s+"), " ")
 }

@@ -44,7 +44,7 @@ actions:
     title: Write a text message
     description: >-
       Opens a new conversation in Messages with the phone number filled in and the text typed in. Nothing is
-      sent: the user (or you, with screen_read and ui_tap) must tap Send. Use send_sms to send directly.
+      sent: the user (or you, with screen_observe and ui_tap) must tap Send. Use send_sms to send directly.
     keywords: [sms, text, message, draft, compose, prefill, write]
     risk: action
     params:

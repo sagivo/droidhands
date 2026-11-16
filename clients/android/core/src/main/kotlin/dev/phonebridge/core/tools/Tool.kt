@@ -19,7 +19,7 @@ enum class Risk {
  * platform-neutral public API documented in docs/TOOLS.md.
  */
 interface Tool {
-    /** Stable snake_case name, e.g. `whatsapp_send`. */
+    /** Stable snake_case name, e.g. `sms_send`. */
     val name: String
 
     /** Short human title, e.g. "Send WhatsApp message". */
@@ -93,7 +93,7 @@ interface DispatchTool : Tool {
 
 /**
  * What a [DispatchTool] resolved to: run [tool] with [args]. [alias] is another name the call is known
- * by (for example `com.whatsapp/send_message` for a plugin action that runs `whatsapp_send`): a BLOCK
+ * by (for example `com.google.android.apps.messaging/send_sms` for a plugin action that runs `sms_send`): a BLOCK
  * rule on it refuses the call too, and the audit entry mentions it.
  */
 class Dispatch(val tool: Tool, val args: JsonObject, val alias: String? = null)

@@ -13,7 +13,7 @@ actions:
     title: Add a note
     description: >-
       Shares text to Keep, which opens its small "add to Keep" window with the text as the note (and the title,
-      if given). The note may need the user to confirm it there: check with screen_read before telling the user
+      if given). The note may need the user to confirm it there: check with screen_observe before telling the user
       it was saved. Keep can also turn it into a list or add a reminder afterwards.
     keywords: [note, notes, memo, jot, remember, write down, save, keep]
     risk: action
