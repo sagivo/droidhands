@@ -80,12 +80,6 @@
   }
 }
 
-@utility text-display {
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
 /* Eyebrow labels in mono — the protocol's own vernacular. */
 @utility eyebrow {
   font-family: var(--font-mono);

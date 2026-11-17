@@ -7,7 +7,7 @@ interface Props {
 const { run, log } = Astro.props;
 ---
 
-<div data-at={run[0]} class="col-start-1 row-start-1 h-fit overflow-hidden rounded-2xl bg-slate-950 font-mono text-xs text-slate-300 ring-1 ring-slate-900">
+<div data-at={run[0]} class="col-start-1 row-start-1 h-fit overflow-hidden rounded-2xl bg-ink-950 font-mono text-xs text-slate-300 ring-1 ring-white/10">
   <div class="flex items-center gap-2 border-b border-white/10 px-3.5 py-2 font-sans text-[11px] font-medium">
     <span class="grid">
       <span data-at={run[0]} data-until={run[1]} data-fx="fade" class="col-start-1 row-start-1 flex items-center gap-1.5 text-amber-300">

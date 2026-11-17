@@ -116,7 +116,7 @@ const svg = (name: string, cls = "size-4") =>
 ---
 
 <div data-demo class="mx-auto max-w-5xl">
-  <div role="tablist" aria-label="Examples" class="mx-auto flex w-fit max-w-full gap-1 overflow-x-auto rounded-full bg-slate-100 p-1">
+  <div role="tablist" aria-label="Examples" class="mx-auto flex w-fit max-w-full gap-1 overflow-x-auto rounded-full bg-white/[0.05] p-1 ring-1 ring-white/[0.08]">
     {
       scenarios.map((s, i) => (
         <button
@@ -124,11 +124,11 @@ const svg = (name: string, cls = "size-4") =>
           role="tab"
           data-tab={i}
           aria-selected={i === 0 ? "true" : "false"}
-          class="relative flex shrink-0 items-center gap-2 overflow-hidden rounded-full px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 aria-selected:bg-white aria-selected:text-slate-900 aria-selected:shadow-sm"
+          class="relative flex shrink-0 items-center gap-2 overflow-hidden rounded-full px-4 py-2 text-sm font-medium text-slate-400 transition-all duration-300 hover:text-white aria-selected:bg-white/[0.1] aria-selected:text-white aria-selected:shadow-sm"
         >
           <Fragment set:html={svg(s.icon)} />
           {s.tab}
-          <span data-progress class="absolute inset-x-3 bottom-0.5 h-0.5 origin-left scale-x-0 rounded-full bg-brand-500" />
+          <span data-progress class="absolute inset-x-3 bottom-0.5 h-0.5 origin-left scale-x-0 rounded-full bg-brand-400" />
         </button>
       ))
     }
@@ -138,30 +138,30 @@ const svg = (name: string, cls = "size-4") =>
     scenarios.map((s, i) => (
       <div data-scenario={s.id} data-plan={JSON.stringify(s.plan)} hidden={i !== 0} class="mt-10 grid items-center gap-10 md:grid-cols-[1fr_auto] md:gap-14">
         {/* Agent side */}
-        <div class="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 shadow-slate-900/5 ring-slate-900/5">
-          <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-3.5">
+        <div class="overflow-hidden rounded-3xl bg-ink-850 shadow-2xl shadow-black/40 ring-1 ring-white/10">
+          <div class="flex items-center gap-3 border-b border-white/[0.06] px-5 py-3.5">
             <span class="flex gap-1.5">
-              <span class="size-2.5 rounded-full bg-slate-200" />
-              <span class="size-2.5 rounded-full bg-slate-200" />
-              <span class="size-2.5 rounded-full bg-slate-200" />
+              <span class="size-2.5 rounded-full bg-white/[0.12]" />
+              <span class="size-2.5 rounded-full bg-white/[0.12]" />
+              <span class="size-2.5 rounded-full bg-white/[0.12]" />
             </span>
-            <span class="ml-2 flex items-center gap-2 text-sm font-medium text-slate-700">
+            <span class="ml-2 flex items-center gap-2 text-sm font-medium text-slate-200">
               <span class="grid size-5 place-items-center rounded-full bg-[#d97757] text-[10px] font-bold text-white">C</span>
               Claude
             </span>
-            <span class="ml-auto rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">phone connected</span>
+            <span class="ml-auto rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300 ring-1 ring-emerald-400/20">phone connected</span>
           </div>
 
           <div class="min-h-[440px] space-y-3 p-5">
             <div data-at="1" class="flex justify-end">
-              <p class="max-w-[85%] rounded-2xl rounded-br-sm bg-brand-600 px-4 py-2.5 text-[15px] text-white">
+              <p class="max-w-[85%] rounded-2xl rounded-br-sm bg-brand-500 px-4 py-2.5 text-[15px] text-white">
                 <span data-type data-type-at="1" data-text={s.prompt} />
                 <span class="caret ml-px h-4 w-0.5 translate-y-0.5 bg-white/80" />
               </p>
             </div>
 
             <div class="grid">
-              <div data-at="2" data-until="3" class="col-start-1 row-start-1 flex h-fit w-fit gap-1 rounded-2xl bg-slate-100 px-4 py-3">
+              <div data-at="2" data-until="3" class="col-start-1 row-start-1 flex h-fit w-fit gap-1 rounded-2xl bg-white/[0.06] px-4 py-3">
                 <span class="dot size-1.5 rounded-full bg-slate-400" />
                 <span class="dot size-1.5 rounded-full bg-slate-400 [animation-delay:150ms]" />
                 <span class="dot size-1.5 rounded-full bg-slate-400 [animation-delay:300ms]" />
@@ -169,18 +169,18 @@ const svg = (name: string, cls = "size-4") =>
 
               {s.routine ? (
                 <div data-at="3" class="col-start-1 row-start-1 space-y-2.5">
-                  <div class="flex items-center gap-3 rounded-2xl bg-brand-50 p-3 ring-1 ring-brand-100">
-                    <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-white">
+                  <div class="flex items-center gap-3 rounded-2xl bg-brand-500/10 p-3 ring-1 ring-brand-400/20">
+                    <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500 text-white shadow-lg shadow-brand-500/30">
                       <Fragment set:html={svg("clock", "size-5")} />
                     </span>
                     <div class="min-w-0">
-                      <p class="text-[11px] font-semibold uppercase tracking-wide text-brand-600">Routine saved</p>
-                      <p class="truncate text-sm font-semibold text-slate-900">{s.routine.title}</p>
-                      <p class="text-xs text-slate-500">{s.routine.schedule}</p>
+                      <p class="font-mono text-[10px] font-semibold tracking-widest text-brand-300 uppercase">Routine saved</p>
+                      <p class="truncate text-sm font-semibold text-white">{s.routine.title}</p>
+                      <p class="text-xs text-slate-400">{s.routine.schedule}</p>
                     </div>
-                    <span class="ml-auto shrink-0 rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-100">On</span>
+                    <span class="ml-auto shrink-0 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300 ring-1 ring-emerald-400/20">On</span>
                   </div>
-                  <p class="flex gap-2.5 text-[15px] text-slate-700">
+                  <p class="flex gap-2.5 text-[15px] text-slate-300">
                     <span class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-[#d97757] text-[10px] font-bold text-white">C</span>
                     {s.routine.reply}
                   </p>
@@ -193,12 +193,12 @@ const svg = (name: string, cls = "size-4") =>
             {s.warp && (
               <>
                 <div data-at="4" data-fx="fade" class="flex items-center gap-3 py-1 text-xs font-medium">
-                  <span class="h-px flex-1 bg-gradient-to-r from-transparent to-slate-300" />
+                  <span class="h-px flex-1 bg-gradient-to-r from-transparent to-white/20" />
                   <span class="warp flex items-center gap-1.5 rounded-full px-3 py-1 text-white">
                     <Fragment set:html={svg(s.id === "bedtime" ? "moon" : "sun", "size-3.5")} />
                     {s.warp.label}
                   </span>
-                  <span class="h-px flex-1 bg-gradient-to-l from-transparent to-slate-300" />
+                  <span class="h-px flex-1 bg-gradient-to-l from-transparent to-white/20" />
                 </div>
                 <RunBox run={s.run} log={s.log} />
               </>
@@ -206,7 +206,7 @@ const svg = (name: string, cls = "size-4") =>
 
             <div data-at={s.final.at} class="flex gap-2.5">
               <span class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-[#d97757] text-[10px] font-bold text-white">C</span>
-              <p class="text-[15px] text-slate-700">{s.final.text}</p>
+              <p class="text-[15px] text-slate-300">{s.final.text}</p>
             </div>
           </div>
         </div>
@@ -214,7 +214,7 @@ const svg = (name: string, cls = "size-4") =>
         {/* Phone side */}
         <div class="relative isolate mx-auto w-[280px]">
           <div data-at={s.run[0]} data-until={s.run[1]} data-fx="fade" class="ai-glow absolute -inset-1.5 -z-10 rounded-[3.2rem]" />
-          <div class="rounded-[2.75rem] bg-slate-900 p-2.5 shadow-2xl ring-1 shadow-brand-900/30 ring-slate-900/10">
+          <div class="rounded-[2.75rem] bg-gradient-to-b from-ink-700 to-ink-950 p-2.5 shadow-[0_32px_64px_-20px_rgb(0_0_0/0.7)] ring-1 ring-white/10">
             <div class="relative h-[560px] overflow-hidden rounded-[2.25rem] bg-gradient-to-br from-brand-400 via-brand-600 to-slate-900">
               {/* Status bar */}
               <div data-statusbar class="absolute inset-x-0 top-0 z-50 flex items-center justify-between px-6 pt-2.5 text-[11px] font-semibold text-white transition-colors duration-300">
@@ -551,7 +551,7 @@ const svg = (name: string, cls = "size-4") =>
     animation: demo-breathe 2s ease-in-out infinite;
   }
   [data-demo] .warp {
-    background-image: linear-gradient(110deg, #0f172a 40%, #4f5fc6 50%, #0f172a 60%);
+    background-image: linear-gradient(110deg, #0b101f 40%, #6f66f7 50%, #0b101f 60%);
     background-size: 200% 100%;
     animation: demo-shimmer 1.8s linear infinite;
   }
