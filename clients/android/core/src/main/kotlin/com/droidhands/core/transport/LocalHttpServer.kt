@@ -58,7 +58,9 @@ class LocalHttpServer(
     /** One-tap pairing (docs/PROTOCOL.md §4.1); null serves only `/mcp` and `/health`. */
     private val oauth: LocalOAuth? = null,
 ) {
-    private class Running(val socket: ServerSocket, val scope: CoroutineScope)
+    private class Running(val socket: ServerSocket, val scope: CoroutineScope) {
+        lateinit var acceptThread: Thread
+    }
 
     private val lock = Any()
 
@@ -88,7 +90,8 @@ class LocalHttpServer(
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("droidhands-http"))
             val state = Running(server, scope)
             running = state
-            Thread({ acceptLoop(state) }, "droidhands-http-accept").apply { isDaemon = true }.start()
+            state.acceptThread = Thread({ acceptLoop(state) }, "droidhands-http-accept").apply { isDaemon = true }
+            state.acceptThread.start()
         }
     }
 
@@ -103,6 +106,15 @@ class LocalHttpServer(
             current
         }
         closeQuietly(state.socket)
+        // On Linux the JDK finishes closing a server socket only when the thread blocked in accept() returns;
+        // wait for it, so the port is really free (and refuses connections) when stop() returns.
+        if (Thread.currentThread() !== state.acceptThread) {
+            try {
+                state.acceptThread.join(ACCEPT_JOIN_MS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
         // A snapshot array: Kotlin's toList() reads the size first and can fail when a connection ends meanwhile.
         for (socket in connections.toTypedArray()) closeQuietly(socket)
         connections.clear()
@@ -324,6 +336,9 @@ class LocalHttpServer(
         const val MAX_CONNECTIONS = 64
 
         private const val BACKLOG = 50
+
+        /** How long [stop] waits for the accept thread to let go of the port. */
+        private const val ACCEPT_JOIN_MS = 2_000L
         private const val READ_TIMEOUT_MS = 30_000
         private const val DRAIN_TIMEOUT_MS = 500
         private const val MAX_DRAIN_BYTES = 256 * 1024
