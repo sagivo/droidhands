@@ -34,6 +34,10 @@ jobs:
           cache: gradle
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The default list includes 'tools', which the SDK no longer has (sdkmanager fails).
+          # Gradle downloads the platform and build tools it needs.
+          packages: platform-tools
 
       - name: Unit tests, plugin checks and debug build
         run: ./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleDebug --console=plain --stacktrace
