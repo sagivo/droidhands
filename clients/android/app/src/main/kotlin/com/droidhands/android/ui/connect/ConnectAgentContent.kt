@@ -146,12 +146,19 @@ internal fun ConnectAgentContent(
             connectUrl != null -> agentApps?.let { apps ->
                 val waiting = connected == null && livePairings.isEmpty()
                 if (apps.isNotEmpty()) {
-                    AgentAppsSection(apps, connectUrl, added = added, waiting = waiting, onAdded = { added = it })
+                    AgentAppsSection(apps, connectUrl, added = added, waiting = waiting, onAdded = {
+                        added = it
+                        main.expectAgent(it.label)
+                    })
                 }
                 // Agents whose app is here are above; with none, the most used one is picked to begin with.
                 val others = AgentClient.entries.filter { client -> apps.none { it.client == client } }
                 val client = picked?.takeIf { it in others } ?: others.first().takeIf { apps.isEmpty() }
-                AgentPicker(others, client, title = if (apps.isEmpty()) "Your agent" else "Another agent", onSelect = { picked = it })
+                AgentPicker(others, client, title = if (apps.isEmpty()) "Your agent" else "Another agent", onSelect = {
+                    picked = it
+                    // "Other" names no agent.
+                    if (it != AgentClient.OTHER) main.expectAgent(it.label)
+                })
                 if (client != null) {
                     val guide = remember(client, connectUrl) { ClientInstructions.guide(client, connectUrl) }
                     GuideCard(guide, connectUrl, waiting = waiting)

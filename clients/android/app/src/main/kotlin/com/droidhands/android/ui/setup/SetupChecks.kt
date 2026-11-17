@@ -134,7 +134,7 @@ internal object SetupChecks {
             description = "Lets agents you authorized read the screen and tap, type and scroll in any app, like pressing " +
                 "Send in WhatsApp. It also lets DroidHands open apps from the background.",
             unlocks = listOf(Scopes.SCREEN_READ, Scopes.SCREEN_CONTROL).joinToString(" · ") { SetupLogic.shortLabel(it) } +
-                " · Automatic WhatsApp Send · Opening apps",
+                " · Opening apps",
             essential = true,
             status = status,
         )

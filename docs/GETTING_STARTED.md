@@ -78,12 +78,12 @@ pick your agent under **Another agent**:
 | Agent | What to do |
 |---|---|
 | Claude (claude.ai, Desktop, mobile) | Tap **Add to Claude**. Claude opens with DroidHands filled in: tap *Add*, then *Connect*. |
-| ChatGPT | Tap **Copy URL and open ChatGPT**, turn on *Developer mode* under *Advanced*, then *Create*, paste, choose OAuth. |
+| ChatGPT (chatgpt.com) | Tap **Copy URL and open ChatGPT** (stay in the browser), then *Add* › *Add custom MCP server*: name it DroidHands, paste, keep OAuth, tick *I understand*, *Create as a plugin*. |
 | Grok (grok.com, Grok apps; paid plans) | Tap **Copy URL and open Grok**, then *New Connector* › *Custom*, paste, *Connect*. |
 | Claude Code | Copy (or **Share** to your computer) `claude mcp add --transport http phone <URL>`, then `/mcp` › *Authenticate*. |
 | Codex | `codex mcp add phone --url <URL>`. Sign-in opens in the browser (or `codex mcp login phone`). |
 | Gemini CLI | `gemini mcp add --transport http -s user phone <URL>`, then `/mcp auth phone`. |
-| Muse (Meta), Grok Bot, Instinct, other chat agents | **Send to your agent**: *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP server, OAuth sign-in) and connect to it. If you can't add connectors, open this link for instructions."* |
+| Muse (Meta), Grok Bot, Instinct, other chat agents | **Send to your agent**: *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. No connector settings? Open that link: it shows how to sign in yourself."* Muse: tap *Connect* on its card, type `droidhands` as the Client ID, *Add*. Grok Bot: tap *Authorize* on its card. |
 | Any other MCP client | Add a Streamable-HTTP server with your connection URL (OAuth sign-in). |
 
 Setting up on a computer? Share the connection URL to it and open it there: the page has the same

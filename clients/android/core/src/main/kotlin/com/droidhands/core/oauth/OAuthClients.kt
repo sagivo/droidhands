@@ -120,6 +120,19 @@ class OAuthClients(key: ByteArray) {
         return RegisteredClient(sanitizeName(n), uris, t)
     }
 
+    /**
+     * The registration [PUBLIC_CLIENT_ID] stands for in an authorization request that uses [redirectUri]
+     * (docs/PROTOCOL.md §5.2): exactly that redirect URI, named after its host. Null when the request
+     * names none or an unacceptable one.
+     */
+    fun publicClient(redirectUri: String?): RegisteredClient? {
+        if (redirectUri == null || RedirectUris.problem(redirectUri) != null) return null
+        return RegisteredClient(sanitizeName(RedirectUris.displayHost(redirectUri)), listOf(redirectUri), 0)
+    }
+
+    /** True for [PUBLIC_CLIENT_ID] or a client_id this key issued. */
+    fun isKnown(clientId: String): Boolean = clientId == PUBLIC_CLIENT_ID || decode(clientId) != null
+
     private fun mac(payload: String): ByteArray =
         Mac.getInstance("HmacSHA256").run {
             init(SecretKeySpec(key, "HmacSHA256"))
@@ -127,6 +140,12 @@ class OAuthClients(key: ByteArray) {
         }
 
     companion object {
+        /**
+         * For MCP clients that need a client ID typed in and don't register themselves; no weaker than
+         * dynamic registration, where anyone may register any acceptable redirect URI. As on the relay.
+         */
+        const val PUBLIC_CLIENT_ID = "droidhands"
+
         /** Longest client name kept (in code points); longer names are truncated. */
         const val MAX_CLIENT_NAME_LENGTH = 60
 

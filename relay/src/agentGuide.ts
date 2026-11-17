@@ -73,7 +73,8 @@ browser opened) shows the same code.
 ### Option A: your app supports remote MCP servers with OAuth
 
 Add ${mcp} as a remote MCP server (Streamable HTTP). Sign-in is standard MCP authorization (OAuth 2.1 with dynamic
-client registration and PKCE); the person approves on their phone. Nothing else to do.
+client registration and PKCE); the person approves on their phone. If the app asks for a client ID, use
+\`droidhands\` and leave the client secret empty. Nothing else to do.
 
 ### Option B: sign in yourself (no browser needed)
 
@@ -114,6 +115,10 @@ POST one JSON-RPC 2.0 message per request to ${mcp} with these headers:
     Authorization: Bearer <access token>
     Content-Type: application/json
     Accept: application/json, text/event-stream
+    User-Agent: <your app's name>
+
+Send a User-Agent: some default ones (such as Python's urllib) are refused with HTTP 403 "error code: 1010"
+before the request reaches the phone.
 
 The server is stateless: there is no session to set up. Start with initialize: its result's "instructions" explain
 how to drive the phone and exactly what this person allowed you to do. Then tools/list and tools/call:

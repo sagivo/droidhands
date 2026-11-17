@@ -3,7 +3,7 @@ import { admit, clientInfo, publicPathPrefix, relayBase, type ClientInfo, type H
 import { allowMethods, sendJson } from '../httpUtil.js';
 import { headerValue } from '../net.js';
 import { sendOfflinePage, sendPairingError, sendWaitingPage, type WaitingPageInput } from '../pages/pairingPages.js';
-import { decodeClientId, type RegisteredClient } from './clientRegistration.js';
+import { decodeClientId, PUBLIC_CLIENT_ID, publicClient, type RegisteredClient } from './clientRegistration.js';
 import { deviceIdFromResource } from './metadata.js';
 import type { AuthorizationRequest, CreateFailure, PairingView } from './pairingStore.js';
 import { CODE_CHALLENGE_REGEX } from './pkce.js';
@@ -89,7 +89,15 @@ export function checkAuthorizeRequest(q: URLSearchParams, relaySecret: Buffer): 
   if (repeated !== undefined) return fail(`The request repeats the "${repeated}" parameter.`, RECONNECT_HINT);
 
   const clientId = q.get('client_id') ?? '';
-  const registered = decodeClientId(clientId, relaySecret);
+  const isPublic = clientId === PUBLIC_CLIENT_ID;
+  const registered = isPublic ? publicClient(q.get('redirect_uri')) : decodeClientId(clientId, relaySecret);
+  if (registered === null && isPublic) {
+    return fail(
+      `Your AI app uses the client ID "${PUBLIC_CLIENT_ID}" but did not say where to return to (or named an address that isn't allowed).`,
+      'Leave the client ID empty if your AI app registers itself, or update the app.',
+      'authorize: public client without a valid redirect_uri',
+    );
+  }
   if (registered === null) {
     return fail(
       "Your AI app's registration is not valid for this relay (it may have been made before the relay's secret changed).",

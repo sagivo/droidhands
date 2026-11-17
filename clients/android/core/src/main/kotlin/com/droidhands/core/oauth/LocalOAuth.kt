@@ -283,7 +283,14 @@ class LocalOAuth(
             return page(400, "The request repeats the \"$it\" parameter.", RECONNECT_HINT)
         }
         val clientId = q.one("client_id") ?: ""
-        val client = clients.decode(clientId)
+        if (clientId == OAuthClients.PUBLIC_CLIENT_ID && clients.publicClient(q.one("redirect_uri")) == null) {
+            return page(
+                400,
+                "Your AI app uses the client ID \"${OAuthClients.PUBLIC_CLIENT_ID}\" but did not say where to return to (or named an address that isn't allowed).",
+                "Leave the client ID empty if your AI app registers itself, or update the app.",
+            )
+        }
+        val client = (if (clientId == OAuthClients.PUBLIC_CLIENT_ID) clients.publicClient(q.one("redirect_uri")) else clients.decode(clientId))
             ?: return page(
                 400,
                 "Your AI app's registration is not valid for this phone (it may have been made before DroidHands was reset).",
@@ -504,7 +511,7 @@ class LocalOAuth(
         if (clientId == null || code == null || verifier == null) {
             return tokenError(400, "invalid_request", "client_id, code and code_verifier are required")
         }
-        if (clients.decode(clientId) == null) return authFailure(address, "invalid_client", "unknown client_id; register again")
+        if (!clients.isKnown(clientId)) return authFailure(address, "invalid_client", "unknown client_id; register again")
         val grant = takeCode(code) ?: return authFailure(address, "invalid_grant", INVALID_CODE)
 
         // From here on the code is consumed: any mismatch abandons the pairing so the phone deletes the token.

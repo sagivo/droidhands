@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { base64UrlDecodeStrict } from '../encoding.js';
 import { sanitizeDisplayText } from '../text.js';
-import { redirectUriProblem } from './redirectUris.js';
+import { redirectHost, redirectUriProblem } from './redirectUris.js';
 
 /**
  * RFC 7591 dynamic registration for public clients, without server-side state
@@ -25,6 +25,28 @@ const MAX_CLIENT_ID_LENGTH = 4096;
 
 /** Name used when a client registers without `client_name`. */
 export const DEFAULT_CLIENT_NAME = 'Unnamed app';
+
+/**
+ * The public client id (docs/PROTOCOL.md §5.2): for MCP clients that need a client ID typed in and
+ * don't register themselves. It stands for "a client registered with exactly the redirect URI this
+ * request uses", so it is no weaker than dynamic registration, where anyone may register any
+ * acceptable redirect URI. The phone shows the redirect URI's host as the name.
+ */
+export const PUBLIC_CLIENT_ID = 'droidhands';
+
+/**
+ * The registration [PUBLIC_CLIENT_ID] stands for in an authorization request that uses
+ * [redirectUri], or null when the request names none or names an unacceptable one. Pure.
+ */
+export function publicClient(redirectUri: string | null): RegisteredClient | null {
+  if (redirectUri === null || redirectUriProblem(redirectUri) !== null) return null;
+  return { clientName: sanitizeClientName(redirectHost(redirectUri)), redirectUris: [redirectUri], issuedAt: 0 };
+}
+
+/** True when [clientId] is [PUBLIC_CLIENT_ID] or a client_id this relay (with [key]) issued. */
+export function isKnownClientId(clientId: string, key: Buffer): boolean {
+  return clientId === PUBLIC_CLIENT_ID || decodeClientId(clientId, key) !== null;
+}
 
 /** A verified registration, as decoded from a client_id. */
 export interface RegisteredClient {

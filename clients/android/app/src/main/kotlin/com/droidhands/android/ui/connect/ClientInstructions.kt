@@ -54,8 +54,8 @@ object ClientInstructions {
     /** Name of the connector in Claude and ChatGPT, where people see it next to other connectors. */
     const val CONNECTOR_NAME = "DroidHands"
 
-    /** ChatGPT's connector settings. */
-    const val CHATGPT_CONNECTORS = "https://chatgpt.com/#settings/Connectors"
+    /** ChatGPT's Plugins page, where custom MCP servers are added (formerly Connectors, behind Developer mode). */
+    const val CHATGPT_CONNECTORS = "https://chatgpt.com/plugins"
 
     /** Grok's connector settings (custom connectors need a paid plan). */
     const val GROK_CONNECTORS = "https://grok.com/connectors"
@@ -69,12 +69,12 @@ object ClientInstructions {
         )
         AgentClient.CHATGPT -> ClientGuide(
             client = client,
-            appliesTo = "ChatGPT on the web, with Developer mode",
-            // The ChatGPT app has no Developer mode: this is for chatgpt.com.
+            appliesTo = "ChatGPT on the web",
+            // Custom MCP servers are added on chatgpt.com only, not in the ChatGPT app.
             open = OpenLink("Copy URL and open ChatGPT", CHATGPT_CONNECTORS, copyUrlFirst = true, inBrowser = true),
             steps = listOf(
-                "Under Advanced, turn on Developer mode.",
-                "Tap Create, paste the URL, choose OAuth, then Create.",
+                "Stay in the browser if it offers the ChatGPT app. Tap Add, then Add custom MCP server.",
+                "Name it $CONNECTOR_NAME, paste the URL, keep OAuth, tick I understand, then Create as a plugin.",
             ),
         )
         AgentClient.GROK -> ClientGuide(
@@ -87,13 +87,19 @@ object ClientInstructions {
             client = client,
             appliesTo = "Meta Muse, in chat",
             message = agentMessage(url),
-            steps = listOf("Send the message to Muse. It adds DroidHands and shows you a 4-letter code."),
+            steps = listOf(
+                "Send the message to Muse, then tap Connect on the card it shows.",
+                "If Muse asks for a Client ID, type droidhands. Tap Add.",
+            ),
         )
         AgentClient.GROK_BOT -> ClientGuide(
             client = client,
             appliesTo = "Grok Bot, on your phone or computer",
             message = agentMessage(url),
-            steps = listOf("Send the message to your Bot, then tap Connect on the card it shows. A 4-letter code appears."),
+            steps = listOf(
+                "Send the message to your Bot, then tap Authorize on the card it shows.",
+                "No card? In Grok Bot, open Connect apps › Your plugins and tap Authorize next to droidhands.",
+            ),
         )
         AgentClient.INSTINCT -> ClientGuide(
             client = client,
@@ -144,8 +150,9 @@ object ClientInstructions {
      * in like any connector; the others open it, which answers agents with sign-in instructions.
      */
     fun agentMessage(url: String): String =
-        "Connect to my phone with DroidHands: add $url as a custom connector (remote MCP server, OAuth sign-in) and " +
-            "connect to it. If you can't add connectors, open this link for instructions."
+        "Connect to my phone with DroidHands: add $url as a custom connector (remote MCP server, OAuth sign-in; " +
+            "if it needs a client ID, use droidhands with no secret) and connect to it. No connector settings? Open " +
+            "that link: it shows how to sign in yourself."
 
     /**
      * Text for the share sheet: one line plus the URL. It works sent to a computer (open it for setup buttons,

@@ -5,7 +5,7 @@ import { admit, clientInfo, type ClientInfo, type HttpDeps } from '../httpDeps.j
 import { applyOpenCors, sendJson } from '../httpUtil.js';
 import { deviceTag } from '../logger.js';
 import { headerValue } from '../net.js';
-import { decodeClientId } from './clientRegistration.js';
+import { isKnownClientId } from './clientRegistration.js';
 import { DEVICE_CODE_GRANT, bodyParams, checkDeviceTokenRequest, deviceTokenError } from './deviceFlow.js';
 import { OAUTH_SCOPE, deviceIdFromResource } from './metadata.js';
 import type { CodeGrant } from './pairingStore.js';
@@ -67,7 +67,7 @@ export function checkTokenRequest(
   if (clientId === null || code === null || verifier === null) {
     return fail('invalid_request', 'client_id, code and code_verifier are required');
   }
-  if (decodeClientId(clientId, relaySecret) === null) {
+  if (!isKnownClientId(clientId, relaySecret)) {
     return fail('invalid_client', 'unknown client_id; register again', true);
   }
   return { ok: true, clientId, code, verifier };

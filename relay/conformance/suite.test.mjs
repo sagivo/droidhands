@@ -493,6 +493,23 @@ test('pairing: approve, exchange with PKCE, pair_complete; the code is single-us
   assert.equal(JSON.parse(mcp.body).auth, `Bearer ${approval.accessToken}`);
 });
 
+test('pairing: the public client id "droidhands" needs no registration and is bound to its redirect_uri', async (t) => {
+  const d = await device(t);
+  const pkce = newPkce();
+  const page = await openAuthorize({ clientId: 'droidhands', pkce, deviceId: d.deviceId, state: 'st-pub' });
+  const approval = await approveNext(d);
+  assert.equal(approval.request.clientName, 'localhost:33418');
+  const status = await pollUntilDecided(page.pollUrl);
+  const code = redirectParams(status.redirect).get('code');
+  const res = await exchange({ code, client_id: 'droidhands', code_verifier: pkce.verifier });
+  assert.equal(res.status, 200, res.body);
+  assert.equal(JSON.parse(res.body).access_token, approval.accessToken);
+
+  const missing = await http(authorizeUrl({ clientId: 'droidhands', pkce: newPkce(), deviceId: d.deviceId, redirectUri: null }));
+  assert.equal(missing.status, 400);
+  assert.equal(missing.headers.location, undefined);
+});
+
 test('pairing: deny redirects with access_denied, state and iss', async (t) => {
   const d = await device(t);
   const clientId = await registerClient();

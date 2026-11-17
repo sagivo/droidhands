@@ -307,6 +307,13 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
   `mailto:`, `tel:`, …). Unsupported `token_endpoint_auth_method`/`grant_types` values are replaced in the 201
   response (RFC 7591 §3.2.1). `client_id` is **stateless**: `base64url(json{n:client_name,r:redirect_uris,t:issuedAt}) + "." + base64url(HMAC-SHA256(relaySecret, payload))`. Answers `201` with `client_id`, `client_name`, `redirect_uris`, `token_endpoint_auth_method:"none"`, `grant_types`, `response_types`, `client_id_issued_at`. |
 
+**Public client id.** Some MCP clients (Meta Muse) ask the person to type a client ID and never register
+themselves. For them `client_id=droidhands` (no secret) works without registration: it stands for a client
+registered with exactly the `redirect_uri` its authorization request names, so `redirect_uri` is required
+there and the token request must repeat it. Its name on the phone is the redirect URI's display host. This is
+no weaker than dynamic registration, where anyone may register any acceptable redirect URI. The local server
+(§4.1) accepts it too.
+
 `relaySecret` comes from `RELAY_SECRET`, or is generated once and persisted to `{DATA_DIR}/relay-secret`
 (the Cloudflare relay has no disk and refuses to serve without the `RELAY_SECRET` secret).
 Discovery, registration and token endpoints send `Access-Control-Allow-Origin: *` (no
@@ -316,7 +323,7 @@ credentials) so browser-based clients work.
 
 `GET /oauth/authorize?response_type=code&client_id&redirect_uri&code_challenge&code_challenge_method=S256&state&resource[&scope]`
 
-1. The relay validates `client_id` (HMAC), checks that `redirect_uri` is one of the registered
+1. The relay validates `client_id` (HMAC, or the public client id of §5.2), checks that `redirect_uri` is one of the registered
    URIs, and requires PKCE `S256`. Matching is exact, except that loopback URIs match on any port
    (RFC 8252 §7.3), and loopback registrations may omit the port. An unsupported `response_type` also gets
    an HTML error page, never a redirect. On any of these errors it renders an HTML error

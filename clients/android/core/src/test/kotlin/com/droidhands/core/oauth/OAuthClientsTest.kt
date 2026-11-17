@@ -104,4 +104,14 @@ class OAuthClientsTest {
         assertEquals("cursor", RedirectUris.displayHost("cursor://anysphere.cursor-mcp/oauth"))
         assertNotNull(RedirectUris.kind("com.example.app:/cb"))
     }
+
+    @Test
+    fun publicClientIdStandsForTheRedirectUriItIsUsedWith() {
+        val muse = clients.publicClient("https://agent.meta.ai/api/hatch/oauth/callback")
+        assertEquals(RegisteredClient("agent.meta.ai", listOf("https://agent.meta.ai/api/hatch/oauth/callback"), 0), muse)
+        assertNull(clients.publicClient(null))
+        assertNull(clients.publicClient("javascript:alert(1)"))
+        assertTrue(clients.isKnown(OAuthClients.PUBLIC_CLIENT_ID))
+        assertFalse(clients.isKnown("droidhands.x"))
+    }
 }

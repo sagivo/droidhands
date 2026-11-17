@@ -34,15 +34,20 @@ class ConnectLogicTest {
     fun chatAgentsGetAMessageToSendAndCompareTheAgentsCode() {
         val message = ClientInstructions.agentMessage(url)
         // Agents that add connectors from chat add the URL; the others open it for sign-in instructions.
-        assertTrue(message.contains("add $url as a custom connector") && message.contains("open this link for instructions"))
+        assertTrue(message.contains("add $url as a custom connector") && message.contains("it shows how to sign in yourself"))
+        // Clients that need a client ID typed in (Muse) get the relay's public one.
+        assertTrue(message.contains("client ID, use droidhands"))
         assertTrue("one line", '\n' !in message)
         listOf(AgentClient.MUSE to "Muse", AgentClient.GROK_BOT to "Bot", AgentClient.INSTINCT to "Instinct").forEach { (client, name) ->
             val guide = ClientInstructions.guide(client, url)
             assertEquals(message, guide.message)
             assertTrue(guide.viaChat)
-            assertTrue(guide.steps.single().contains(name) && guide.steps.single().contains("4-letter code"))
+            assertTrue(guide.steps.first().contains(name))
             assertTrue(guide.steps.none { it.contains("browser") })
         }
+        assertTrue(ClientInstructions.guide(AgentClient.INSTINCT, url).steps.single().contains("4-letter code"))
+        assertTrue(ClientInstructions.guide(AgentClient.MUSE, url).steps.any { it.contains("Client ID, type droidhands") })
+        assertTrue(ClientInstructions.guide(AgentClient.GROK_BOT, url).steps.any { it.contains("Authorize") })
         assertTrue(ClientInstructions.guide(AgentClient.OTHER, url).note.orEmpty().contains("chat"))
         assertFalse(ClientInstructions.guide(AgentClient.CLAUDE, url).viaChat)
     }
@@ -76,9 +81,10 @@ class ConnectLogicTest {
     fun chatGptCopiesTheUrlBeforeOpeningItsSettings() {
         val guide = ClientInstructions.guide(AgentClient.CHATGPT, url)
         assertTrue(guide.open!!.copyUrlFirst)
-        // Developer mode is on chatgpt.com only, not in the ChatGPT app.
+        // Custom MCP servers are added on chatgpt.com only, not in the ChatGPT app.
         assertTrue(guide.open!!.inBrowser)
-        assertTrue(guide.steps.first().contains("Developer mode"))
+        assertEquals("https://chatgpt.com/plugins", guide.open!!.url)
+        assertTrue(guide.steps.first().contains("Add custom MCP server"))
         assertFalse(guide.onComputer)
     }
 

@@ -75,6 +75,8 @@ class PairingCoordinator(
     private val clock: () -> Long = System::currentTimeMillis,
     private val exchangeGraceMs: Long = EXCHANGE_GRACE_MS,
     private val log: (message: String, error: Throwable?) -> Unit = { _, _ -> },
+    /** The agent the user is adding in the app right now, if any ([ExpectedAgent]); names its request. */
+    private val expectedAgent: () -> String? = { null },
     onPendingChanged: (Boolean) -> Unit = {},
 ) : PairingHandler {
     private val registry = PendingPairings(onPendingChanged = onPendingChanged)
@@ -95,7 +97,7 @@ class PairingCoordinator(
     fun isApproving(id: String): Boolean = registry[id]?.isApproving == true
 
     override suspend fun onPairRequest(request: PairingRequest): PairingDecision {
-        val clean = PairingRules.sanitize(request)
+        val clean = PairingRules.labeled(PairingRules.sanitize(request), expectedAgent())
         PairingRules.rejection(clean, clock())?.let { return it }
         val entry = registry.register(clean) ?: return PairingDecision.Denied(PairingRules.BUSY)
         var answer: PairingDecision? = null

@@ -573,3 +573,39 @@ test('relay shutdown cancels pending prompts and abandons unexchanged tokens', a
   assert.deepEqual(await device.nextFrame('pair_cancel'), { type: 'pair_cancel', id: pending.id });
   assert.deepEqual(await device.nextFrame('pair_abandoned'), { type: 'pair_abandoned', id: pairingId, tokenId: approval.tokenId });
 });
+
+test('public client id "droidhands": no registration, named after the redirect host, bound to its redirect_uri', async (t) => {
+  const relay = await startRelay(t);
+  const device = await connectReady(relay);
+  const redirectUri = 'https://agent.example.com/oauth/callback';
+  const pkce = newPkce();
+  const page = await openAuthorize(relay, { clientId: 'droidhands', pkce, deviceId: device.identity.deviceId, redirectUri });
+  const approval = await approveNext(device);
+  assert.equal(approval.request.clientName, 'agent.example.com');
+  const status = await pollUntilDecided(page.pollUrl);
+  assert.ok((status.redirect as string).startsWith(`${redirectUri}?`));
+  const code = new URL(status.redirect as string).searchParams.get('code') as string;
+  // Another redirect_uri is refused; the right one gets the token.
+  const other = await postForm(`${relay.url}/oauth/token`, {
+    grant_type: 'authorization_code', code, client_id: 'droidhands', code_verifier: pkce.verifier, redirect_uri: 'https://evil.example/cb',
+  });
+  assert.equal(other.status, 400, other.body);
+  const pkce2 = newPkce();
+  const page2 = await openAuthorize(relay, { clientId: 'droidhands', pkce: pkce2, deviceId: device.identity.deviceId, redirectUri });
+  await approveNext(device);
+  const code2 = new URL((await pollUntilDecided(page2.pollUrl)).redirect as string).searchParams.get('code') as string;
+  const res = await postForm(`${relay.url}/oauth/token`, {
+    grant_type: 'authorization_code', code: code2, client_id: 'droidhands', code_verifier: pkce2.verifier, redirect_uri: redirectUri,
+  });
+  assert.equal(res.status, 200, res.body);
+});
+
+test('public client id without a redirect_uri, or with a forbidden one, gets an error page and no prompt', async (t) => {
+  const relay = await startRelay(t);
+  const device = await connectReady(relay);
+  for (const redirectUri of [null, 'javascript:alert(1)', 'http://evil.example/cb']) {
+    const res = await httpRequest(authorizeUrl(relay, { clientId: 'droidhands', pkce: newPkce(), deviceId: device.identity.deviceId, redirectUri }));
+    assert.equal(res.status, 400, String(redirectUri));
+    assert.match(res.body, /client ID &quot;droidhands&quot;|client ID "droidhands"/);
+  }
+});

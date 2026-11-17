@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { DEFAULT_CLIENT_NAME, decodeClientId, sanitizeClientName } from './clientRegistration.js';
+import { DEFAULT_CLIENT_NAME, decodeClientId, PUBLIC_CLIENT_ID, sanitizeClientName } from './clientRegistration.js';
 import { connectorUrl, deviceIdFromResource } from './metadata.js';
 import { DEVICE_FLOW_REDIRECT_URI, type AuthorizationRequest, type CreateFailure, type PairingView, type RedeemResult } from './pairingStore.js';
 import { PAIRING_ID_REGEX, createFailureError } from './authorizeRoutes.js';
@@ -96,7 +96,7 @@ function agentName(params: URLSearchParams, relaySecret: Buffer): string {
   if (registered !== null) return registered.clientName;
   const name = params.get('client_name');
   if (name !== null && sanitizeClientName(name) !== DEFAULT_CLIENT_NAME) return sanitizeClientName(name);
-  if (clientId !== null && NAME_LIKE_CLIENT_ID.test(clientId)) return sanitizeClientName(clientId);
+  if (clientId !== null && clientId !== PUBLIC_CLIENT_ID && NAME_LIKE_CLIENT_ID.test(clientId)) return sanitizeClientName(clientId);
   return 'AI agent';
 }
 

@@ -174,6 +174,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The user is adding [label] on the Connect page: its pairing request is shown under that name. */
+    fun expectAgent(label: String) = graph.expectedAgent.set(label)
+
     fun denyPairing(id: String) = io("Couldn't deny the connection request") { GraphAdapters.denyPairing(graph, id) }
 
     /** Re-applies settings, (re)starting the bridge service. */

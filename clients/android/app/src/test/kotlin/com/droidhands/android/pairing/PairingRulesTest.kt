@@ -3,6 +3,7 @@ package com.droidhands.android.pairing
 import com.droidhands.core.transport.PairingDecision
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class PairingRulesTest {
@@ -78,5 +79,21 @@ class PairingRulesTest {
         val clean = PairingRules.sanitize(pairingRequest(clientName = "A".repeat(100)))
         assertEquals(PairingRules.MAX_CLIENT_NAME, clean.clientName.length)
         assertEquals('…', clean.clientName.last())
+    }
+
+    @Test
+    fun requestIsShownAsTheAgentBeingAddedKeepingItsOwnName() {
+        val cursor = pairingRequest(clientName = "Cursor", redirectHost = "www.cursor.com")
+        val labeled = PairingRules.labeled(cursor, "Grok Bot")
+        assertEquals("Grok Bot", labeled.clientName)
+        assertEquals("Cursor", labeled.declaredName)
+        assertEquals("www.cursor.com", labeled.redirectHost)
+        // Nothing being added, or the name already says it: unchanged.
+        assertSame(cursor, PairingRules.labeled(cursor, null))
+        assertSame(cursor, PairingRules.labeled(cursor, "  "))
+        val claude = pairingRequest(clientName = "Claude Code")
+        assertSame(claude, PairingRules.labeled(claude, "claude"))
+        // The label is display text like any other.
+        assertEquals("Muse", PairingRules.labeled(pairingRequest(clientName = "agent.meta.ai"), "Mu\u202Ese").clientName.replace(" ", ""))
     }
 }

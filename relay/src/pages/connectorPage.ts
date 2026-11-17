@@ -90,6 +90,7 @@ export function connectorSetupPage(url: string, agentGuide: string): PageOptions
     body: html`<p class="eyebrow">DroidHands</p>
 <h1>Add your phone to your AI agent</h1>
 <p class="muted">Pick your agent below. Nothing works until you tap <strong>Allow</strong> on the phone, and you choose there what it may do.</p>
+<p class="muted"><strong>AI agent reading this?</strong> You don't need connector settings: if you can make HTTP requests, sign in yourself with the steps under "For AI agents" at the end of this page.</p>
 <div class="card">
 <h2>Claude</h2>
 <p class="muted">claude.ai, Claude Desktop and the Claude apps.</p>
@@ -105,7 +106,7 @@ ${commands}
 <div class="card">
 <h2>ChatGPT and other agents</h2>
 <div class="copyrow"><code class="cmd">${url}</code><button type="button" class="copy" data-copy="${url}">Copy</button></div>
-<p class="muted">Add it as a remote MCP server (Streamable HTTP) with OAuth sign-in. In ChatGPT: Settings › Connectors › Advanced › Developer mode, then Create.</p>
+<p class="muted">Add it as a remote MCP server (Streamable HTTP) with OAuth sign-in. In ChatGPT: Plugins › Add › Add custom MCP server. If your app asks for a client ID, use droidhands.</p>
 </div>
 <p class="muted">This link isn't a password: every agent still has to be allowed on the phone.</p>
 <details class="card"><summary>For AI agents: how to connect</summary><pre class="guide">${agentGuide}</pre></details>`,

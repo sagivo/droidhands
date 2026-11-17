@@ -16,7 +16,8 @@ await main('worker', async (settings) => {
   const dir = join(RELAY_DIR, '.wrangler', `conformance-${process.pid}`);
   mkdirSync(dir, { recursive: true });
   onCleanup(() => rmSync(dir, { recursive: true, force: true }));
-  const vars = { ...settings, APK_URL };
+  // wrangler.toml's PUBLIC_URL is production's; the suite reaches this relay on localhost.
+  const vars = { PUBLIC_URL: '', ...settings, APK_URL };
   const devVars = join(dir, '.dev.vars');
   writeFileSync(devVars, `${Object.entries(vars).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join('\n')}\n`, { mode: 0o600 });
 
@@ -30,6 +31,9 @@ await main('worker', async (settings) => {
       '127.0.0.1',
       '--port',
       String(port),
+      // With wrangler.toml's custom domain route, wrangler dev would otherwise present every request as that host.
+      '--local-upstream',
+      `127.0.0.1:${port}`,
       '--inspector-port',
       String(inspectorPort),
       '--env-file',

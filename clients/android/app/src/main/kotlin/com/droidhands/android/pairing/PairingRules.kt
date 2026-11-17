@@ -40,6 +40,17 @@ object PairingRules {
     )
 
     /**
+     * [request] (already [sanitize]d) shown as [expected], the agent the user is adding in the app right now,
+     * when its own name doesn't already say so: one-tap agents often register under another name (Grok Bot
+     * as "Cursor", a typed-in client ID as its website). Its own name stays visible as [PairingRequest.declaredName].
+     */
+    fun labeled(request: PairingRequest, expected: String?): PairingRequest {
+        val label = expected?.let { DisplayText.clean(it, MAX_CLIENT_NAME) }?.takeIf { it.isNotEmpty() } ?: return request
+        if (request.clientName.contains(label, ignoreCase = true)) return request
+        return request.copy(clientName = label, declaredName = request.clientName)
+    }
+
+    /**
      * Null if [request] (already [sanitize]d) may be shown at [now]; otherwise the immediate answer:
      * "denied" for a malformed id or code (the user could not verify it), "timeout" if already expired.
      */

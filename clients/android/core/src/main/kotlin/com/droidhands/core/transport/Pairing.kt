@@ -32,6 +32,11 @@ data class PairingRequest(
      * browser flow (relay or local server).
      */
     val viaAgent: Boolean = false,
+    /**
+     * The client's own name when the phone shows another one as [clientName]: the agent the user was
+     * adding in the app when the request arrived (Grok Bot registers as "Cursor"). Null otherwise.
+     */
+    val declaredName: String? = null,
 )
 
 sealed interface PairingDecision {

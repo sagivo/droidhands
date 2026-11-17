@@ -21,6 +21,8 @@ export default defineConfig({
           RATE_LIMIT_REQUESTS_PER_MIN: '100000',
           RATE_LIMIT_AUTH_FAILURES_PER_MIN: '100000',
           LOG_LEVEL: 'silent',
+          // wrangler.toml's PUBLIC_URL is production's; the tests address the relay as BASE.
+          PUBLIC_URL: '',
         },
       },
     }),
