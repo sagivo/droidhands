@@ -1,47 +1,199 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter var", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+/* Self-hosted so the site keeps making zero third-party requests. */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/fonts/bricolage-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/inter-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/jetbrains-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
-  --color-brand-50: #eef0fb;
-  --color-brand-100: #dde1f6;
-  --color-brand-200: #bcc4ee;
-  --color-brand-300: #949fe2;
-  --color-brand-400: #6c7bd5;
-  --color-brand-500: #4f5fc6;
-  --color-brand-600: #3f51b5;
-  --color-brand-700: #34439a;
-  --color-brand-800: #2b377c;
-  --color-brand-900: #232d63;
-  --color-brand-950: #151b3d;
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Bricolage Grotesque", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Page surfaces: deep ink navy, never pure black. */
+  --color-ink-950: #070a14;
+  --color-ink-900: #0b101f;
+  --color-ink-850: #0f1628;
+  --color-ink-800: #141c33;
+  --color-ink-700: #1d2745;
+  --color-ink-600: #2a3658;
+
+  /* Brand: electric indigo — the Material indigo of the old site, modernized. */
+  --color-brand-50: #eff1ff;
+  --color-brand-100: #e2e5ff;
+  --color-brand-200: #cbceff;
+  --color-brand-300: #a8aaff;
+  --color-brand-400: #8684ff;
+  --color-brand-500: #6f66f7;
+  --color-brand-600: #5f4ce4;
+  --color-brand-700: #513cc6;
+  --color-brand-800: #4334a1;
+  --color-brand-900: #383080;
+  --color-brand-950: #201d52;
+
+  /* The agent's own color, used semantically wherever an agent acts. */
+  --color-agent-300: #eda98f;
+  --color-agent-500: #d97757;
+  --color-agent-700: #b35a3c;
+
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-float-slow: float 7s ease-in-out infinite;
 }
 
 @layer base {
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   ::selection {
-    background: var(--color-brand-200);
+    background: rgb(111 102 247 / 0.45);
+    color: #fff;
   }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-400);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@utility text-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Eyebrow labels in mono — the protocol's own vernacular. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Fine film grain over the whole page for atmosphere. */
+@utility grain {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+}
+
+/* ---- Scroll reveals ---- */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.8s var(--ease-out-soft),
+    transform 0.8s var(--ease-out-soft);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+[data-reveal="left"] { transform: translateX(-28px); }
+[data-reveal="right"] { transform: translateX(28px); }
+[data-reveal="scale"] { transform: scale(0.96); }
+[data-reveal].revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/* ---- Spotlight cards: a soft glow follows the cursor ---- */
+.spotlight {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    280px circle at var(--mx, 50%) var(--my, 50%),
+    rgb(134 132 255 / 0.14),
+    transparent 65%
+  );
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+.spotlight:hover::before {
+  opacity: 1;
+}
+
+/* ---- Shared keyframes ---- */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgb(111 102 247 / 0.5); }
+  100% { box-shadow: 0 0 0 16px rgb(111 102 247 / 0); }
+}
+
+@keyframes glow-drift {
+  0%, 100% { opacity: 0.55; transform: translate(0, 0) scale(1); }
+  50% { opacity: 0.85; transform: translate(2rem, -1.5rem) scale(1.08); }
+}
+
+@keyframes packet {
+  0% { offset-distance: 0%; opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .float-slow {
-    animation: float 6s ease-in-out infinite;
+    animation: float 7s ease-in-out infinite;
   }
   .pulse-ring {
     animation: pulse-ring 2.4s ease-out infinite;
   }
+  .glow-drift {
+    animation: glow-drift 14s ease-in-out infinite;
+  }
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-@keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgb(63 81 181 / 0.45); }
-  100% { box-shadow: 0 0 0 14px rgb(63 81 181 / 0); }
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
