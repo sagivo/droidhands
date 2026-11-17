@@ -16,6 +16,11 @@ class SystemOverlaysTest {
     private val app = appWindow(group(label("Inbox", pkg = "com.mail"), pkg = "com.mail"), pkg = "com.mail")
 
     @Test
+    fun `a lone status bar is not a panel when the app window behind it wasn't captured`() {
+        assertNull(SystemOverlays.detect(listOf(statusBar), locked = false, display = SCREEN))
+    }
+
+    @Test
     fun `ordinary app with bars is not an overlay`() {
         assertNull(SystemOverlays.detect(listOf(app, statusBar, navBar), locked = false))
     }

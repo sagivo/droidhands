@@ -122,7 +122,7 @@ internal suspend fun requireShareable(context: Context, service: BridgeAccessibi
             ?.let { access.refuse(it, "Can't take a screenshot.") }
         access.visibility.firstBlocked(state.windows)
             ?.let { access.refuse(it, "Can't take a screenshot: a window or notification of a blocked app is visible.") }
-        SystemOverlays.detect(state.windows, state.locked, state.activity)
+        SystemOverlays.detect(state.windows, state.locked, state.activity, display = service.screenBounds())
             ?.let { throw ToolException(ScreenAccess.overlayRefusal(it)) }
     }
 }

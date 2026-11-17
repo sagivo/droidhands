@@ -28,12 +28,14 @@ object SystemOverlays {
     /**
      * The overlay showing on [windows] (all windows, top first, with roots), or null. [locked] is the keyguard
      * state; [activity] the foreground activity class when known (recents is an activity on some launchers).
+     * [display] is the full display: the windows alone may not cover it (an app window whose content Android
+     * withholds isn't captured, which would make the status bar look like a full-screen panel).
      */
-    fun detect(windows: List<WindowSnapshot>, locked: Boolean, activity: String? = null): SystemOverlay? {
+    fun detect(windows: List<WindowSnapshot>, locked: Boolean, activity: String? = null, display: Bounds = Bounds.EMPTY): SystemOverlay? {
         if (locked) return SystemOverlay.LOCK_SCREEN
         if (activity != null && activity.substringAfterLast('.').contains("Recents")) return SystemOverlay.RECENTS
         if (windows.any(::isRecents)) return SystemOverlay.RECENTS
-        val screen = windows.fold(Bounds.EMPTY) { acc, w -> acc.union(w.bounds) }
+        val screen = windows.fold(display) { acc, w -> acc.union(w.bounds) }
         val panel = windows.firstOrNull { w ->
             w.packageName == ForegroundTracker.SYSTEM_UI && !w.bounds.isEmpty && !WindowSelection.isSystemBar(WindowKind.SYSTEM, w.bounds, screen)
         } ?: return null
