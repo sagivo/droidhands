@@ -7,6 +7,12 @@ compatibility_date = "2026-11-01"
 # node:crypto and Buffer for the modules shared with the Node relay.
 compatibility_flags = ["nodejs_compat"]
 
+# A custom domain instead of *.workers.dev (the zone must be on your Cloudflare account).
+# workers.dev stays on for phones whose APK was built with the workers.dev URL; with PUBLIC_URL
+# set, every URL the relay hands out (connect URLs, OAuth metadata, setup link) uses the domain.
+routes = [{ pattern = "connect.droidhands.com", custom_domain = true }]
+workers_dev = true
+
 # One Durable Object per phone. SQLite-backed, so it runs on the Workers Free plan.
 [[durable_objects.bindings]]
 name = "DEVICES"
@@ -19,7 +25,7 @@ new_sqlite_classes = ["DeviceObject"]
 [vars]
 # Public base URL (https://relay.example.com). Leave empty to use the address each request was
 # sent to (e.g. https://droidhands-relay.<account>.workers.dev or your custom domain).
-PUBLIC_URL = ""
+PUBLIC_URL = "https://connect.droidhands.com"
 # Origins (comma-separated, or *) of browser-based MCP clients allowed to call the MCP endpoints.
 ALLOWED_ORIGINS = ""
 # Where the setup page's "Install DroidHands" button points, e.g. the APK of a GitHub release.
@@ -43,6 +49,3 @@ enabled = true
 # With ALLOW_TOKEN_IN_URL=true the agent token is in the URL *path* (/mcp/<token>), which this does
 # not redact: leave that setting off here, or set `logs = { invocation_logs = false }`.
 redact_query_string = true
-
-# A custom domain instead of *.workers.dev (the zone must be on your Cloudflare account):
-# routes = [{ pattern = "relay.example.com", custom_domain = true }]
