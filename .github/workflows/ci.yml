@@ -55,7 +55,7 @@ jobs:
   relay:
     name: Relay
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: relay
@@ -69,5 +69,14 @@ jobs:
           cache-dependency-path: relay/package-lock.json
 
       - run: npm ci --no-audit --no-fund
-      - run: npm test
+      - name: Node relay tests
+        run: npm test
       - run: npm run build
+      - name: Worker type-check and tests (workerd)
+        run: npm run test:worker
+      - name: Conformance suite against the Node relay
+        run: npm run conformance:node
+      - name: Conformance suite against the Worker (wrangler dev --local)
+        run: npm run conformance:worker
+        env:
+          WRANGLER_SEND_METRICS: 'false'

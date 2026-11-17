@@ -138,13 +138,19 @@ Release builds bake in a default relay URL from the GitHub repository variable
 Variables**, or `gh variable set DROIDHANDS_RELAY_URL --body https://relay.example.com`), then cut a
 release. Phones that install that APK connect to your relay without any setup.
 
-### Deploy from GitHub Actions
+### Deploy on every push (Workers Builds)
 
-[`.github/workflows/relay-cloudflare.yml`](../.github/workflows/relay-cloudflare.yml) runs the relay
-tests and both conformance runs on every push to `main` that touches `relay/`, then deploys with
-`wrangler deploy`, but only if the repository has the secret `CLOUDFLARE_API_TOKEN` (an API token
-from the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`. Without them the deploy job
-is skipped. Set `RELAY_SECRET` once with `wrangler secret put` as above; deploys keep it.
+The project's relay, `droidhands-relay`, is connected to this repository with Cloudflare's Git
+integration ([Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/)): every push to
+`main` that changes `relay/` makes Cloudflare build from `relay/` (`npm run typecheck:worker`) and run
+`npx wrangler deploy`. Builds and their logs are under **Workers & Pages › droidhands-relay ›
+Deployments**. GitHub Actions only tests ([`ci.yml`](../.github/workflows/ci.yml): Node relay, Worker
+and both conformance runs); it doesn't deploy.
+
+For your own fork: **Workers & Pages › your worker › Settings › Builds › Connect**, choose the
+repository, set the root directory to `/relay`, the deploy command to `npx wrangler deploy`, and a
+build watch path of `relay/*`. Set `RELAY_SECRET` once with `wrangler secret put` as above; deploys
+keep it.
 
 ## Costs and privacy
 
