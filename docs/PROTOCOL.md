@@ -194,7 +194,8 @@ Implemented on the device by `McpServer` (core). The relay is a transparent tunn
 * Body that is not valid JSON → `400` with JSON-RPC error `-32700` (Parse error), `id: null`.
 * Only notifications/responses (no requests) → `202`, empty body.
 * Otherwise → `200`, `content-type: application/json`, the JSON-RPC response (or array for batch).
-* Stateless: the server does not issue `Mcp-Session-Id`. `GET /mcp` → `405`; `DELETE /mcp` → `405`.
+* Stateless: the server does not issue `Mcp-Session-Id`. `GET /mcp` → `405`; `DELETE /mcp` → `405`
+  (on the relay's connector path, a `GET` without `Accept: text/event-stream` gets the setup page or the agent guide, §5.1, §5.7).
 * Supported `protocolVersion`s (newest first): `2025-11-25`, `2025-06-18`, `2025-03-26`,
   `2024-11-05`. `initialize` echoes the client's version if supported, otherwise the newest.
 * Methods: `initialize`, `ping`, `tools/list`, `tools/call`; `resources/list`,
@@ -286,19 +287,21 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
 * `welcome` gains `"connectUrl": "{relay}/d/<deviceId>/mcp"`. The app shows it as
   **"Your connection URL"**.
 * **Setup page.** A `GET` or `HEAD` whose `Accept` includes `text/html` but not `text/event-stream`,
-  without `Authorization`, is a person opening the URL in a browser. It gets `200` with an HTML page
+  without `Authorization`, is a person opening the URL in a browser (or a link fetcher that looks like
+  one). It gets `200` with an HTML page
   of one-click setup for common agents: claude.ai's documented install link
   (`https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=DroidHands&connectorUrl=<url>`),
   copyable commands for Claude Code, Codex and Gemini CLI, Cursor's `cursor://…/mcp/install` link, and the
-  URL itself. The page is the same for every device and never looks the device up, so it reveals
-  nothing (not even whether the phone is online). Every other `GET` stays `405`.
+  URL itself, and the agent guide (§5.7) folded away for agents. The page is the same for every device
+  and never looks the device up, so it reveals nothing (not even whether the phone is online). Other
+  `GET`s get the agent guide as text (§5.7), except `Accept: text/event-stream`, which stays `405`.
 
 ### 5.2 Discovery and registration (relay)
 
 | Endpoint | Behaviour |
 |---|---|
 | `GET /.well-known/oauth-protected-resource/d/<id>/mcp` | RFC 9728: `{"resource":"{relay}/d/<id>/mcp","authorization_servers":["{relay}"],"bearer_methods_supported":["header"],"resource_name":"DroidHands"}` |
-| `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414: `issuer` `{relay}`, `authorization_endpoint` `{relay}/oauth/authorize`, `token_endpoint` `{relay}/oauth/token`, `registration_endpoint` `{relay}/oauth/register`, `response_types_supported` `["code"]`, `grant_types_supported` `["authorization_code"]`, `code_challenge_methods_supported` `["S256"]`, `token_endpoint_auth_methods_supported` `["none"]`, `scopes_supported` `["phone"]` |
+| `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414: `issuer` `{relay}`, `authorization_endpoint` `{relay}/oauth/authorize`, `token_endpoint` `{relay}/oauth/token`, `registration_endpoint` `{relay}/oauth/register`, `device_authorization_endpoint` `{relay}/oauth/device_authorization` (§5.6), `response_types_supported` `["code"]`, `grant_types_supported` `["authorization_code", "urn:ietf:params:oauth:grant-type:device_code"]`, `code_challenge_methods_supported` `["S256"]`, `token_endpoint_auth_methods_supported` `["none"]`, `scopes_supported` `["phone"]` |
 | `POST /oauth/register` | RFC 7591 dynamic registration for **public clients**. `redirect_uris` must be `https://…` or loopback `http://localhost|127.0.0.1|[::1]:<port>/…`. Private-use schemes are allowed (`com.example.app:/cb`, `cursor://…`) except a denylist of schemes that
   execute, read local data or reach other handlers (`javascript:`, `data:`, `file:`, `blob:`, `intent:`, `content:`, `ws:`,
   `mailto:`, `tel:`, …). Unsupported `token_endpoint_auth_method`/`grant_types` values are replaced in the 201
@@ -418,6 +421,57 @@ also accepts the `droidhands://configure` link, its `intent://` form or a bare r
 the same "Connect to relay?" question, and anything else is refused. When an access key is set, the page draws its QR code
 through `POST /setup/qr` (`{"key"}` → SVG path; a wrong key gets 403 and counts as an auth failure),
 so the key never appears in a page served to someone who doesn't already have it.
+
+### 5.6 Agent sign-in (device flow)
+
+For agents that can make HTTP requests but cannot run a browser sign-in: assistants you chat or text
+with, such as Meta Muse or Instinct, which have no MCP connector settings. It is the OAuth 2.0 Device
+Authorization Grant (RFC 8628) on top of the pairing of §5.3: same prompt on the phone, same limits,
+and the phone still mints the token.
+
+1. `POST /oauth/device_authorization`, form-encoded or a JSON object, with `resource` (the
+   connection URL, required) and optionally `client_name` and `client_id`. A `client_id` registered
+   here (§5.2) names the agent by its registration; otherwise `client_name`, or a name-like
+   `client_id`, is shown on the phone (sanitized as in §5.2), else "AI agent". The relay creates a
+   pairing exactly as in §5.3 steps 2-5 and answers `200`:
+   ```json
+   { "device_code": "<pairing id>.<page token>", "user_code": "K7Q2",
+     "verification_uri": "{relay}/d/<id>/mcp", "expires_in": 180, "interval": 5,
+     "token_endpoint": "{relay}/oauth/token", "message": "Tell the user: …" }
+   ```
+   `user_code` is the display code; nothing is typed anywhere, the user compares it with the phone.
+   `verification_uri` is the connection URL, whose page (§5.7) tells a person to answer on the phone.
+   `token_endpoint` and `message` are extensions for agents that read the answer rather than
+   implement the RFC. Errors (RFC 6749 shape): `invalid_request` (missing or repeated parameter,
+   unreadable body), `invalid_target` (not a connection URL of this relay), `503
+   temporarily_unavailable` (phone offline, `Retry-After: 30`), `429 slow_down` (the limits of §5.3
+   step 4, or the per-IP request limit). Open CORS, like the other OAuth endpoints.
+2. The `pair_request` gains `"flow": "device"` and carries `"redirectHost": "agent sign-in"` (older
+   apps show that as the website). Apps that know `flow` say the agent signed in from its chat and ask
+   the user to compare the code the agent showed.
+3. The agent polls `POST /oauth/token` with `grant_type=urn:ietf:params:oauth:grant-type:device_code`
+   and `device_code` (form-encoded, or JSON for this grant only). Answers: `400
+   authorization_pending` while the phone has not answered; `400 access_denied` (denied, or nobody
+   answered); `400 expired_token` (the pairing expired, or the approval's code TTL of 120 s passed
+   without a poll; the token is then abandoned as in §5.3 step 9); `400 invalid_grant` for an unknown
+   or already redeemed device code (counts toward the auth-failure limit); and once approved, the
+   same `200` body as §5.4, after which the relay sends `pair_complete`. A device code is redeemed
+   once. There is no `slow_down` beyond the per-IP request limit.
+
+Internally the pairing records `client_id` `droidhands-agent-sign-in`, which is not a signed client
+id, so its authorization code can never be exchanged through the code grant of §5.4. The Cloudflare
+relay routes the device code to the device's Durable Object by the page token's deviceId prefix.
+
+### 5.7 Agent guide
+
+People paste their connection URL into agents that may simply open it. So `GET` (or `HEAD`) on
+`{relay}/d/<id>/mcp` **without** `Accept: text/event-stream` returns `200` with instructions for
+agents and people: what the URL is, how to add it as a remote MCP server, how to sign in with §5.6
+(exact `curl` commands with the URL filled in), and how to call the MCP endpoint with a bearer token.
+It is `text/markdown` when `Accept` includes `text/markdown`, otherwise `text/plain`, both UTF-8. It
+names no phone and reveals nothing beyond the URL itself. MCP clients are unaffected: they POST, and
+a `GET` with `Accept: text/event-stream` (the Streamable HTTP SSE stream) still gets `405`.
+`GET /llms.txt` serves the same guide without a phone, and `GET /` points at it.
 
 ## 6. Versioning
 

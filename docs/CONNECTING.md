@@ -25,7 +25,9 @@ from permissions to adding an agent. Tap **Connect an AI agent**, pick your agen
 fills everything in) and tap **Allow** on the phone
 ([GETTING_STARTED.md](GETTING_STARTED.md#3-connect-your-ai-agent)).
 
-It works with every agent, including cloud ones (claude.ai, ChatGPT), on Wi-Fi or mobile data, and
+It works with every agent, including cloud ones (claude.ai, ChatGPT, Grok) and agents you chat or text
+with that have no connector settings (Muse, Instinct): send them the URL and they sign in by themselves
+([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)). It works on Wi-Fi or mobile data, and
 behind any router: the phone connects out to the relay. The relay is a tunnel and can't do anything
 by itself, but it does see the requests and answers passing through. If that matters to you, use
 Tailscale or your own relay.

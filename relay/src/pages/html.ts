@@ -166,5 +166,7 @@ li{margin:.4rem 0}
 .cmd{flex:1;font-size:.85rem;overflow-x:auto;white-space:nowrap;word-break:normal}
 button.copy{flex:none;background:var(--accent);color:var(--accent-fg);border:0;border-radius:999px;padding:.4rem .9rem;font:600 .875rem system-ui,sans-serif;cursor:pointer}
 .card h2{margin-bottom:.25rem}
+summary{cursor:pointer;font-weight:600}
+.guide{white-space:pre-wrap;font-size:.8rem;overflow-x:auto}
 @media (max-width:600px){.desktop-only{display:none}}
 `;

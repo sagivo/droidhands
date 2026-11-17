@@ -22,20 +22,46 @@ data class PairingChoice(
 object PairingPresentation {
     const val CODE_HINT = "Same code in your browser?"
 
+    /** [CODE_HINT] for an agent sign-in: the agent shows the code in its chat, not a browser. */
+    const val AGENT_CODE_HINT = "Same code your agent showed you?"
+
     const val ALLOW_HINT = "Only allow it if you started this yourself."
+
+    /** Where an agent sign-in came from, in place of a website (prompt row, Agents list). */
+    const val AGENT_SIGN_IN = "Agent sign-in"
+
+    /** What to compare the code with: the browser, or the agent's chat for an agent sign-in. */
+    fun codeHint(request: PairingRequest): String = if (request.viaAgent) AGENT_CODE_HINT else CODE_HINT
+
+    /** The token's clientHost: the website, or [AGENT_SIGN_IN] (the relay's placeholder host is never stored). */
+    fun clientHost(request: PairingRequest): String = if (request.viaAgent) AGENT_SIGN_IN else request.redirectHost
 
     /** "Claude wants to connect". */
     fun notificationTitle(request: PairingRequest): String = "${request.clientName} wants to connect"
 
     /** Collapsed text, code first so a long name or host can't push it out of view. */
-    fun notificationText(request: PairingRequest): String = "Code ${request.displayCode} · from ${request.redirectHost}"
+    fun notificationText(request: PairingRequest): String =
+        "Code ${request.displayCode} · " + if (request.viaAgent) "signed in from its chat" else "from ${request.redirectHost}"
 
-    /** "wants access to this phone · claude.ai", under the agent's name on the approval screen. */
-    fun heroLine(request: PairingRequest): String =
-        "wants access to this phone" + (request.redirectHost.takeIf { it.isNotBlank() && !it.equals(request.clientName, ignoreCase = true) }?.let { " · $it" } ?: "")
+    /**
+     * Under the agent's name on the approval screen: "wants access to this phone · claude.ai", or
+     * "· signed in from its chat" for an agent sign-in (which has no website).
+     */
+    fun heroLine(request: PairingRequest): String {
+        val origin = if (request.viaAgent) {
+            "signed in from its chat"
+        } else {
+            request.redirectHost.takeIf { it.isNotBlank() && !it.equals(request.clientName, ignoreCase = true) }
+        }
+        return "wants access to this phone" + (origin?.let { " · $it" } ?: "")
+    }
 
     fun notificationBigText(request: PairingRequest): String = buildString {
-        append("From ").append(request.redirectHost).append(". If your browser shows ").append(request.displayCode)
+        if (request.viaAgent) {
+            append("Signed in from its chat. If your agent showed you ").append(request.displayCode)
+        } else {
+            append("From ").append(request.redirectHost).append(". If your browser shows ").append(request.displayCode)
+        }
         append(", tap to choose what ").append(request.clientName).append(" can do.")
         originLine(request)?.let { append("\n\n").append(it) }
     }

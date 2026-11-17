@@ -70,7 +70,7 @@ import kotlinx.coroutines.delay
 private const val ARM_DELAY_MS = 700L
 
 /**
- * Approve a new agent: who it is, the code to compare with the browser, the grant ("Give <agent> access":
+ * Approve a new agent: who it is, the code to compare with the browser (or the agent's chat, for an agent sign-in), the grant ("Give <agent> access":
  * Everything, or chosen apps and abilities, and whether it asks first) and its name. The app picker opens in
  * place of the grant, in this same window. [onAllow] gets the user's choice; [approving] shows progress.
  * [apps] are the installed apps for the picker (null while loading); [onChangeNeverAllow] opens the
@@ -261,7 +261,7 @@ private fun Hero(request: PairingRequest, secondsLeft: Long) {
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(PairingPresentation.CODE_HINT, style = MaterialTheme.typography.bodyMedium)
+                    Text(PairingPresentation.codeHint(request), style = MaterialTheme.typography.bodyMedium)
                     StatusPill(PairingPresentation.countdownLabel(secondsLeft), if (secondsLeft > 0) colors.warning else colors.error)
                 }
             }
@@ -303,7 +303,11 @@ private fun DetailsSection(
             )
         }
         ListDivider()
-        ListRow(title = "Website", trailing = { RowValue(request.redirectHost) })
+        if (request.viaAgent) {
+            ListRow(title = "Signed in", trailing = { RowValue("In the agent's chat") })
+        } else {
+            ListRow(title = "Website", trailing = { RowValue(request.redirectHost) })
+        }
         request.remoteAddress?.let { address ->
             ListDivider()
             // Same fact as PairingPresentation.originLine ("Requested from 203.0.113.7"), as a row.

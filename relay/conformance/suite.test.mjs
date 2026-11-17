@@ -39,6 +39,8 @@ import {
 const { base } = config;
 const UNAUTHORIZED_BODY = '{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"Unauthorized"}}';
 const MAY_HAVE_RUN = /may already have performed the action/;
+const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
+const oauthError = (res) => JSON.parse(res.body).error;
 
 /** A connected device that is closed when the test ends. */
 async function device(t, options) {
@@ -271,10 +273,10 @@ test('tunnel: requests beyond the in-flight cap → 429, Retry-After 1', { skip:
   assert.deepEqual((await Promise.all(held)).map((r) => r.status), Array(config.maxInflight).fill(200));
 });
 
-test('tunnel: GET → 405 Allow: POST; a body over MAX_BODY_BYTES → 413', async (t) => {
+test('tunnel: SSE GET → 405 Allow: POST; a body over MAX_BODY_BYTES → 413', async (t) => {
   const d = await device(t);
   const token = tokenFor(d.deviceId);
-  const get = await http(connectorUrl(d.deviceId), { headers: { authorization: `Bearer ${token}` } });
+  const get = await http(connectorUrl(d.deviceId), { headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' } });
   assert.equal(get.status, 405);
   assert.equal(get.headers.allow, 'POST');
   const big = await postMcp(connectorUrl(d.deviceId), { token, body: 'x'.repeat(config.maxBodyBytes + 1) });
@@ -387,8 +389,9 @@ test('discovery: protected resource and authorization server metadata', async ()
     assert.equal(as.authorization_endpoint, `${base}/oauth/authorize`);
     assert.equal(as.token_endpoint, `${base}/oauth/token`);
     assert.equal(as.registration_endpoint, `${base}/oauth/register`);
+    assert.equal(as.device_authorization_endpoint, `${base}/oauth/device_authorization`);
     assert.deepEqual(as.response_types_supported, ['code']);
-    assert.deepEqual(as.grant_types_supported, ['authorization_code']);
+    assert.deepEqual(as.grant_types_supported, ['authorization_code', DEVICE_GRANT]);
     assert.deepEqual(as.code_challenge_methods_supported, ['S256']);
     assert.deepEqual(as.token_endpoint_auth_methods_supported, ['none']);
     assert.deepEqual(as.scopes_supported, ['phone']);
@@ -691,6 +694,92 @@ test('pairing: a pair_response for an unknown pairing with a token is abandoned'
 });
 
 // ---- §5.5 setup and misc ----------------------------------------------------------------------
+
+// ---- §5.6 agent sign-in, §5.7 agent guide ----------------------------------------------------------
+
+/** Polls the device-code grant until it stops answering authorization_pending. */
+async function pollDeviceToken(deviceCode, { json = false } = {}) {
+  const params = { grant_type: DEVICE_GRANT, device_code: deviceCode };
+  const send = () => (json ? postJson(`${base}/oauth/token`, params) : postForm(`${base}/oauth/token`, params));
+  let res = await send();
+  for (let i = 0; i < 100 && res.status === 400 && oauthError(res) === 'authorization_pending'; i++) {
+    await sleep(50);
+    res = await send();
+  }
+  return res;
+}
+
+test('agent sign-in: device code, pending, approve, token, pair_complete; single-use', async (t) => {
+  const d = await device(t);
+  const res = await postForm(`${base}/oauth/device_authorization`, { resource: connectorUrl(d.deviceId), client_name: 'Instinct' });
+  assert.equal(res.status, 200, res.body);
+  assert.equal(res.headers['access-control-allow-origin'], '*');
+  const auth = JSON.parse(res.body);
+  assert.match(auth.user_code, /^[A-HJ-NP-Z2-9]{4}$/);
+  assert.equal(auth.verification_uri, connectorUrl(d.deviceId));
+  assert.equal(auth.interval, 5);
+  assert.ok(auth.expires_in > 0);
+  const pending = await postForm(`${base}/oauth/token`, { grant_type: DEVICE_GRANT, device_code: auth.device_code });
+  assert.equal(pending.status, 400);
+  assert.equal(oauthError(pending), 'authorization_pending');
+
+  const approval = await approveNext(d);
+  assert.equal(approval.request.flow, 'device');
+  assert.equal(approval.request.redirectHost, 'agent sign-in');
+  assert.equal(approval.request.clientName, 'Instinct');
+  assert.equal(approval.request.displayCode, auth.user_code);
+  const token = await pollDeviceToken(auth.device_code);
+  assert.equal(token.status, 200, token.body);
+  assert.deepEqual(JSON.parse(token.body), { access_token: approval.accessToken, token_type: 'Bearer', scope: 'phone' });
+  const complete = await withTimeout(d.nextFrame('pair_complete'), 'pair_complete');
+  assert.equal(complete.tokenId, approval.tokenId);
+  const again = await postForm(`${base}/oauth/token`, { grant_type: DEVICE_GRANT, device_code: auth.device_code });
+  assert.equal(oauthError(again), 'invalid_grant');
+});
+
+test('agent sign-in: JSON bodies; denied on the phone → access_denied', async (t) => {
+  const d = await device(t);
+  const res = await postJson(`${base}/oauth/device_authorization`, { resource: connectorUrl(d.deviceId), client_id: 'Muse' });
+  assert.equal(res.status, 200, res.body);
+  const request = await d.nextFrame('pair_request');
+  assert.equal(request.clientName, 'Muse');
+  d.send({ type: 'pair_response', id: request.id, approved: false, reason: 'denied' });
+  const token = await pollDeviceToken(JSON.parse(res.body).device_code, { json: true });
+  assert.equal(oauthError(token), 'access_denied');
+});
+
+test('agent sign-in: request errors', async () => {
+  const url = `${base}/oauth/device_authorization`;
+  const offline = newIdentity().deviceId;
+  assert.equal(oauthError(await postForm(url, { client_name: 'x' })), 'invalid_request');
+  assert.equal(oauthError(await postForm(url, { resource: `https://elsewhere.example/d/${offline}/mcp` })), 'invalid_target');
+  const down = await postForm(url, { resource: connectorUrl(offline) });
+  assert.equal(down.status, 503);
+  assert.equal(oauthError(down), 'temporarily_unavailable');
+  assert.equal((await http(url)).status, 405);
+  assert.equal(oauthError(await postForm(`${base}/oauth/token`, { grant_type: DEVICE_GRANT, device_code: 'nope' })), 'invalid_grant');
+  // Only the device-code grant takes JSON.
+  assert.equal(oauthError(await postJson(`${base}/oauth/token`, { grant_type: 'authorization_code', code: 'c' })), 'invalid_request');
+});
+
+test('agent guide: GET on a connection URL and /llms.txt are instructions; the banner points at it', async () => {
+  const id = newIdentity().deviceId;
+  const guide = await http(connectorUrl(id), { headers: { accept: '*/*' } });
+  assert.equal(guide.status, 200);
+  assert.match(guide.headers['content-type'], /^text\/plain/);
+  assert.ok(guide.body.includes(`MCP server URL: ${connectorUrl(id)}`));
+  assert.ok(guide.body.includes(`${base}/oauth/device_authorization`));
+  // Asked for HTML (a browser, or a fetcher that looks like one): the setup page, with the same guide inside.
+  const html = await http(connectorUrl(id), { headers: { accept: 'text/html,*/*' } });
+  assert.match(html.headers['content-type'], /^text\/html/);
+  assert.ok(html.body.includes(`MCP server URL: ${connectorUrl(id)}`));
+  assert.ok(html.body.includes(`${base}/oauth/device_authorization`));
+  assert.match((await http(connectorUrl(id), { headers: { accept: 'text/markdown' } })).headers['content-type'], /^text\/markdown/);
+  const llms = await http(`${base}/llms.txt`);
+  assert.equal(llms.status, 200);
+  assert.ok(llms.body.includes(`${base}/d/<id>/mcp`));
+  assert.ok((await http(`${base}/`)).body.includes(`${base}/llms.txt`));
+});
 
 test('setup: page with the configure deep link; QR endpoint checks the access key', async () => {
   const res = await http(`${base}/setup`);

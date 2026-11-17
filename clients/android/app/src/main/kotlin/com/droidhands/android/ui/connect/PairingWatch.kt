@@ -13,12 +13,17 @@ object PairingWatch {
     fun newlyPaired(tokens: List<TokenRecord>, baselineIds: Set<String>): TokenRecord? =
         tokens.firstOrNull { it.origin == AgentPresentation.ORIGIN_PAIRING && it.id !in baselineIds && !it.revoked }
 
-    /** "Claude (claude.ai) wants to connect". */
+    /** "Claude (claude.ai) wants to connect"; an agent sign-in has no host: "Instinct wants to connect". */
     fun title(request: PairingRequest): String {
         val name = request.clientName.trim().ifEmpty { "An AI agent" }
-        val host = request.redirectHost.trim()
+        val host = if (request.viaAgent) "" else request.redirectHost.trim()
         return if (host.isEmpty() || host.equals(name, ignoreCase = true)) "$name wants to connect" else "$name ($host) wants to connect"
     }
+
+    /** Under the code: allow only if you are connecting right now and the code matches the browser's or the agent's. */
+    fun cardHint(request: PairingRequest): String =
+        "Only allow it if you are connecting this agent right now and " +
+            if (request.viaAgent) "your agent showed you the same code." else "your browser shows the same code."
 
     /** "2:31 left", "Expired" — whole seconds, never negative. */
     fun timeLeft(expiresAt: Long, now: Long): String {

@@ -249,7 +249,11 @@ private fun GuideCard(guide: ClientGuide, url: String, waiting: Boolean) {
                 onShareFailed = shareFailed,
             )
         }
-        if (guide.open == null && guide.command == null) {
+        guide.message?.let { message ->
+            // Shared straight into the agent's app, or copied and pasted there.
+            CopyableCode(message, copyLabel = "Message", sensitive = false, shareTitle = "Send to your agent", onShareFailed = shareFailed)
+        }
+        if (guide.open == null && guide.command == null && guide.message == null) {
             CopyableCode(url, copyLabel = "Connection URL", sensitive = false, shareTitle = "Share connection URL", onShareFailed = shareFailed)
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -267,6 +271,9 @@ private fun GuideCard(guide: ClientGuide, url: String, waiting: Boolean) {
                 text = if (waiting) ALLOW_STEP_WAITING else ALLOW_STEP,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
+        }
+        guide.note?.let { note ->
+            Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

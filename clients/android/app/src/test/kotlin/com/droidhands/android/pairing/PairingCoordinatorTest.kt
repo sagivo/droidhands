@@ -125,6 +125,20 @@ class PairingCoordinatorTest {
     }
 
     @Test
+    fun agentSignInIsStoredWithoutTheRelaysPlaceholderHost() = runTest {
+        val f = Fixture(this)
+        val browser = f.request(this, pairingRequest(id = "p_browser"))
+        val agent = f.request(this, pairingRequest(id = "p_agent", clientName = "Instinct", redirectHost = "agent sign-in", viaAgent = true))
+        runCurrent()
+        val web = (f.coordinator.approve("p_browser", assistant) as PairingApproval.Connected).token
+        val chat = (f.coordinator.approve("p_agent", assistant) as PairingApproval.Connected).token
+        assertEquals("claude.ai", web.clientHost)
+        assertEquals(PairingPresentation.AGENT_SIGN_IN, chat.clientHost)
+        assertTrue(browser.await() is PairingDecision.Approved)
+        assertTrue(agent.await() is PairingDecision.Approved)
+    }
+
+    @Test
     fun denyAnswersDeniedAndMintsNothing() = runTest {
         val f = Fixture(this)
         val decision = f.request(this)

@@ -14,6 +14,7 @@ import {
   type PairingView,
 } from '../oauth/pairingStore.js';
 import type { RelayPairFrame } from '../oauth/pairingFrames.js';
+import { deviceTokenError, type DeviceFlowError } from '../oauth/deviceFlow.js';
 import {
   CloseCode,
   HEARTBEAT_ACK_FRAME,
@@ -99,6 +100,10 @@ export interface ExchangeInput {
 export type ExchangeResult =
   | { readonly ok: true; readonly body: string; readonly deviceId: string }
   | { readonly ok: false; readonly error: TokenError; readonly description: string; readonly deviceId: string | null };
+
+export type RedeemOutcome =
+  | { readonly ok: true; readonly body: string; readonly deviceId: string }
+  | { readonly ok: false; readonly error: DeviceFlowError; readonly authFailure: boolean };
 
 /** Headers the Worker sets on the internal upgrade request. */
 export const INTERNAL = Object.freeze({ deviceId: 'x-pb-device-id', ip: 'x-pb-ip', ipKey: 'x-pb-ip-key', base: 'x-pb-base' });
@@ -480,6 +485,22 @@ export class DeviceObject extends DurableObject<Env> {
     this.pairings.finishExchange(grant, true);
     await this.pairingsChanged();
     return { ok: true, body, deviceId: grant.deviceId };
+  }
+
+  /**
+   * The device-code grant of `POST /oauth/token` (agent sign-in, §5.6): the token once the phone
+   * approved, handed out and `pair_complete` sent at once as in [exchange].
+   */
+  async redeem(id: string, pageToken: string): Promise<RedeemOutcome> {
+    const result = this.pairings.redeem(id, pageToken);
+    if (result.status !== 'approved') {
+      await this.pairingsChanged();
+      return { ok: false, error: deviceTokenError(result), authFailure: result.status === 'invalid' };
+    }
+    const body = tokenResponseBody(result.grant);
+    this.pairings.finishExchange(result.grant, true);
+    await this.pairingsChanged();
+    return { ok: true, body, deviceId: result.grant.deviceId };
   }
 
   // ---- helpers ---------------------------------------------------------------------------------

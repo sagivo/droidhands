@@ -6,9 +6,7 @@ import { admit, clientInfo, relayBase, type HttpDeps } from './httpDeps.js';
 import { applyOriginCors, sendBody, type OriginCors } from './httpUtil.js';
 import { deviceTag, type Logger } from './logger.js';
 import { headerValue } from './net.js';
-import { connectorChallenge, connectorUrl } from './oauth/metadata.js';
-import { connectorSetupPage, wantsSetupPage } from './pages/connectorPage.js';
-import { sendPage } from './pages/html.js';
+import { connectorChallenge } from './oauth/metadata.js';
 import { FORWARDED_REQUEST_HEADERS, RpcCode, SAFE_RESPONSE_HEADERS, jsonRpcError, type DeviceResponse } from './protocol.js';
 import { bearerCredential, parseToken } from './token.js';
 
@@ -91,12 +89,6 @@ export async function handleMcp(deps: HttpDeps, req: IncomingMessage, res: Serve
     res.setHeader('Retry-After', String(decision.retryAfterSec));
     sendRpcError(req, res, 429, 'Too many requests');
     return done(429);
-  }
-
-  // The connection URL opened in a browser: its setup page instead of an error.
-  if (route.kind === 'connector' && wantsSetupPage(req.method, headerValue(req, 'accept'), headerValue(req, 'authorization'))) {
-    sendPage(req, res, 200, connectorSetupPage(connectorUrl(relayBase(deps, req), route.deviceId)));
-    return done(200);
   }
 
   if (req.method !== 'POST') {

@@ -38,6 +38,30 @@ class PairingPresentationTest {
     }
 
     @Test
+    fun agentSignInShowsNoWebsiteAndPointsAtTheAgentsCode() {
+        val agent = PairingRules.sanitize(pairingRequest(clientName = "Instinct", redirectHost = "agent sign-in", viaAgent = true))
+        assertEquals("Instinct wants to connect", PairingPresentation.notificationTitle(agent))
+        assertEquals("Code K7Q2 · signed in from its chat", PairingPresentation.notificationText(agent))
+        val big = PairingPresentation.notificationBigText(agent)
+        assertTrue(big, big.startsWith("Signed in from its chat. If your agent showed you K7Q2") && !big.contains("browser"))
+        assertEquals("wants access to this phone · signed in from its chat", PairingPresentation.heroLine(agent))
+        assertEquals(PairingPresentation.AGENT_CODE_HINT, PairingPresentation.codeHint(agent))
+        assertEquals(PairingPresentation.AGENT_SIGN_IN, PairingPresentation.clientHost(agent))
+        listOf(
+            PairingPresentation.notificationTitle(agent),
+            PairingPresentation.notificationText(agent),
+            PairingPresentation.heroLine(agent),
+            PairingPresentation.codeHint(agent),
+        ).forEach {
+            assertFalse(it, it.contains("agent sign-in") || it.contains("browser"))
+        }
+
+        assertEquals("wants access to this phone · claude.ai", PairingPresentation.heroLine(request))
+        assertEquals(PairingPresentation.CODE_HINT, PairingPresentation.codeHint(request))
+        assertEquals("claude.ai", PairingPresentation.clientHost(request))
+    }
+
+    @Test
     fun tokenNameDefaultsToTheClientName() {
         assertEquals("Claude", PairingPresentation.tokenName("   ", request))
         assertEquals("Work laptop", PairingPresentation.tokenName("  Work   laptop ", request))

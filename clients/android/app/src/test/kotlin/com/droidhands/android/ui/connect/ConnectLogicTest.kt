@@ -15,8 +15,8 @@ class ConnectLogicTest {
     private fun token(id: String, origin: String = "pairing", revoked: Boolean = false) =
         TokenRecord(id = id, name = "Claude", secretHash = "00", scopes = Scopes.PRESET_ASSISTANT, createdAt = 0, origin = origin, revoked = revoked)
 
-    private fun pairing(name: String = "Claude", host: String = "claude.ai", expiresAt: Long = 0) =
-        PairingRequest("p_1", name, host, "K7Q2", null, null, expiresAt)
+    private fun pairing(name: String = "Claude", host: String = "claude.ai", expiresAt: Long = 0, viaAgent: Boolean = false) =
+        PairingRequest("p_1", name, host, "K7Q2", null, null, expiresAt, viaAgent)
 
     @Test
     fun everyGuideIsShortWithOneMainAction() {
@@ -25,8 +25,36 @@ class ConnectLogicTest {
             assertTrue(client.name, guide.steps.size in 1..2)
             assertTrue(client.name, guide.appliesTo.isNotBlank())
             // One main action at most: a link that does the setup, or a command to copy.
-            assertFalse(client.name, guide.open != null && guide.command != null)
+            assertTrue(client.name, listOfNotNull(guide.open, guide.command, guide.message).size <= 1)
         }
+        assertEquals(AgentClient.OTHER, AgentClient.entries.last())
+    }
+
+    @Test
+    fun chatAgentsGetAMessageToSendAndCompareTheAgentsCode() {
+        val message = ClientInstructions.agentMessage(url)
+        assertTrue(message.contains(url) && message.contains("Open this link"))
+        assertTrue("one line", '\n' !in message)
+        listOf(AgentClient.MUSE to "Muse", AgentClient.INSTINCT to "Instinct").forEach { (client, name) ->
+            val guide = ClientInstructions.guide(client, url)
+            assertEquals(message, guide.message)
+            assertTrue(guide.viaChat)
+            assertTrue(guide.steps.single().contains(name) && guide.steps.single().contains("4-letter code"))
+            assertTrue(guide.steps.none { it.contains("browser") })
+        }
+        assertTrue(ClientInstructions.guide(AgentClient.OTHER, url).note.orEmpty().contains("chat"))
+        assertFalse(ClientInstructions.guide(AgentClient.CLAUDE, url).viaChat)
+    }
+
+    @Test
+    fun grokCopiesTheUrlOpensItsConnectorsAndMentionsGrokBot() {
+        val guide = ClientInstructions.guide(AgentClient.GROK, url)
+        assertEquals(ClientInstructions.GROK_CONNECTORS, guide.open!!.url)
+        assertTrue(guide.open!!.copyUrlFirst)
+        assertTrue(guide.steps.first().contains("Custom"))
+        assertNull(guide.command)
+        assertTrue(guide.appliesTo.contains("paid"))
+        assertTrue(guide.note.orEmpty().contains("Grok Bot"))
     }
 
     @Test
@@ -60,7 +88,9 @@ class ConnectLogicTest {
         assertEquals("gemini mcp add --transport http -s user phone $url", ClientInstructions.guide(AgentClient.GEMINI_CLI, url).command)
         assertNull(ClientInstructions.guide(AgentClient.CLAUDE, url).command)
         assertTrue(ClientInstructions.shareCommand(guide).endsWith(guide.command!!))
-        assertTrue(ClientInstructions.shareText(url).endsWith(url))
+        val share = ClientInstructions.shareText(url)
+        assertTrue(share.endsWith("\n$url"))
+        assertTrue(share.contains("AI agents get instructions"))
     }
 
     @Test
@@ -78,6 +108,9 @@ class ConnectLogicTest {
         assertEquals("claude.ai wants to connect", PairingWatch.title(pairing(name = "claude.ai")))
         assertEquals("An AI agent (localhost:33418) wants to connect", PairingWatch.title(pairing(name = " ", host = "localhost:33418")))
         assertEquals("Cursor wants to connect", PairingWatch.title(pairing(name = "Cursor", host = "")))
+        assertEquals("Instinct wants to connect", PairingWatch.title(pairing(name = "Instinct", host = "agent sign-in", viaAgent = true)))
+        assertTrue(PairingWatch.cardHint(pairing()).endsWith("your browser shows the same code."))
+        assertTrue(PairingWatch.cardHint(pairing(viaAgent = true)).endsWith("your agent showed you the same code."))
         assertEquals("2:31 left", PairingWatch.timeLeft(expiresAt = 151_000, now = 0))
         assertEquals("0:01 left", PairingWatch.timeLeft(expiresAt = 500, now = 0))
         assertEquals("Expired", PairingWatch.timeLeft(expiresAt = 0, now = 10))

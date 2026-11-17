@@ -421,7 +421,9 @@ DROIDHANDS_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 | `POST /oauth/register` | RFC 7591 dynamic registration of public clients → `201` with a stateless `client_id`. |
 | `GET /oauth/authorize?…` | Validates the request (`resource` must be the phone's connection URL), prompts the phone and shows the "Tap Allow on your phone" page. Every error is an HTML page, never a redirect. |
 | `GET /oauth/pair/<id>?t=<pageToken>` | Pairing status for the page: `{"status":"pending"\|"approved"\|"denied"\|"expired","redirect"?}`. With `&view=html`, the reloadable page (redirects once decided). |
-| `POST /oauth/token` | Authorization code + PKCE verifier → `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. Errors per RFC 6749 §5.2. |
+| `POST /oauth/token` | Authorization code + PKCE verifier, or a device code (agent sign-in) → `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. Errors per RFC 6749 §5.2. |
+| `POST /oauth/device_authorization` | Agent sign-in (RFC 8628) for agents without a browser: prompts the phone, returns `device_code` and the 4-letter `user_code` ([PROTOCOL.md §5.6](../docs/PROTOCOL.md#56-agent-sign-in-device-flow)). |
+| `GET /d/<id>/mcp`, `GET /llms.txt` | Instructions for AI agents and people (any `Accept` except `text/event-stream`; [§5.7](../docs/PROTOCOL.md#57-agent-guide)). |
 | `GET /setup` | Phone setup page. |
 | `GET /download/droidhands.apk` | `302` to `APK_URL` when set; otherwise the APK from `PUBLIC_DIR`, if present (`application/vnd.android.package-archive`). |
 | `POST /setup/qr` | Used by the setup page: `{"key"}` → QR code (SVG path) of the setup link, if the key is the access key. |

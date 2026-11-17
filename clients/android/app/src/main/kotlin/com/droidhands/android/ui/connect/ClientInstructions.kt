@@ -3,13 +3,16 @@ package com.droidhands.android.ui.connect
 import com.droidhands.android.ui.tokens.ConnectionSnippets
 import java.net.URLEncoder
 
-/** MCP clients with tailored setup on the Connect page (chip order: most used first). */
+/** AI agents with tailored setup on the Connect page (chip order: most used first; Other stays last). */
 enum class AgentClient(val label: String) {
     CLAUDE("Claude"),
     CHATGPT("ChatGPT"),
+    GROK("Grok"),
     CLAUDE_CODE("Claude Code"),
     CODEX("Codex"),
     GEMINI_CLI("Gemini CLI"),
+    MUSE("Muse"),
+    INSTINCT("Instinct"),
     OTHER("Other"),
 }
 
@@ -17,8 +20,10 @@ enum class AgentClient(val label: String) {
 data class OpenLink(val label: String, val url: String, val copyUrlFirst: Boolean = false)
 
 /**
- * How to add the connection URL to one client: at most one [open] link (the main action) or one [command]
- * to copy, and one or two short [steps]. The phone's own "tap Allow" is shown once, under the guide.
+ * How to add the connection URL to one client: at most one main action, either an [open] link, a [command]
+ * to copy, or a chat [message] for agents without connector settings (they open the link and sign in from
+ * the chat), and one or two short [steps]. The phone's own "tap Allow" is shown once, under the guide.
+ * [note] is an aside under the card.
  */
 data class ClientGuide(
     val client: AgentClient,
@@ -27,7 +32,12 @@ data class ClientGuide(
     val steps: List<String>,
     val open: OpenLink? = null,
     val command: String? = null,
+    val message: String? = null,
+    val note: String? = null,
 ) {
+    /** True when the agent signs in from its chat and shows the code there, not in a browser. */
+    val viaChat: Boolean get() = message != null
+
     /** True for clients that run on a computer: the command has to get there (Share). */
     val onComputer: Boolean get() = command != null
 }
@@ -42,6 +52,9 @@ object ClientInstructions {
 
     /** ChatGPT's connector settings. */
     const val CHATGPT_CONNECTORS = "https://chatgpt.com/#settings/Connectors"
+
+    /** Grok's connector settings (custom connectors need a paid plan). */
+    const val GROK_CONNECTORS = "https://grok.com/connectors"
 
     fun guide(client: AgentClient, url: String): ClientGuide = when (client) {
         AgentClient.CLAUDE -> ClientGuide(
@@ -58,6 +71,25 @@ object ClientInstructions {
                 "Under Advanced, turn on Developer mode.",
                 "Tap Create, paste the URL, choose OAuth, then Create.",
             ),
+        )
+        AgentClient.GROK -> ClientGuide(
+            client = client,
+            appliesTo = "grok.com and the Grok apps, on paid plans",
+            open = OpenLink("Copy URL and open Grok", GROK_CONNECTORS, copyUrlFirst = true),
+            steps = listOf("Tap New Connector, then Custom. Paste the URL and tap Connect."),
+            note = "In Grok Bot, add a custom MCP server with the same URL and sign in.",
+        )
+        AgentClient.MUSE -> ClientGuide(
+            client = client,
+            appliesTo = "Meta Muse, in chat",
+            message = agentMessage(url),
+            steps = listOf("Send this to Muse. It opens the link and shows you a 4-letter code."),
+        )
+        AgentClient.INSTINCT -> ClientGuide(
+            client = client,
+            appliesTo = "Instinct, by text",
+            message = agentMessage(url),
+            steps = listOf("Text this to Instinct. It texts you back a 4-letter code."),
         )
         AgentClient.CLAUDE_CODE -> ClientGuide(
             client = client,
@@ -81,6 +113,7 @@ object ClientInstructions {
             client = client,
             appliesTo = "any MCP client with remote servers and OAuth",
             steps = listOf("Add a remote MCP server (Streamable HTTP) with your connection URL. Sign-in opens in your browser."),
+            note = "No connector settings? Share the URL into your agent's chat: it opens the link and signs in from there.",
         )
     }
 
@@ -96,8 +129,15 @@ object ClientInstructions {
         "https://claude.ai/customize/connectors?modal=add-custom-connector" +
             "&connectorName=${encode(CONNECTOR_NAME)}&connectorUrl=${encode(url)}"
 
-    /** Text for the share sheet: the URL plus one line, so it still makes sense on another device. */
-    fun shareText(url: String): String = "Add this phone to your AI agent as a custom connector (remote MCP server):\n$url"
+    /** One line to send an agent in chat: it opens [url], which answers agents with sign-in instructions. */
+    fun agentMessage(url: String): String = "Connect to my phone with DroidHands. Open this link for instructions: $url"
+
+    /**
+     * Text for the share sheet: one line plus the URL. It works sent to a computer (open it for setup buttons,
+     * or paste it into a connector) and shared straight into an agent's chat (the agent opens the link).
+     */
+    fun shareText(url: String): String =
+        "Connect to my phone with DroidHands (MCP server). Open this link to set it up; AI agents get instructions there.\n$url"
 
     /** The command plus one line on where to run it, for sending to a computer. */
     fun shareCommand(guide: ClientGuide): String =

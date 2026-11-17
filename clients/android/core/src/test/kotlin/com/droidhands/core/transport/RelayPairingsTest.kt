@@ -16,6 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -129,6 +130,7 @@ class RelayPairingsTest {
         assertNull(request.remoteAddress)
         assertNull(request.userAgent)
         assertEquals(1731500180000, request.expiresAt)
+        assertFalse(request.viaAgent)
 
         val defaults = RelayProtocol.pairingRequest(frame("""{"type":"pair_request","id":"p_x","clientName":"  ","expiresAt":"soon"}"""), now)!!
         assertEquals("Unknown app", defaults.clientName)
@@ -136,9 +138,27 @@ class RelayPairingsTest {
         assertEquals("", defaults.displayCode)
         assertEquals(now + RelayProtocol.DEFAULT_PAIRING_TTL_MS, defaults.expiresAt)
 
+        assertFalse(defaults.viaAgent)
+
         assertNull(RelayProtocol.pairingRequest(frame("""{"type":"pair_request"}"""), now))
         assertNull(RelayProtocol.pairingRequest(frame("""{"type":"pair_request","id":" "}"""), now))
         assertNull(RelayProtocol.pairingRequest(frame("""{"type":"pair_request","id":7}"""), now))
+    }
+
+    @Test
+    fun agentSignInIsFlowDevice() {
+        fun flow(json: String) = RelayProtocol.pairingRequest(
+            frame("""{"type":"pair_request","id":"p_d","clientName":"Instinct","redirectHost":"agent sign-in","displayCode":"K7Q2"$json}"""),
+            now,
+        )!!
+        val device = flow(""","flow":"device"""")
+        assertTrue(device.viaAgent)
+        assertEquals("Instinct", device.clientName)
+        assertEquals("K7Q2", device.displayCode)
+        assertFalse(flow("").viaAgent)
+        assertFalse(flow(""","flow":"browser"""").viaAgent)
+        assertFalse(flow(""","flow":"DEVICE"""").viaAgent)
+        assertFalse(flow(""","flow":true""").viaAgent)
     }
 
     @Test

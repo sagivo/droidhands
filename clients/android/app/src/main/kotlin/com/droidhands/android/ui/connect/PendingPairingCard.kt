@@ -29,7 +29,7 @@ import com.droidhands.android.ui.components.SecondaryButton
 import com.droidhands.core.transport.PairingRequest
 
 /**
- * "Claude (claude.ai) wants to connect · code K7Q2": a one-tap pairing waiting for the user.
+ * "Claude (claude.ai) wants to connect · code K7Q2" (or "Instinct wants to connect" for an agent sign-in): a one-tap pairing waiting for the user.
  * Review opens the full approval screen (choose access, then Allow); Deny refuses right away.
  */
 @Composable
@@ -67,7 +67,7 @@ internal fun PendingPairingCard(
             }
         }
         Text(
-            "Only allow it if you are connecting this agent right now and your browser shows the same code.",
+            PairingWatch.cardHint(request),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

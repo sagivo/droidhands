@@ -2,7 +2,7 @@ package com.droidhands.android.pairing
 
 import com.droidhands.core.transport.PairingRequest
 
-/** A well-formed relay pair_request expiring at [expiresAt]. */
+/** A well-formed relay pair_request expiring at [expiresAt]; [viaAgent] for an agent sign-in (`"flow":"device"`). */
 internal fun pairingRequest(
     id: String = "p_abc123",
     clientName: String = "Claude",
@@ -11,6 +11,7 @@ internal fun pairingRequest(
     expiresAt: Long = 181_000L,
     remoteAddress: String? = "203.0.113.7",
     userAgent: String? = "Mozilla/5.0",
+    viaAgent: Boolean = false,
 ) = PairingRequest(
     id = id,
     clientName = clientName,
@@ -19,4 +20,5 @@ internal fun pairingRequest(
     remoteAddress = remoteAddress,
     userAgent = userAgent,
     expiresAt = expiresAt,
+    viaAgent = viaAgent,
 )

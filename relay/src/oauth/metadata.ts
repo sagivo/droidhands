@@ -46,9 +46,11 @@ export function authorizationServerMetadata(base: string): Record<string, unknow
     authorization_endpoint: `${base}/oauth/authorize`,
     token_endpoint: `${base}/oauth/token`,
     registration_endpoint: `${base}/oauth/register`,
+    // Agent sign-in (RFC 8628, §5.6) for agents without a browser.
+    device_authorization_endpoint: `${base}/oauth/device_authorization`,
     response_types_supported: ['code'],
     response_modes_supported: ['query'],
-    grant_types_supported: ['authorization_code'],
+    grant_types_supported: ['authorization_code', 'urn:ietf:params:oauth:grant-type:device_code'],
     code_challenge_methods_supported: ['S256'],
     token_endpoint_auth_methods_supported: ['none'],
     scopes_supported: [OAUTH_SCOPE],

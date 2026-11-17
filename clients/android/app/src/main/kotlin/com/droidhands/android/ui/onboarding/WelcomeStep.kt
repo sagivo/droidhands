@@ -37,7 +37,7 @@ internal fun WelcomeStep() {
     StepHeader(
         Icons.Filled.Phone,
         "Let your AI agents use this phone",
-        "Claude, ChatGPT and other AI agents you approve can message, call and use apps on this phone for you.",
+        "Claude, ChatGPT, Grok and other AI agents you approve can message, call and use apps on this phone for you.",
     )
     ListSection(
         title = "You stay in charge",

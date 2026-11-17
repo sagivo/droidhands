@@ -59,7 +59,8 @@ fun AgentsScreen(vm: AgentsViewModel, onOpenAgent: (String) -> Unit, onConnect: 
                 item(key = "empty") {
                     EmptyState(
                         title = "No agents yet",
-                        message = "Connect Claude, ChatGPT or any MCP client: paste one URL into it, then tap Allow on this phone.",
+                        message = "Paste one URL into Claude, ChatGPT, Grok or any MCP client, or send it to Muse or Instinct in chat. " +
+                            "Then tap Allow on this phone.",
                         icon = Icons.Filled.Face,
                         action = { PrimaryButton("Connect an AI agent", onClick = onConnect, icon = Icons.Filled.Add) },
                     )

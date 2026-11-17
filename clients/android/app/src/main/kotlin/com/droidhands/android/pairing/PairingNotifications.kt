@@ -14,7 +14,7 @@ import com.droidhands.android.graph.NotificationGroups
 
 /**
  * Posts the pairing prompt as a heads-up notification on [Channels.PAIRING]:
- * "<client> (<host>) wants to connect · code <code>". Tapping it (or "Review") opens
+ * "<client> (<host>) wants to connect · code <code>" (no host for an agent sign-in). Tapping it (or "Review") opens
  * [PairingActivity]; "Deny" and swiping it away deny through [PairingReceiver] with the prompt's
  * nonce. There is deliberately no Allow button: the user must choose the agent's access first.
  *

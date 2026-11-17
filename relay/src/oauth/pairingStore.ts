@@ -32,6 +32,12 @@ export interface AuthorizationRequest {
    * online one (ALLOW_IMPLICIT_DEVICE). The waiting page then does not show the phone's name.
    */
   readonly implicitDevice?: boolean;
+  /**
+   * `'device'` for agent sign-in (RFC 8628, docs/PROTOCOL.md §5.6): no browser, the agent itself
+   * polls for the outcome with the pairing's id and page token. [redirectUri] is then
+   * [DEVICE_FLOW_REDIRECT_URI] and the phone is told the flow instead of a website.
+   */
+  readonly flow?: 'device';
 }
 
 /** Who started the pairing (shown on the phone, used for per-IP limits). */
@@ -173,6 +179,20 @@ interface PairingRecord {
 
 const HOUR_MS = 3_600_000;
 
+/** Stands in for the redirect URI of agent sign-in pairings, which never redirect anywhere. */
+export const DEVICE_FLOW_REDIRECT_URI = 'urn:ietf:params:oauth:grant-type:device_code';
+
+/** What the phone shows as the "website" of an agent sign-in (apps that know `flow` show that instead). */
+export const DEVICE_FLOW_HOST = 'agent sign-in';
+
+/** Where an agent sign-in stands, for its holder (see [PairingStore.redeem]). */
+export type RedeemResult =
+  | { readonly status: 'pending' | 'denied' | 'expired'; readonly pairing: PairingView }
+  /** Approved: the grant was taken (as by [PairingStore.takeCode]); call [PairingStore.finishExchange]. */
+  | { readonly status: 'approved'; readonly grant: CodeGrant }
+  /** Unknown pairing, wrong page token, not an agent sign-in, or its token was already handed out. */
+  | { readonly status: 'invalid' };
+
 /** Alphabet of the display code: no 0/O, 1/I. */
 const DISPLAY_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const DISPLAY_CODE_LENGTH = 4;
@@ -282,7 +302,7 @@ export class PairingStore {
       request,
       origin,
       displayCode: newDisplayCode(),
-      redirectHost: redirectHost(request.redirectUri),
+      redirectHost: request.flow === 'device' ? DEVICE_FLOW_HOST : redirectHost(request.redirectUri),
       expiresAt: now + this.options.ttlMs,
     };
     const channel = this.options.deliver(request.deviceId, pairRequestFrame(prompt));
@@ -310,6 +330,34 @@ export class PairingStore {
     if (record === undefined || !constantTimeEqual(record.pageToken, pageToken)) return null;
     this.expireIfDue(record, this.now());
     return view(record);
+  }
+
+  /**
+   * Agent sign-in (RFC 8628): the state of device-flow pairing [id] for the holder of [pageToken].
+   * Once approved, the first call takes the grant, exactly like [takeCode] with the pairing's code;
+   * later calls get `invalid`. An approval whose code expired unexchanged reads as `expired`.
+   */
+  redeem(id: string, pageToken: string): RedeemResult {
+    const record = this.records.get(id);
+    if (record === undefined || record.request.flow !== 'device' || !constantTimeEqual(record.pageToken, pageToken)) {
+      return { status: 'invalid' };
+    }
+    const now = this.now();
+    this.expireIfDue(record, now);
+    if (record.status !== 'approved') return { status: record.status, pairing: view(record) };
+    const code = record.redirect === null ? null : new URL(record.redirect).searchParams.get('code');
+    const key = code === null ? null : hashCode(code);
+    const grant = key === null ? undefined : this.codes.get(key);
+    if (grant === undefined || key === null) {
+      // Codes leave only when exchanged or expired: before its expiry, this one was redeemed already.
+      return now < record.decidedAt + this.options.codeTtlMs ? { status: 'invalid' } : { status: 'expired', pairing: view(record) };
+    }
+    this.codes.delete(key);
+    if (now >= grant.expiresAt) {
+      this.finishExchange(grant, false);
+      return { status: 'expired', pairing: view(record) };
+    }
+    return { status: 'approved', grant };
   }
 
   /**
@@ -550,6 +598,7 @@ function pairRequestFrame(
     remoteAddress: prompt.origin.remoteAddress,
     ...(prompt.origin.userAgent === undefined ? {} : { userAgent: prompt.origin.userAgent }),
     expiresAt: prompt.expiresAt,
+    ...(prompt.request.flow === undefined ? {} : { flow: prompt.request.flow }),
   };
 }
 

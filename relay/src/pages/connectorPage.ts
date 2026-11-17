@@ -73,8 +73,11 @@ export function agentCommands(url: string): readonly AgentCommand[] {
   ];
 }
 
-/** The setup page for the connection URL [url]. */
-export function connectorSetupPage(url: string): PageOptions {
+/**
+ * The setup page for the connection URL [url]. [agentGuide] (docs/PROTOCOL.md §5.7) is included, folded
+ * away, for agents whose link fetcher asks for HTML like a browser.
+ */
+export function connectorSetupPage(url: string, agentGuide: string): PageOptions {
   const commands = agentCommands(url).map(
     (c) => html`<div class="card">
 <h2>${c.agent}</h2>
@@ -104,7 +107,8 @@ ${commands}
 <div class="copyrow"><code class="cmd">${url}</code><button type="button" class="copy" data-copy="${url}">Copy</button></div>
 <p class="muted">Add it as a remote MCP server (Streamable HTTP) with OAuth sign-in. In ChatGPT: Settings › Connectors › Advanced › Developer mode, then Create.</p>
 </div>
-<p class="muted">This link isn't a password: every agent still has to be allowed on the phone.</p>`,
+<p class="muted">This link isn't a password: every agent still has to be allowed on the phone.</p>
+<details class="card"><summary>For AI agents: how to connect</summary><pre class="guide">${agentGuide}</pre></details>`,
     script: COPY_SCRIPT,
   };
 }

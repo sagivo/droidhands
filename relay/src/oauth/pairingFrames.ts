@@ -13,6 +13,8 @@ export interface PairRequestFrame {
   remoteAddress: string;
   userAgent?: string;
   expiresAt: number;
+  /** `device`: agent sign-in (§5.6), no browser; absent for the browser flow. */
+  flow?: 'device';
 }
 
 /** Relay → device: the pairing expired before the phone answered; remove the prompt. */

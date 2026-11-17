@@ -68,8 +68,9 @@ app_action_run(app="Spotify", action="play", params={query: "lofi beats"})
 
 The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 
-* **One-tap pairing**: paste your connection URL into Claude.ai, Claude Code, ChatGPT or any MCP
-  client, check the 4-letter code on the phone, give it access, and tap **Allow**. The token
+* **One-tap pairing**: paste your connection URL into Claude.ai, Claude Code, ChatGPT, Grok or any MCP
+  client (or send it to an agent you chat with, such as Muse or Instinct: it opens the link and signs
+  in by itself), check the 4-letter code on the phone, give it access, and tap **Allow**. The token
   is minted on the phone (256-bit, stored only as a hash). Manual tokens are available too.
 * **Access chosen once, no prompts after**: **Everything**, or **only what you choose**: which apps
   and what it can do (read messages, use apps, send messages, calls…). Inside that the agent acts

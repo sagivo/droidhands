@@ -60,11 +60,11 @@ test('the legacy /mcp endpoint keeps its plain challenge', async (t) => {
   assert.equal(res.headers['www-authenticate'], 'Bearer realm="droidhands"');
 });
 
-test('connector: GET and DELETE -> 405; malformed ids -> 404; offline -> 503', async (t) => {
+test('connector: SSE GET and DELETE -> 405; malformed ids -> 404; offline -> 503', async (t) => {
   const relay = await startRelay(t);
   const deviceId = newIdentity().deviceId;
-  for (const method of ['GET', 'DELETE']) {
-    const res = await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { method });
+  for (const [method, headers] of [['GET', { accept: 'text/event-stream' }], ['DELETE', {}]] as const) {
+    const res = await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { method, headers });
     assert.equal(res.status, 405, method);
     assert.equal(res.headers.allow, 'POST');
   }
@@ -90,12 +90,10 @@ test('connector opened in a browser: the setup page with one-click links; MCP cl
   assert.ok(res.body.includes(`codex mcp add phone --url ${url}`), 'Codex command');
   assert.ok(res.body.includes('cursor://anysphere.cursor-deeplink/mcp/install?name=phone&amp;config='), 'Cursor link');
 
-  // MCP clients, credentials and other methods keep the usual answers.
-  const clients: Array<Record<string, string>> = [
-    { accept: 'text/event-stream' },
-    { accept: 'application/json, text/event-stream' },
-    { accept: browser, authorization: 'Bearer x' },
-  ];
+  // MCP clients and other methods keep the usual answers; a GET with credentials gets the agent guide as text.
+  const withToken = await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { headers: { accept: browser, authorization: 'Bearer x' } });
+  assert.match(String(withToken.headers['content-type']), /^text\/plain/);
+  const clients: Array<Record<string, string>> = [{ accept: 'text/event-stream' }, { accept: 'application/json, text/event-stream' }];
   for (const headers of clients) {
     assert.equal((await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { headers })).status, 405, JSON.stringify(headers));
   }

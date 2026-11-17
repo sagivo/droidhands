@@ -42,7 +42,29 @@ import {
   isAuthorizationServerMetadataPath,
   protectedResourceMetadata,
 } from '../oauth/metadata.js';
-import { MAX_TOKEN_BODY_BYTES, checkTokenRequest } from '../oauth/tokenRoute.js';
+import {
+  FORM_ONLY_DESCRIPTION,
+  MAX_TOKEN_BODY_BYTES,
+  TOKEN_CONTENT_TYPE_DESCRIPTION,
+  checkTokenRequest,
+  isFormContentType,
+  isTokenContentType,
+} from '../oauth/tokenRoute.js';
+import { LLMS_TXT_PATH, agentGuide, agentGuideContentType, bannerText as relayBanner, llmsTxt, wantsAgentGuide } from '../agentGuide.js';
+import {
+  DEVICE_AUTHORIZATION_PATH,
+  DEVICE_CODE_GRANT,
+  MAX_DEVICE_AUTHORIZATION_BODY_BYTES,
+  bodyParams,
+  checkDeviceAuthorization,
+  checkDeviceTokenRequest,
+  deviceAuthorizationRequest,
+  deviceAuthorizationResponse,
+  BODY_ERROR,
+  DEVICE_OFFLINE_ERROR,
+  deviceCreateFailure,
+  type DeviceFlowError,
+} from '../oauth/deviceFlow.js';
 import { connectorSetupPage, wantsSetupPage } from '../pages/connectorPage.js';
 import { offlinePage, OFFLINE_PAGE_STATUS, pairingErrorPage, waitingPage } from '../pages/pairingPages.js';
 import { setupPage } from '../pages/setupPage.js';
@@ -53,7 +75,14 @@ import { qrPath, qrSvg } from '../setup/qr.js';
 import { SETUP_PATH, setupUrl } from '../setup/setupUrl.js';
 import { bearerCredential, parseToken } from '../token.js';
 import { unsupportedSettings, workerConfig, type Env, type WorkerConfig } from './config.js';
-import { INTERNAL, type AuthorizeResult, type DeviceObject, type ExchangeResult, type PollResult } from './deviceObject.js';
+import {
+  INTERNAL,
+  type AuthorizeResult,
+  type DeviceObject,
+  type ExchangeResult,
+  type PollResult,
+  type RedeemOutcome,
+} from './deviceObject.js';
 import { declaredLength, json, methodNotAllowed, page, readBody, respond, rpcError, text } from './http.js';
 
 export { DeviceObject } from './deviceObject.js';
@@ -190,7 +219,17 @@ function match(ctx: Ctx, pathname: string): { policy: OriginPolicy; rpc: boolean
     return checked(() => handleMcp(ctx, { kind: 'token', pathToken: segment }), true);
   }
   const connector = CONNECTOR_PATH_REGEX.exec(pathname)?.[1];
-  if (connector !== undefined) return checked(() => handleMcp(ctx, { kind: 'connector', deviceId: connector }), true);
+  if (connector !== undefined) {
+    // People and agents who open the connection URL get instructions (§5.7); MCP clients POST.
+    if (wantsAgentGuide(ctx.method, ctx.request.headers.get('accept') ?? undefined)) {
+      // A person in a browser gets the setup page (with the guide inside); agents get the guide as text.
+      if (wantsSetupPage(ctx.method, ctx.request.headers.get('accept') ?? undefined, ctx.request.headers.get('authorization') ?? undefined)) {
+        return open(() => setupPageFor(ctx, connector));
+      }
+      return open(() => guideText(ctx, agentGuide(ctx.base, connector)));
+    }
+    return checked(() => handleMcp(ctx, { kind: 'connector', deviceId: connector }), true);
+  }
 
   if (pathname.startsWith('/.well-known/')) {
     const deviceId = deviceIdFromMetadataPath(pathname, ctx.cfg.prefix);
@@ -209,6 +248,10 @@ function match(ctx: Ctx, pathname: string): { policy: OriginPolicy; rpc: boolean
       return open(() => handleRegister(ctx));
     case '/oauth/token':
       return open(() => handleToken(ctx));
+    case DEVICE_AUTHORIZATION_PATH:
+      return open(() => handleDeviceAuthorization(ctx));
+    case LLMS_TXT_PATH:
+      return open(() => methodNotAllowed(ctx.method, 'GET, HEAD') ?? guideText(ctx, llmsTxt(ctx.base)));
     case '/oauth/authorize':
       return pageRoute(() => handleAuthorize(ctx));
     case SETUP_PATH:
@@ -235,11 +278,19 @@ function notFound(): Response {
 }
 
 function bannerText(ctx: Ctx): Response {
-  return respond(
-    200,
-    `DroidHands relay.\nSet up a phone: ${ctx.base}${SETUP_PATH}\nAI apps connect to the connection URL shown in the DroidHands app (${ctx.base}/d/<deviceId>/mcp).\n`,
-    { 'Content-Type': 'text/plain; charset=utf-8' },
-  );
+  return respond(200, relayBanner(ctx.base), { 'Content-Type': 'text/plain; charset=utf-8' });
+}
+
+/** The agent guide or llms.txt (§5.7). */
+function setupPageFor(ctx: Ctx, deviceId: string): Response {
+  if (!admit(ctx).allowed) return json(429, { error: 'rate_limited' });
+  return page(200, connectorSetupPage(connectorUrl(ctx.base, deviceId), agentGuide(ctx.base, deviceId)));
+}
+
+function guideText(ctx: Ctx, body: string): Response {
+  if (!admit(ctx).allowed) return json(429, { error: 'rate_limited' });
+  const type = agentGuideContentType(ctx.request.headers.get('accept') ?? undefined);
+  return respond(200, ctx.method === 'HEAD' ? null : body, { 'Content-Type': type });
 }
 
 function admit(ctx: Ctx): RateDecision {
@@ -325,13 +376,6 @@ async function handleMcp(ctx: Ctx, route: McpRoute): Promise<Response> {
 
   const decision = admit(ctx);
   if (!decision.allowed) return error(429, 'Too many requests', { 'Retry-After': String(decision.retryAfterSec) });
-  // The connection URL opened in a browser: its setup page instead of an error.
-  if (
-    route.kind === 'connector' &&
-    wantsSetupPage(ctx.method, ctx.request.headers.get('accept') ?? undefined, ctx.request.headers.get('authorization') ?? undefined)
-  ) {
-    return done(page(200, connectorSetupPage(connectorUrl(ctx.base, route.deviceId))));
-  }
   if (ctx.method !== 'POST') return error(405, 'Method not allowed; use POST', { Allow: 'POST' });
 
   const credential =
@@ -549,14 +593,17 @@ async function handleToken(ctx: Ctx): Promise<Response> {
   }
   const decision = admit(ctx);
   if (!decision.allowed) return tooManyJson(decision, headers);
-  const contentType = ctx.request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
-  if (contentType !== 'application/x-www-form-urlencoded') {
-    return fail('invalid_request', 'the body must be application/x-www-form-urlencoded');
-  }
+  const contentType = ctx.request.headers.get('content-type') ?? undefined;
+  if (!isTokenContentType(contentType)) return fail('invalid_request', TOKEN_CONTENT_TYPE_DESCRIPTION);
   const body = await readBody(ctx.request, MAX_TOKEN_BODY_BYTES);
   if (body.kind === 'too_large') return json(413, { error: 'invalid_request', error_description: 'request too large' }, headers);
 
-  const params = new URLSearchParams(body.body);
+  const params = bodyParams(contentType, body.body);
+  if (params === null) return fail('invalid_request', 'the body is not valid JSON');
+  if (params.getAll('grant_type').length === 1 && params.get('grant_type') === DEVICE_CODE_GRANT) {
+    return redeemDeviceCode(ctx, params, headers, rejectAuth);
+  }
+  if (!isFormContentType(contentType)) return fail('invalid_request', FORM_ONLY_DESCRIPTION);
   const checked = checkTokenRequest(params, ctx.request.headers.get('authorization') ?? undefined, ctx.cfg.relaySecret);
   if (!checked.ok) return checked.authFailure ? rejectAuth(checked.error, checked.description) : fail(checked.error, checked.description);
 
@@ -580,6 +627,75 @@ async function handleToken(ctx: Ctx): Promise<Response> {
   }
   if (!result.ok) return rejectAuth(result.error, result.description, result.deviceId);
   ctx.logger.info('token issued', { device: deviceTag(result.deviceId), ip: ctx.ip });
+  return respond(200, result.body, { ...headers, 'Content-Type': 'application/json' });
+}
+
+// ---- agent sign-in (§5.6; mirrors relay/src/oauth/deviceRoutes.ts and tokenRoute.ts) ------------
+
+function deviceError(error: DeviceFlowError, headers: Record<string, string> = {}): Response {
+  return json(error.status, { error: error.error, error_description: error.description }, headers);
+}
+
+async function handleDeviceAuthorization(ctx: Ctx): Promise<Response> {
+  const cors = openCors(ctx, 'POST');
+  if (cors.preflight !== null) return cors.preflight;
+  if (ctx.method !== 'POST') {
+    return json(405, { error: 'invalid_request', error_description: 'use POST' }, { ...cors.headers, Allow: 'POST, OPTIONS' });
+  }
+  const decision = admit(ctx);
+  if (!decision.allowed) {
+    return json(
+      429,
+      { error: 'slow_down', error_description: 'too many requests; retry later' },
+      { ...cors.headers, 'Retry-After': String(decision.retryAfterSec) },
+    );
+  }
+  const body = await readBody(ctx.request, MAX_DEVICE_AUTHORIZATION_BODY_BYTES);
+  if (body.kind === 'too_large') return json(413, { error: 'invalid_request', error_description: 'request too large' }, cors.headers);
+  const params = bodyParams(ctx.request.headers.get('content-type') ?? undefined, body.body);
+  if (params === null) return deviceError(BODY_ERROR, cors.headers);
+  const checked = checkDeviceAuthorization(params, ctx.base, ctx.cfg.relaySecret);
+  if (!checked.ok) return deviceError(checked, cors.headers);
+
+  let result: AuthorizeResult;
+  try {
+    result = await stub(ctx, checked.deviceId).authorize(deviceAuthorizationRequest(checked.deviceId, checked.clientName, ctx.base), {
+      ipKey: ctx.ipKey,
+      remoteAddress: ctx.ip,
+      userAgent: cleanUserAgent(ctx.request.headers.get('user-agent') ?? undefined),
+    });
+  } catch (err) {
+    objectFailed(ctx, checked.deviceId, err);
+    return json(503, { error: 'temporarily_unavailable', error_description: 'the relay restarted; try again' }, { ...cors.headers, 'Retry-After': '1' });
+  }
+  if (result.kind === 'offline') return deviceError(DEVICE_OFFLINE_ERROR, { ...cors.headers, 'Retry-After': '30' });
+  if (result.kind === 'failure') return deviceError(deviceCreateFailure(result.reason), cors.headers);
+  return json(200, deviceAuthorizationResponse(result.pairing, ctx.base, Date.now()), cors.headers);
+}
+
+async function redeemDeviceCode(
+  ctx: Ctx,
+  params: URLSearchParams,
+  headers: Record<string, string>,
+  rejectAuth: (error: string, description: string, deviceId?: string | null) => Response,
+): Promise<Response> {
+  const checked = checkDeviceTokenRequest(params);
+  if (!checked.ok) return checked.authFailure ? rejectAuth(checked.error, checked.description) : deviceError(checked, headers);
+  // Page tokens issued by this relay start with the device id (see DeviceObject).
+  const deviceId = checked.pageToken.slice(0, 26);
+  if (!DEVICE_ID_REGEX.test(deviceId)) return rejectAuth('invalid_grant', 'the device_code is invalid or was already used');
+  let result: RedeemOutcome;
+  try {
+    result = await stub(ctx, deviceId).redeem(checked.id, checked.pageToken);
+  } catch (err) {
+    objectFailed(ctx, deviceId, err);
+    return json(503, { error: 'temporarily_unavailable', error_description: 'the relay restarted; poll again' }, { ...headers, 'Retry-After': '1' });
+  }
+  if (!result.ok) {
+    if (result.authFailure) return rejectAuth(result.error.error, result.error.description, deviceId);
+    return deviceError(result.error, headers);
+  }
+  ctx.logger.info('token issued', { device: deviceTag(result.deviceId), ip: ctx.ip, flow: 'device' });
   return respond(200, result.body, { ...headers, 'Content-Type': 'application/json' });
 }
 

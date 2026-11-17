@@ -9,6 +9,9 @@ import { PAIR_STATUS_PREFIX, handleAuthorize, handlePairStatus } from './oauth/a
 import { handleRegister, handleResourceMetadata, handleServerMetadata } from './oauth/discoveryRoutes.js';
 import { CONNECTOR_PATH_REGEX, deviceIdFromMetadataPath, isAuthorizationServerMetadataPath } from './oauth/metadata.js';
 import { handleToken } from './oauth/tokenRoute.js';
+import { LLMS_TXT_PATH, bannerText, wantsAgentGuide } from './agentGuide.js';
+import { DEVICE_AUTHORIZATION_PATH } from './oauth/deviceFlow.js';
+import { handleAgentGuide, handleDeviceAuthorization, handleLlmsTxt } from './oauth/deviceRoutes.js';
 import { DEVICE_WS_PATH } from './protocol.js';
 import { APK_PATH, SETUP_QR_PATH, handleApkDownload, handleSetupPage, handleSetupQr } from './setup/setupRoutes.js';
 import { SETUP_PATH } from './setup/setupUrl.js';
@@ -55,7 +58,7 @@ async function handle(deps: HttpDeps, prefix: string, req: IncomingMessage, res:
 
   const url = requestUrl(req.url);
   if (url === null) return sendText(res, 400, 'Bad Request\n');
-  const route = matchRoute(deps, url.pathname, prefix);
+  const route = matchRoute(deps, url.pathname, prefix, req);
 
   const origin = headerValue(req, 'origin');
   if (route.origin === 'checked' && origin !== undefined && !isOriginAllowed(origin, deps.config.allowedOrigins)) {
@@ -65,7 +68,7 @@ async function handle(deps: HttpDeps, prefix: string, req: IncomingMessage, res:
   return route.handle(deps, req, res, url);
 }
 
-function matchRoute(deps: HttpDeps, pathname: string, prefix: string): Route {
+function matchRoute(deps: HttpDeps, pathname: string, prefix: string, req: IncomingMessage): Route {
   const mcp = (route: McpRoute): Route => ({ origin: 'checked', rpc: true, handle: (d, q, r) => handleMcp(d, q, r, route) });
 
   if (pathname === '/mcp' || pathname === '/mcp/') return mcp({ kind: 'token', pathToken: null });
@@ -75,7 +78,13 @@ function matchRoute(deps: HttpDeps, pathname: string, prefix: string): Route {
     return mcp({ kind: 'token', pathToken: segment });
   }
   const connector = CONNECTOR_PATH_REGEX.exec(pathname)?.[1];
-  if (connector !== undefined) return mcp({ kind: 'connector', deviceId: connector });
+  if (connector !== undefined) {
+    // People and agents who open the connection URL get instructions (§5.7); MCP clients POST.
+    if (wantsAgentGuide(req.method ?? '', headerValue(req, 'accept'))) {
+      return { origin: 'open', handle: (d, q, r) => handleAgentGuide(d, q, r, connector) };
+    }
+    return mcp({ kind: 'connector', deviceId: connector });
+  }
 
   if (pathname.startsWith('/.well-known/')) {
     const deviceId = deviceIdFromMetadataPath(pathname, prefix);
@@ -93,6 +102,10 @@ function matchRoute(deps: HttpDeps, pathname: string, prefix: string): Route {
       return { origin: 'open', handle: handleRegister };
     case '/oauth/token':
       return { origin: 'open', handle: handleToken };
+    case DEVICE_AUTHORIZATION_PATH:
+      return { origin: 'open', handle: handleDeviceAuthorization };
+    case LLMS_TXT_PATH:
+      return { origin: 'open', handle: handleLlmsTxt };
     case '/oauth/authorize':
       return { origin: 'page', handle: handleAuthorize };
     case SETUP_PATH:
@@ -125,7 +138,7 @@ function banner(deps: HttpDeps, req: IncomingMessage, res: ServerResponse): void
     res,
     200,
     'text/plain; charset=utf-8',
-    `DroidHands relay.\nSet up a phone: ${base}${SETUP_PATH}\nAI apps connect to the connection URL shown in the DroidHands app (${base}/d/<deviceId>/mcp).\n`,
+    bannerText(base),
   );
 }
 

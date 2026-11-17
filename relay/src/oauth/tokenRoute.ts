@@ -6,13 +6,15 @@ import { applyOpenCors, sendJson } from '../httpUtil.js';
 import { deviceTag } from '../logger.js';
 import { headerValue } from '../net.js';
 import { decodeClientId } from './clientRegistration.js';
+import { DEVICE_CODE_GRANT, bodyParams, checkDeviceTokenRequest, deviceTokenError } from './deviceFlow.js';
 import { OAUTH_SCOPE, deviceIdFromResource } from './metadata.js';
 import type { CodeGrant } from './pairingStore.js';
 import { verifyPkce } from './pkce.js';
 
 /**
  * `POST /oauth/token` (docs/PROTOCOL.md §5.4): exchanges a one-time authorization code for the
- * token the phone issued. Errors follow RFC 6749 §5.2 with status 400.
+ * token the phone issued, or, for agent sign-in (§5.6), a device code once the phone approved it.
+ * Errors follow RFC 6749 §5.2 (and RFC 8628 §3.5) with status 400.
  */
 
 /** Token requests are a handful of short parameters. */
@@ -56,7 +58,7 @@ export function checkTokenRequest(
   const grantType = params.get('grant_type');
   if (grantType === null) return fail('invalid_request', 'grant_type is required');
   if (grantType !== 'authorization_code') {
-    return fail('unsupported_grant_type', 'only authorization_code is supported; to reconnect, authorize again');
+    return fail('unsupported_grant_type', `only authorization_code and ${DEVICE_CODE_GRANT} are supported; to reconnect, authorize again`);
   }
   const clientId = requestClientId(params, authorization);
   const code = params.get('code');
@@ -89,10 +91,8 @@ export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: Ser
     res.setHeader('Retry-After', String(decision.retryAfterSec));
     return sendJson(res, 429, { error: 'invalid_request', error_description: 'too many requests; retry later' });
   }
-  const contentType = headerValue(req, 'content-type')?.split(';')[0]?.trim().toLowerCase();
-  if (contentType !== 'application/x-www-form-urlencoded') {
-    return fail(res, 'invalid_request', 'the body must be application/x-www-form-urlencoded');
-  }
+  const contentType = headerValue(req, 'content-type');
+  if (!isTokenContentType(contentType)) return fail(res, 'invalid_request', TOKEN_CONTENT_TYPE_DESCRIPTION);
   const body = await readBody(req, MAX_TOKEN_BODY_BYTES);
   if (body.kind === 'aborted') return;
   if (body.kind === 'too_large') {
@@ -100,7 +100,12 @@ export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: Ser
     return sendJson(res, 413, { error: 'invalid_request', error_description: 'request too large' });
   }
 
-  const params = new URLSearchParams(body.body);
+  const params = bodyParams(contentType, body.body);
+  if (params === null) return fail(res, 'invalid_request', 'the body is not valid JSON');
+  if (params.getAll('grant_type').length === 1 && params.get('grant_type') === DEVICE_CODE_GRANT) {
+    return redeemDeviceCode(deps, res, client, params);
+  }
+  if (!isFormContentType(contentType)) return fail(res, 'invalid_request', FORM_ONLY_DESCRIPTION);
   const checked = checkTokenRequest(params, headerValue(req, 'authorization'), deps.relaySecret);
   if (!checked.ok) {
     return checked.authFailure
@@ -125,6 +130,48 @@ export async function handleToken(deps: HttpDeps, req: IncomingMessage, res: Ser
   // pair_complete only once the response has been handed to the network; abandoned otherwise.
   res.once('close', () => deps.pairings.finishExchange(grant, res.writableFinished));
   deps.logger.info('token issued', { device: deviceTag(grant.deviceId), ip: client.ip });
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Length', String(Buffer.byteLength(payload)));
+  res.end(payload);
+}
+
+/**
+ * Form-encoded (RFC 6749), or JSON for the device-code grant of agents writing requests by hand
+ * (§5.6). Anything else is refused before the body is read.
+ */
+export function isTokenContentType(contentType: string | undefined): boolean {
+  const type = contentType?.split(';')[0]?.trim().toLowerCase();
+  return type === 'application/x-www-form-urlencoded' || type === 'application/json';
+}
+
+export const TOKEN_CONTENT_TYPE_DESCRIPTION =
+  'the body must be application/x-www-form-urlencoded (JSON is accepted for the device_code grant)';
+
+/** The authorization code grant keeps to RFC 6749's form encoding; only agent sign-in takes JSON. */
+export function isFormContentType(contentType: string | undefined): boolean {
+  return contentType?.split(';')[0]?.trim().toLowerCase() === 'application/x-www-form-urlencoded';
+}
+
+export const FORM_ONLY_DESCRIPTION = 'the body must be application/x-www-form-urlencoded';
+
+/** The device-code grant (§5.6 step 3): the token once the phone approved, else an RFC 8628 error. */
+function redeemDeviceCode(deps: HttpDeps, res: ServerResponse, client: ClientInfo, params: URLSearchParams): void {
+  const checked = checkDeviceTokenRequest(params);
+  if (!checked.ok) {
+    return checked.authFailure ? rejectAuth(deps, res, client, 'invalid_grant', checked.description) : fail(res, 'invalid_request', checked.description);
+  }
+  const result = deps.pairings.redeem(checked.id, checked.pageToken);
+  if (result.status !== 'approved') {
+    const error = deviceTokenError(result);
+    if (result.status === 'invalid') return rejectAuth(deps, res, client, 'invalid_grant', error.description);
+    return sendJson(res, error.status, { error: error.error, error_description: error.description });
+  }
+  const { grant } = result;
+  const payload = tokenResponseBody(grant);
+  grant.accessToken = '';
+  res.once('close', () => deps.pairings.finishExchange(grant, res.writableFinished));
+  deps.logger.info('token issued', { device: deviceTag(grant.deviceId), ip: client.ip, flow: 'device' });
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Length', String(Buffer.byteLength(payload)));

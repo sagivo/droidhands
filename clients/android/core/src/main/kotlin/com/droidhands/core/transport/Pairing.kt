@@ -9,9 +9,12 @@ data class PairingRequest(
     val id: String,
     /** Registered OAuth client_name (sanitized by the relay or local server), e.g. "Claude". */
     val clientName: String,
-    /** Host of the OAuth redirect URI, e.g. "claude.ai" or "localhost:33418". */
+    /**
+     * Host of the OAuth redirect URI, e.g. "claude.ai" or "localhost:33418". For [viaAgent] requests
+     * there is no website: the relay sends the placeholder "agent sign-in", which isn't shown as a host.
+     */
     val redirectHost: String,
-    /** 4-char code also shown in the user's browser. */
+    /** 4-char code also shown in the user's browser, or by the agent in chat when [viaAgent]. */
     val displayCode: String,
     val remoteAddress: String?,
     val userAgent: String?,
@@ -23,6 +26,12 @@ data class PairingRequest(
      * cancelled, so compare it with the local clock for countdowns and expiry checks.
      */
     val expiresAt: Long,
+    /**
+     * True for an agent sign-in (`"flow":"device"`, OAuth device authorization, docs/PROTOCOL.md §5.3):
+     * the agent started it without a browser and showed the user the code in its chat. False for the
+     * browser flow (relay or local server).
+     */
+    val viaAgent: Boolean = false,
 )
 
 sealed interface PairingDecision {

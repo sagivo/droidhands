@@ -178,8 +178,12 @@ internal object RelayProtocol {
             remoteAddress = displayText(frame.string("remoteAddress"), MAX_DETAIL),
             userAgent = displayText(frame.string("userAgent"), MAX_DETAIL),
             expiresAt = frame.long("expiresAt") ?: (now + DEFAULT_PAIRING_TTL_MS),
+            viaAgent = frame.string("flow") == FLOW_DEVICE,
         )
     }
+
+    /** `pair_request.flow` of an agent sign-in (OAuth device authorization); absent for the browser flow. */
+    const val FLOW_DEVICE = "device"
 
     /** Denial reasons the relay understands; anything else is sent as "denied". */
     val PAIR_DENIAL_REASONS = setOf("denied", "timeout", "busy")

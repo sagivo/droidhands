@@ -178,7 +178,7 @@ class PairingCoordinator(
                 confirmPolicy = grant.confirmPolicy,
                 ttlMillis = null,
                 origin = ORIGIN_PAIRING,
-                clientHost = request.redirectHost,
+                clientHost = PairingPresentation.clientHost(request),
                 appPolicy = grant.appPolicy,
                 maxRisk = grant.maxRisk,
             )

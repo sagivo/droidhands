@@ -67,17 +67,22 @@ agent:
 |---|---|
 | Claude (claude.ai, Desktop, mobile) | Tap **Add to Claude**. Claude opens with DroidHands filled in: tap *Add*, then *Connect*. |
 | ChatGPT | Tap **Copy URL and open ChatGPT**, turn on *Developer mode* under *Advanced*, then *Create*, paste, choose OAuth. |
+| Grok (grok.com, Grok apps; paid plans) | Tap **Copy URL and open Grok**, then *New Connector* › *Custom*, paste, *Connect*. In Grok Bot, add a custom MCP server with the URL. |
 | Claude Code | Copy (or **Share** to your computer) `claude mcp add --transport http phone <URL>`, then `/mcp` › *Authenticate*. |
 | Codex | `codex mcp add phone --url <URL>`. Sign-in opens in the browser (or `codex mcp login phone`). |
 | Gemini CLI | `gemini mcp add --transport http -s user phone <URL>`, then `/mcp auth phone`. |
+| Muse (Meta), Instinct, other chat agents | **Send to your agent**: *"Connect to my phone with DroidHands. Open this link for instructions: \<URL\>"* |
 | Any other MCP client | Add a Streamable-HTTP server with your connection URL (OAuth sign-in). |
 
 Setting up on a computer? Share the connection URL to it and open it there: the page has the same
 one-click buttons and commands (plus **Add to Cursor**).
 
-Your browser opens a page saying **"Tap Allow on your phone"** with a 4-letter code. If DroidHands
-is open, the approval screen appears by itself; otherwise tap the notification. Check that the code
-matches and choose what the agent gets (**Give Claude access**):
+Agents with connector settings open a browser page saying **"Tap Allow on your phone"** with a
+4-letter code. Agents you chat or text with (Muse, Instinct) have no connector settings: they open the
+link, which tells them how to sign in by themselves ([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)),
+and reply with the 4-letter code. If DroidHands is open, the approval screen appears by itself;
+otherwise tap the notification. Check that the code matches and choose what the agent gets
+(**Give Claude access**):
 
 * **Everything**: every app and everything DroidHands can do, without asking you first.
 * **Only what I choose**: *All apps* or just the apps you pick, and what it can do (read messages
