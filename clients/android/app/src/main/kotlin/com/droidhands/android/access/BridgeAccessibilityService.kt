@@ -143,6 +143,20 @@ class BridgeAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * Title (usually the app name) of the active app window when Android withholds its content from this service,
+     * e.g. a screen the app marks accessibility-data-sensitive; null when it is readable or there is none. Blocking IPC.
+     */
+    fun withheldActiveAppTitle(): String? {
+        val active = try {
+            windows.orEmpty().firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION && (it.isActive || it.isFocused) }
+        } catch (e: RuntimeException) {
+            null
+        } ?: return null
+        val root = try { active.root } catch (e: RuntimeException) { null }
+        return if (root == null) active.title?.toString()?.ifBlank { null } ?: "the app in front" else null
+    }
+
+    /**
      * Every window on the default display, top-most first, including those whose content Android withholds from this
      * service (null root), for fail-closed hit-testing. Falls back to [getRootInActiveWindow]. Blocking IPC.
      */

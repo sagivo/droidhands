@@ -24,6 +24,16 @@ class NodeQueriesTest {
     }
 
     @Test
+    fun `an empty field matches by the hint it shows, a filled one by its text only`() {
+        val subject = UiNode(hint = "Subject", editable = true, clickable = true, viewId = "subject")
+        val filled = UiNode(text = "Lunch", hint = "Search", editable = true, clickable = true)
+        val root = group(subject, filled)
+        assertSame(subject, (NodeQueries.resolveTapText(listOf(root), "Subject") as TextTarget.Found).node)
+        assertEquals(listOf(subject), NodeQueries.find(listOf(root), FindCriteria(text = "subj")))
+        assertEquals(emptyList<UiNode>(), NodeQueries.find(listOf(root), FindCriteria(text = "Search")))
+    }
+
+    @Test
     fun `content description matches and case and bidi marks are ignored`() {
         val icon = UiNode(description = "‪Tania Cohen‬", className = "android.widget.ImageView", clickable = true)
         val result = NodeQueries.resolveTapText(listOf(group(icon)), "  TANIA   cohen ")

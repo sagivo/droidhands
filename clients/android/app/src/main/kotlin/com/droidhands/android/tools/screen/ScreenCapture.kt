@@ -31,6 +31,8 @@ class ScreenState(
     val ownContentHidden: Boolean = false,
     /** Some text was masked because the user hides one-time codes. */
     val codesHidden: Boolean = false,
+    /** Title of the app window in front when Android withholds its content (see [BridgeAccessibilityService.withheldActiveAppTitle]). */
+    val withheldWindow: String? = null,
 ) {
     /** Roots of the readable windows (DroidHands's own windows excluded). */
     val roots: List<UiNode> get() = WindowSelection.roots(windows)
@@ -44,9 +46,15 @@ class ScreenState(
             if (omittedWindows > 0) add("($omittedWindows window(s) of apps blocked for this agent are not shown)")
             if (ownContentHidden) add(OWN_CONTENT_NOTE)
             if (codesHidden) add(CODES_NOTE)
+            withheldWindow?.let { add(withheldNote(it)) }
         }
 
     companion object {
+        /** The app in front hides its screen: neither screen_read nor ui_* tools can see or operate it. */
+        fun withheldNote(title: String) =
+            "(\"$title\", the window in front, hides its content from accessibility services, so it can't be read or operated " +
+                "here. The app may allow the same task from another of its screens; otherwise ask the user to do this step.)"
+
         const val OWN_CONTENT_NOTE = "(DroidHands's own notifications are not shown to agents)"
 
         const val CODES_NOTE =
@@ -101,6 +109,7 @@ object ScreenCapture {
             omittedWindows = readable.size - allowed.size + filtered.omitted,
             ownContentHidden = withoutOwn.size != captured.size || withoutOwn.indices.any { withoutOwn[it] !== captured[it] },
             codesHidden = shown.indices.any { shown[it] !== filtered.windows[it] },
+            withheldWindow = service.withheldActiveAppTitle(),
         )
     }
 

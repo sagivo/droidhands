@@ -1,6 +1,9 @@
 package com.droidhands.android.access
 
-/** screen_find criteria. Text and description match "contains", view id matches exactly (full or short id). */
+/**
+ * screen_find criteria. Text (or, on an empty field, the hint it shows) and description match "contains", view id
+ * matches exactly (full or short id).
+ */
 data class FindCriteria(
     val text: String? = null,
     val viewId: String? = null,
@@ -50,7 +53,7 @@ object NodeQueries {
         val descKey = criteria.description?.let(TextNorm::key)?.takeIf { it.isNotEmpty() }
         val idKey = criteria.viewId?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         return visibleNodes(roots).filter { n ->
-            (textKey == null || TextNorm.key(n.text).contains(textKey)) &&
+            (textKey == null || TextNorm.key(n.text).contains(textKey) || TextNorm.key(shownHint(n)).contains(textKey)) &&
                 (descKey == null || TextNorm.key(n.description).contains(descKey)) &&
                 (idKey == null || idMatches(n, idKey)) &&
                 (!criteria.clickableOnly || clickTarget(n) != null || longClickTarget(n) != null)
@@ -62,9 +65,16 @@ object NodeQueries {
         return full == idKey || n.shortId?.lowercase() == idKey || (idKey.startsWith(":id/") && full.endsWith(idKey))
     }
 
-    /** Best match level of [node]'s text or content description against [queryKey]. */
-    fun textLevel(node: UiNode, queryKey: String): MatchLevel =
-        maxOf(matchLevel(queryKey, TextNorm.key(node.text)), matchLevel(queryKey, TextNorm.key(node.description)))
+    /** Best match level of [node]'s text, shown hint or content description against [queryKey]. */
+    fun textLevel(node: UiNode, queryKey: String): MatchLevel = maxOf(
+        matchLevel(queryKey, TextNorm.key(node.text)),
+        matchLevel(queryKey, TextNorm.key(shownHint(node))),
+        matchLevel(queryKey, TextNorm.key(node.description)),
+    )
+
+    /** The hint of an empty field: what the user sees in it (e.g. "Subject", "Search"); null otherwise. */
+    fun shownHint(node: UiNode): String? =
+        node.hint?.takeIf { node.editable && it.isNotBlank() && (node.text.isNullOrEmpty() || node.text == node.hint) }
 
     /**
      * Resolves `ui_tap(text=...)`: exact > starts-with > contains on text or description
