@@ -46,7 +46,7 @@ class ConnectLogicTest {
             assertTrue(guide.steps.none { it.contains("browser") })
         }
         assertTrue(ClientInstructions.guide(AgentClient.INSTINCT, url).steps.single().contains("4-letter code"))
-        assertTrue(ClientInstructions.guide(AgentClient.MUSE, url).steps.any { it.contains("Client ID, type droidhands") })
+        assertTrue(ClientInstructions.guide(AgentClient.MUSE, url).steps.any { it.contains("Client ID, paste it (droidhands") })
         assertTrue(ClientInstructions.guide(AgentClient.GROK_BOT, url).steps.any { it.contains("Authorize") })
         assertTrue(ClientInstructions.guide(AgentClient.OTHER, url).note.orEmpty().contains("chat"))
         assertFalse(ClientInstructions.guide(AgentClient.CLAUDE, url).viaChat)

@@ -34,7 +34,8 @@ class AgentAppsTest {
     @Test
     fun chatAgentsGetTheMessageInTheirOwnApp() {
         listOf(AgentClient.MUSE to "com.facebook.aura", AgentClient.GROK_BOT to "ai.x.grok.bot").forEach { (client, packageName) ->
-            assertEquals(OneTap.Send(packageName, ClientInstructions.agentMessage(url)), tap(client))
+            val clientId = if (client == AgentClient.MUSE) "droidhands" else null
+            assertEquals(OneTap.Send(packageName, ClientInstructions.agentMessage(url), clientId), tap(client))
             assertEquals("Opens ${client.label} with a message to send", AgentApps.summary(app(client), tap(client)!!))
         }
     }

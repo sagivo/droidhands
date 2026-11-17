@@ -1,6 +1,7 @@
 package com.droidhands.android.ui.connect
 
 import com.droidhands.android.ui.tokens.ConnectionSnippets
+import com.droidhands.core.oauth.OAuthClients
 import java.net.URLEncoder
 
 /** AI agents with tailored setup on the Connect page (chip order: most used first; Other stays last). */
@@ -38,6 +39,8 @@ data class ClientGuide(
     val command: String? = null,
     val message: String? = null,
     val note: String? = null,
+    /** A client ID the agent's own screen asks for: put on the clipboard when its app opens, so it's a paste. */
+    val clientId: String? = null,
 ) {
     /** True when the agent signs in from its chat and shows the code there, not in a browser. */
     val viaChat: Boolean get() = message != null
@@ -87,9 +90,10 @@ object ClientInstructions {
             client = client,
             appliesTo = "Meta Muse, in chat",
             message = agentMessage(url),
+            clientId = OAuthClients.PUBLIC_CLIENT_ID,
             steps = listOf(
                 "Send the message to Muse, then tap Connect on the card it shows.",
-                "If Muse asks for a Client ID, type droidhands. Tap Add.",
+                "If Muse asks for a Client ID, paste it (droidhands is copied). Tap Add.",
             ),
         )
         AgentClient.GROK_BOT -> ClientGuide(

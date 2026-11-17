@@ -62,7 +62,7 @@ internal fun AgentAppsSection(
                     // Every row has an "Add": TalkBack says which agent it adds to.
                     SecondaryButton("Add", modifier = Modifier.semantics { contentDescription = "Add to $label" }, onClick = {
                         val opened = when (tap) {
-                            is OneTap.Send -> when (AgentAppIntents.send(context, tap.packageName, tap.message)) {
+                            is OneTap.Send -> when (AgentAppIntents.send(context, tap.packageName, tap.message, tap.clientId)) {
                                 AgentAppIntents.Sent.IN_CHAT -> true
                                 // A toast, since the user is in the agent's app by now.
                                 AgentAppIntents.Sent.COPIED -> true.also {

@@ -11,7 +11,7 @@ sealed interface OneTap {
     data class Open(val link: OpenLink) : OneTap
 
     /** Opens the agent's app ([packageName]) with [message] in its chat, ready to send. */
-    data class Send(val packageName: String, val message: String) : OneTap
+    data class Send(val packageName: String, val message: String, val clientId: String? = null) : OneTap
 }
 
 /** Pure part of "Agents on this phone" (unit-tested); the PackageManager side is [AgentAppIntents]. */
@@ -36,7 +36,7 @@ internal object AgentApps {
      * DroidHands from the chat); the others open their setup link. Null when the guide has neither.
      */
     fun oneTap(app: AgentApp, guide: ClientGuide): OneTap? = when {
-        guide.message != null -> OneTap.Send(app.packageName, guide.message)
+        guide.message != null -> OneTap.Send(app.packageName, guide.message, guide.clientId)
         guide.open != null -> OneTap.Open(guide.open)
         else -> null
     }

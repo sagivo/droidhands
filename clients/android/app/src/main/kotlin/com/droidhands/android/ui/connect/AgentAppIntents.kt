@@ -30,12 +30,15 @@ internal object AgentAppIntents {
      * Opens [packageName] with [text] ready to send in its chat: a share to that app only, no share sheet.
      * Apps that don't take shared text open with [text] on the clipboard instead.
      */
-    fun send(context: Context, packageName: String, text: String): Sent {
+    fun send(context: Context, packageName: String, text: String, clientId: String? = null): Sent {
         val share = Intent(Intent.ACTION_SEND)
             .setType("text/plain")
             .putExtra(Intent.EXTRA_TEXT, text)
             .setPackage(packageName)
-        if (SystemIntents.launch(context, share)) return Sent.IN_CHAT
+        if (SystemIntents.launch(context, share)) {
+            clientId?.let { Clipboard.copy(context, "Client ID", it, false) }
+            return Sent.IN_CHAT
+        }
         val open = SystemIntents.openApp(context, packageName) ?: return Sent.FAILED
         Clipboard.copy(context, "Message", text, false)
         return if (SystemIntents.launch(context, open)) Sent.COPIED else Sent.FAILED
