@@ -282,6 +282,18 @@ test('tunnel: GET → 405 Allow: POST; a body over MAX_BODY_BYTES → 413', asyn
   assert.equal(await d.noFrame('request'), true);
 });
 
+test('tunnel: a browser visit of the connection URL gets its setup page; MCP GETs still get 405', async () => {
+  const url = connectorUrl(newIdentity().deviceId);
+  const browser = 'text/html,application/xhtml+xml,*/*;q=0.8';
+  const page = await http(url, { headers: { accept: browser } });
+  assert.equal(page.status, 200);
+  assert.match(String(page.headers['content-type']), /^text\/html/);
+  assert.ok(page.body.includes(`connectorUrl=${encodeURIComponent(url)}`), 'Add to Claude link');
+  assert.ok(page.body.includes(`claude mcp add --transport http phone ${url}`), 'Claude Code command');
+  const sse = await http(url, { headers: { accept: 'text/event-stream' } });
+  assert.equal(sse.status, 405);
+});
+
 test('keepalive: hb → hb_ack, ping → pong with the same t', async (t) => {
   const d = await device(t);
   d.send('{"type":"hb"}');

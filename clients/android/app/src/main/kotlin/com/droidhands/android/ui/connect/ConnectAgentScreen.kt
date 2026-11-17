@@ -36,8 +36,7 @@ fun ConnectAgentScreen(main: MainViewModel, actions: ConnectActions) {
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                "Paste your connection URL into the agent, then tap Allow when this phone asks. You choose what each " +
-                    "agent may do, and can revoke it anytime.",
+                "Add DroidHands to your agent, then tap Allow here. You choose what it may do, and can revoke it anytime.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = CardPadding),

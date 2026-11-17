@@ -19,14 +19,10 @@ object GrantPresentation {
     fun title(agentName: String): String = "Give ${agentName.trim().ifEmpty { "this agent" }} access"
 
     const val EVERYTHING = "Everything"
-    const val EVERYTHING_DESCRIPTION =
-        "Every app, and everything DroidHands can do: read and send messages, make calls, see the screen, tap and type. " +
-            "It acts without asking you first."
+    const val EVERYTHING_DESCRIPTION = "Every app and ability: messages, calls, the screen. It acts without asking you first."
 
     const val CHOSEN = "Only what I choose"
-    const val CHOSEN_DESCRIPTION =
-        "Pick the apps and what it can do. Inside that it acts without asking you; anything else is refused. " +
-            "Best for agents you don't fully trust."
+    const val CHOSEN_DESCRIPTION = "Pick apps and abilities; anything else is refused. Best for agents you don't fully trust."
 
     const val APPS_HEADER = "Apps"
     const val ALL_APPS = "All apps"
@@ -35,16 +31,16 @@ object GrantPresentation {
     const val ABILITIES_HEADER = "What it can do"
 
     const val ASK_SWITCH = "Ask me before it sends messages, calls or pays"
-    const val ASK_SWITCH_OFF = "Off: it never asks. Turn on to approve those on the phone; everything else still runs without asking."
-    const val ASK_SWITCH_ON = "You approve sending messages, calls, payments and other sensitive actions on the phone. Everything else runs without asking."
+    const val ASK_SWITCH_OFF = "Off: it never asks."
+    const val ASK_SWITCH_ON = "You approve those on this phone. Everything else runs without asking."
 
     const val CHANGE_NEVER_ALLOW = "Change list"
 
     /** The never-allow line: these apps stay blocked even with Everything. */
     fun neverAllowLine(count: Int): String = when (count) {
         0 -> "Your never-allow list is empty, so Everything includes banking and password apps."
-        1 -> "1 app on your never-allow list (like banking or password apps) stays off-limits, even with Everything."
-        else -> "$count apps on your never-allow list (like banking and password apps) stay off-limits, even with Everything."
+        1 -> "1 app on your never-allow list stays off-limits, even with Everything."
+        else -> "$count apps on your never-allow list stay off-limits, even with Everything."
     }
 
     /** "Allowed: WhatsApp, Gmail +2", or a nudge when none are chosen. */

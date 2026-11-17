@@ -20,20 +20,23 @@ data class PairingChoice(
 
 /** Pure text for the pairing prompt (notification, [PairingActivity], Home card). */
 object PairingPresentation {
-    const val CODE_HINT = "Make sure your browser shows the same code."
+    const val CODE_HINT = "Same code in your browser?"
 
-    const val ALLOW_HINT = "Only allow if you just started connecting this agent yourself."
+    const val ALLOW_HINT = "Only allow it if you started this yourself."
 
-    /** "Claude (claude.ai) wants to connect · code K7Q2". */
-    fun notificationTitle(request: PairingRequest): String =
-        "${request.clientName} (${request.redirectHost}) wants to connect · code ${request.displayCode}"
+    /** "Claude wants to connect". */
+    fun notificationTitle(request: PairingRequest): String = "${request.clientName} wants to connect"
 
-    /** Collapsed text: repeats the code first, in case the title is cut off. */
-    fun notificationText(request: PairingRequest): String = "Code ${request.displayCode} · Tap to review and choose its access"
+    /** Collapsed text, code first so a long name or host can't push it out of view. */
+    fun notificationText(request: PairingRequest): String = "Code ${request.displayCode} · from ${request.redirectHost}"
+
+    /** "wants access to this phone · claude.ai", under the agent's name on the approval screen. */
+    fun heroLine(request: PairingRequest): String =
+        "wants access to this phone" + (request.redirectHost.takeIf { it.isNotBlank() && !it.equals(request.clientName, ignoreCase = true) }?.let { " · $it" } ?: "")
 
     fun notificationBigText(request: PairingRequest): String = buildString {
-        append("Check that your browser shows code ").append(request.displayCode)
-        append(", then tap to give ").append(request.clientName).append(" access to this phone.")
+        append("From ").append(request.redirectHost).append(". If your browser shows ").append(request.displayCode)
+        append(", tap to choose what ").append(request.clientName).append(" can do.")
         originLine(request)?.let { append("\n\n").append(it) }
     }
 

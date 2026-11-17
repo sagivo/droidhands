@@ -4,7 +4,8 @@ Three steps, about five minutes, all on the phone (Android 11 or newer):
 
 1. Download and install the app.
 2. Open it: the wizard grants the permissions, and the phone goes online by itself.
-3. Connect your AI agent: paste one URL into it and tap **Allow** on the phone.
+3. Connect your AI agent: pick it, tap **Add to Claude** (or copy one command), and tap **Allow** on
+   the phone.
 
 ## 1. Install the app
 
@@ -23,8 +24,8 @@ DroidHands is not on the Play Store, so it tells you itself when a new version i
 
 ## 2. Open it and follow the wizard
 
-The wizard has four short steps. Every step can be skipped and reopened later from
-*Settings › About › Run setup again*.
+The wizard has three short steps (four in builds without a default relay, which add **Connect**).
+Every step can be skipped and reopened later from *Settings › About › Run setup again*.
 
 1. **Welcome**: what agents can and can't do.
 2. **Permissions**: **Grant all** asks for the regular permissions (notifications for the Allow/Deny
@@ -43,32 +44,40 @@ The wizard has four short steps. Every step can be skipped and reopened later fr
       settings** and confirm.
    3. Come back and turn on accessibility.
 
-3. **Connect**: nothing to do. The app has already connected to its **default relay** and shows
-   **You're online**. The relay forwards your agents' requests to the phone over HTTPS. It can't do
+3. **Add an agent**: the same page as [step 3](#3-connect-your-ai-agent) below. The phone is
+   already online through the app's **default relay**, so there is no Connect step; **More ways to
+   connect** under it opens the other routes.
+
+   About the relay: it forwards your agents' requests to the phone over HTTPS. It can't do
    anything by itself: every agent needs a token you approve on the phone. Whoever runs the relay
    could see the requests passing through, so for maximum privacy open **More ways to connect**:
    **Tailscale** (agents on your own devices reach the phone directly, no relay) or **Your own
    relay** ([self-hosting](#self-hosting-the-relay-optional-most-private)). The routes are compared
    in [CONNECTING.md](CONNECTING.md).
 
-   Builds without a default relay (for example ones you build from source) ask for your relay here
-   instead, or offer Tailscale.
-4. **Add an agent**: the same page as [step 3](#3-connect-your-ai-agent) below.
+   Builds without a default relay (for example ones you build from source) have a **Connect** step
+   before it, which asks for your relay or offers Tailscale.
 
 ## 3. Connect your AI agent
 
-In DroidHands, tap **Connect an AI agent** and copy **your connection URL**
-(`https://<relay>/d/<id>/mcp`). Then:
+In DroidHands, tap **Connect an AI agent** (the wizard's last step is the same page) and pick your
+agent:
 
 | Agent | What to do |
 |---|---|
-| Claude.ai / Claude Desktop | Settings → Connectors → *Add custom connector* → paste the URL |
-| Claude Code | `claude mcp add --transport http phone <URL>`, then run `/mcp` and choose *Authenticate* |
-| ChatGPT | Settings → Connectors → Developer mode → *Create* → paste the URL |
-| Any other MCP client | Add a Streamable-HTTP server with that URL (OAuth sign-in) |
+| Claude (claude.ai, Desktop, mobile) | Tap **Add to Claude**. Claude opens with DroidHands filled in: tap *Add*, then *Connect*. |
+| ChatGPT | Tap **Copy URL and open ChatGPT**, turn on *Developer mode* under *Advanced*, then *Create*, paste, choose OAuth. |
+| Claude Code | Copy (or **Share** to your computer) `claude mcp add --transport http phone <URL>`, then `/mcp` › *Authenticate*. |
+| Codex | `codex mcp add phone --url <URL>`. Sign-in opens in the browser (or `codex mcp login phone`). |
+| Gemini CLI | `gemini mcp add --transport http -s user phone <URL>`, then `/mcp auth phone`. |
+| Any other MCP client | Add a Streamable-HTTP server with your connection URL (OAuth sign-in). |
 
-Your browser opens a page saying **"Approve on your phone"** with a 4-letter code. On the
-phone, check that the code matches and choose what the agent gets (**Give Claude access**):
+Setting up on a computer? Share the connection URL to it and open it there: the page has the same
+one-click buttons and commands (plus **Add to Cursor**).
+
+Your browser opens a page saying **"Tap Allow on your phone"** with a 4-letter code. If DroidHands
+is open, the approval screen appears by itself; otherwise tap the notification. Check that the code
+matches and choose what the agent gets (**Give Claude access**):
 
 * **Everything**: every app and everything DroidHands can do, without asking you first.
 * **Only what I choose**: *All apps* or just the apps you pick, and what it can do (read messages
@@ -141,16 +150,16 @@ Then point the app at it, either way:
 
 * Open the setup link on the phone (or scan the QR code) and tap **Open in DroidHands**. The app
   asks "Connect to relay …?" and connects.
-* Or in the app: the Connect step's **More ways to connect** › Your own relay, or *Settings › How
+* Or in the app: the wizard's **More ways to connect** › Your own relay, or *Settings › How
   agents reach this phone* › Relay, and paste the URL and access key.
 
 Agents you connected through the previous relay need its URL, so connect them again with the new
 connection URL.
 
 > If your agent and phone are on the same Tailscale network, you can skip the relay: turn on
-> **Tailscale** (Connect step › *More ways to connect*, or Settings) and the phone serves agents on
+> **Tailscale** (the wizard's *More ways to connect*, or Settings) and the phone serves agents on
 > its tailnet address only ([CONNECTING.md](CONNECTING.md#tailscale-private-no-relay)). For USB,
-> use the *local server* (Connect step › *Local only*).
+> use the *local server* (*More ways to connect* › *Local only*).
 
 ## Developer setup over USB (scripts/setup-phone.sh)
 

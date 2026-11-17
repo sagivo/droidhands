@@ -36,12 +36,14 @@ import {
   CONNECTOR_PATH_REGEX,
   authorizationServerMetadata,
   connectorChallenge,
+  connectorUrl,
   deviceIdFromMetadataPath,
   deviceIdFromResource,
   isAuthorizationServerMetadataPath,
   protectedResourceMetadata,
 } from '../oauth/metadata.js';
 import { MAX_TOKEN_BODY_BYTES, checkTokenRequest } from '../oauth/tokenRoute.js';
+import { connectorSetupPage, wantsSetupPage } from '../pages/connectorPage.js';
 import { offlinePage, OFFLINE_PAGE_STATUS, pairingErrorPage, waitingPage } from '../pages/pairingPages.js';
 import { setupPage } from '../pages/setupPage.js';
 import { CloseCode, DEVICE_WS_PATH, PROTOCOL_VERSION, SAFE_RESPONSE_HEADERS, type ErrorFrame } from '../protocol.js';
@@ -323,6 +325,13 @@ async function handleMcp(ctx: Ctx, route: McpRoute): Promise<Response> {
 
   const decision = admit(ctx);
   if (!decision.allowed) return error(429, 'Too many requests', { 'Retry-After': String(decision.retryAfterSec) });
+  // The connection URL opened in a browser: its setup page instead of an error.
+  if (
+    route.kind === 'connector' &&
+    wantsSetupPage(ctx.method, ctx.request.headers.get('accept') ?? undefined, ctx.request.headers.get('authorization') ?? undefined)
+  ) {
+    return done(page(200, connectorSetupPage(connectorUrl(ctx.base, route.deviceId))));
+  }
   if (ctx.method !== 'POST') return error(405, 'Method not allowed; use POST', { Allow: 'POST' });
 
   const credential =

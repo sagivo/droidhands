@@ -28,8 +28,10 @@ class PairingPresentationTest {
 
     @Test
     fun notificationShowsClientHostAndCode() {
-        assertEquals("Claude (claude.ai) wants to connect · code K7Q2", PairingPresentation.notificationTitle(request))
-        assertTrue(PairingPresentation.notificationText(request).startsWith("Code K7Q2"))
+        assertEquals("Claude wants to connect", PairingPresentation.notificationTitle(request))
+        assertEquals("Code K7Q2 · from claude.ai", PairingPresentation.notificationText(request))
+        assertEquals("wants access to this phone · claude.ai", PairingPresentation.heroLine(request))
+        assertEquals("wants access to this phone", PairingPresentation.heroLine(request.copy(redirectHost = "claude")))
         val big = PairingPresentation.notificationBigText(request)
         assertTrue(big, big.contains("K7Q2") && big.contains("Requested from 203.0.113.7"))
         assertFalse(PairingPresentation.notificationBigText(request.copy(remoteAddress = null)).contains("Requested from"))

@@ -6,7 +6,7 @@ connect an AI app by pasting **one URL** and tapping **Allow** on the phone.
 ```
 AI app (MCP client) ── HTTPS POST /d/<deviceId>/mcp ──► relay ◄── WSS /v1/device (outbound from the phone)
                        Authorization: Bearer pb1.…          │
-                       (obtained by one-tap OAuth pairing)  └── /oauth/*: "Approve on your phone"
+                       (obtained by one-tap OAuth pairing)  └── /oauth/*: "Tap Allow on your phone"
 ```
 
 The phone keeps one outbound WebSocket open to the relay, so it works behind NAT, CGNAT and mobile
@@ -19,7 +19,7 @@ specified in [docs/PROTOCOL.md](../docs/PROTOCOL.md) §2-5.
 1. In the DroidHands app, copy **Your connection URL**. It looks like
    `https://relay.example.com/d/mmg42klgyqzwneiskrelxms3j4/mcp`.
 2. Paste it into your AI app as a remote MCP server / custom connector (see below).
-3. Your browser shows **Approve on your phone** with a 4-character code. The phone shows who is
+3. Your browser shows **Tap Allow on your phone** with a 4-character code. The phone shows who is
    asking, where it will return, the same code and an access level (Read-only / **Assistant** /
    Full control). Check the code and tap **Allow**.
 4. The browser returns to the AI app, which is now connected. Nothing to copy, no token to paste.
@@ -419,7 +419,7 @@ DROIDHANDS_TOKEN=pb1.... npm run smoke -- https://relay.example.com/mcp
 | `GET /.well-known/oauth-protected-resource/d/<deviceId>/mcp` | RFC 9728 protected resource metadata. |
 | `GET /.well-known/oauth-authorization-server` (alias `/.well-known/openid-configuration`) | RFC 8414 authorization server metadata. |
 | `POST /oauth/register` | RFC 7591 dynamic registration of public clients → `201` with a stateless `client_id`. |
-| `GET /oauth/authorize?…` | Validates the request (`resource` must be the phone's connection URL), prompts the phone and shows the "Approve on your phone" page. Every error is an HTML page, never a redirect. |
+| `GET /oauth/authorize?…` | Validates the request (`resource` must be the phone's connection URL), prompts the phone and shows the "Tap Allow on your phone" page. Every error is an HTML page, never a redirect. |
 | `GET /oauth/pair/<id>?t=<pageToken>` | Pairing status for the page: `{"status":"pending"\|"approved"\|"denied"\|"expired","redirect"?}`. With `&view=html`, the reloadable page (redirects once decided). |
 | `POST /oauth/token` | Authorization code + PKCE verifier → `{"access_token":"pb1.…","token_type":"Bearer","scope":"phone"}`. Errors per RFC 6749 §5.2. |
 | `GET /setup` | Phone setup page. |

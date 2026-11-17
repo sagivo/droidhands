@@ -30,19 +30,17 @@ export function waitingPage(input: WaitingPageInput): PageOptions {
   return {
     title: 'Approve on your phone · DroidHands',
     head: html`<noscript><meta http-equiv="refresh" content="5;url=${pageUrl}"></noscript>`,
-    body: html`<div id="pairing" data-poll="${pollUrl}" data-page="${pageUrl}" data-remaining="${remaining}">
-<h1>Approve on your phone</h1>
-<p><strong>${pairing.clientName}</strong> wants to connect to your phone.</p>
+    body: html`<div id="pairing" class="center" data-poll="${pollUrl}" data-page="${pageUrl}" data-remaining="${remaining}">
+<p class="eyebrow">DroidHands</p>
+<h1>Tap Allow on your phone</h1>
+<p class="muted"><strong>${pairing.clientName}</strong> wants to use <strong>${deviceName ?? 'your phone'}</strong>. Allow it if your phone shows this code:</p>
 <div class="card">
-<p>Open DroidHands on <strong>${deviceName ?? 'your phone'}</strong> and tap <strong>Allow</strong>.</p>
-<p class="muted">Check that the code shown there is</p>
 <div class="code" id="code">${pairing.displayCode}</div>
-</div>
 <p id="status" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>Waiting for your phone…</p>
+</div>
 <a id="next" class="button hidden" href="${pageUrl}">Continue</a>
-<p class="muted">If the code on your phone is different, or you did not start this, tap <strong>Deny</strong>.
-After you approve, you will return to <span class="mono">${pairing.redirectHost}</span>.
-<span id="expiry"></span></p>
+<p class="muted">Different code, or you didn't start this? Tap <strong>Deny</strong> on your phone.
+Then you return to <span class="mono">${pairing.redirectHost}</span>. <span id="expiry"></span></p>
 <noscript><p><a class="button" href="${pageUrl}">I answered on my phone. Continue</a></p></noscript>
 </div>`,
     script: WAITING_SCRIPT,
@@ -100,7 +98,7 @@ const WAITING_SCRIPT = `(function () {
   var done = false;
   try { history.replaceState(null, '', pageUrl); } catch (e) {}
   var MESSAGES = {
-    approved: 'Approved. Returning to your app…',
+    approved: '✓ Allowed. Returning to your app…',
     denied: 'Denied on your phone. Returning to your app…',
     expired: 'This request expired. Returning to your app…'
   };
@@ -108,7 +106,7 @@ const WAITING_SCRIPT = `(function () {
   function finish(d) {
     done = true;
     if (/^\\s*(javascript|data|vbscript):/i.test(d.redirect)) return;
-    show(MESSAGES[d.status] || 'Returning to your app…', d.status === 'approved' ? '' : 'warn');
+    show(MESSAGES[d.status] || 'Returning to your app…', d.status === 'approved' ? 'ok' : 'warn');
     expiry.textContent = '';
     next.href = d.redirect;
     next.className = 'button';
@@ -138,7 +136,7 @@ const WAITING_SCRIPT = `(function () {
   function tick() {
     if (done) return;
     var left = Math.max(0, Math.round((deadline - Date.now()) / 1000));
-    expiry.textContent = 'The request expires in ' + Math.floor(left / 60) + ':' + ('0' + (left % 60)).slice(-2) + '.';
+    expiry.textContent = 'Expires in ' + Math.floor(left / 60) + ':' + ('0' + (left % 60)).slice(-2) + '.';
     setTimeout(tick, 1000);
   }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) schedule(0); });

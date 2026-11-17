@@ -20,15 +20,15 @@ import com.droidhands.android.ui.components.ListSection
 private class Promise(val title: String, val text: String, val icon: ImageVector, val color: Color)
 
 private val PROMISES = listOf(
-    Promise("You approve every agent", "Every agent must be allowed on this phone first.", Icons.Filled.CheckCircle, Accents.Green),
+    Promise("You approve every agent", "And choose once what it may use. Anything else is refused.", Icons.Filled.CheckCircle, Accents.Green),
     Promise(
-        "Sensitive actions ask first",
-        "Sending messages, calls and other sensitive actions ask you before they happen.",
+        "Ask first, if you want",
+        "Have messages, calls and payments wait for your OK.",
         Icons.Filled.Notifications,
         Accents.Orange,
     ),
-    Promise("See and revoke anytime", "See everything an agent did, and revoke it with one tap.", Icons.AutoMirrored.Filled.List, Accents.Blue),
-    Promise("Keep apps off-limits", "Banking, payment and password apps can be blocked for all agents.", Icons.Filled.Lock, Accents.Purple),
+    Promise("See and revoke anytime", "Every action is logged. Stop or revoke an agent in one tap.", Icons.AutoMirrored.Filled.List, Accents.Blue),
+    Promise("Keep apps off-limits", "Banking and password apps are blocked for every agent by default.", Icons.Filled.Lock, Accents.Purple),
 )
 
 /** Step 1: what DroidHands does, in one sentence, and the safety promise as a list. */
@@ -37,12 +37,11 @@ internal fun WelcomeStep() {
     StepHeader(
         Icons.Filled.Phone,
         "Let your AI agents use this phone",
-        "AI assistants you approve, like Claude or ChatGPT, can read and send messages, handle notifications and use " +
-            "apps on this phone for you.",
+        "Claude, ChatGPT and other AI agents you approve can message, call and use apps on this phone for you.",
     )
     ListSection(
         title = "You stay in charge",
-        footer = "Setup takes about two minutes: allow a few permissions, get the phone online, and add your first agent.",
+        footer = "About two minutes: allow a few permissions, then add your agent.",
     ) {
         PROMISES.forEachIndexed { index, promise ->
             if (index > 0) ListDivider(IconRowInset)

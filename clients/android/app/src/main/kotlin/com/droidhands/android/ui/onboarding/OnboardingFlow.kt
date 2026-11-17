@@ -27,6 +27,26 @@ enum class OnboardingStep(val title: String) {
 /** Pure decisions of the onboarding wizard (unit-tested). */
 object OnboardingFlow {
     /**
+     * The steps the wizard walks. With the build's default relay in use, the Connect step has nothing to do
+     * (the phone goes online by itself), so it is left out: Welcome → Permissions → Add an agent. It stays
+     * reachable from the agent step ("More ways to connect").
+     */
+    fun steps(defaultRelayInUse: Boolean): List<OnboardingStep> =
+        if (defaultRelayInUse) OnboardingStep.entries - OnboardingStep.CONNECT else OnboardingStep.entries
+
+    /** The step after [step] in [steps]; a step outside [steps] (Connect, opened by link) returns to the agent step. */
+    fun next(step: OnboardingStep, steps: List<OnboardingStep>): OnboardingStep? {
+        val index = steps.indexOf(step)
+        return if (index < 0) OnboardingStep.AGENT else steps.getOrNull(index + 1)
+    }
+
+    /** The step before [step] in [steps], with the same rule as [next] for a step outside them. */
+    fun previous(step: OnboardingStep, steps: List<OnboardingStep>): OnboardingStep? {
+        val index = steps.indexOf(step)
+        return if (index < 0) OnboardingStep.AGENT else steps.getOrNull(index - 1)
+    }
+
+    /**
      * Show the wizard on first run only: not once it was finished or skipped, and not for people
      * who already set DroidHands up before the wizard existed (they have a connection or an agent).
      */

@@ -1,30 +1,31 @@
 package com.droidhands.android.ui.connect
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,23 +33,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
-import com.droidhands.android.ui.components.Accents
 import com.droidhands.android.ui.components.AppCard
 import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.ChoiceChip
 import com.droidhands.android.ui.components.Clipboard
-import com.droidhands.android.ui.components.CodeBlock
 import com.droidhands.android.ui.components.CopyableCode
 import com.droidhands.android.ui.components.IconBadge
-import com.droidhands.android.ui.components.IconTile
-import com.droidhands.android.ui.components.ListRow
 import com.droidhands.android.ui.components.ListSection
 import com.droidhands.android.ui.components.LocalSnackbarHostState
 import com.droidhands.android.ui.components.Notice
@@ -56,6 +57,7 @@ import com.droidhands.android.ui.components.NoticeKind
 import com.droidhands.android.ui.components.PrimaryButton
 import com.droidhands.android.ui.components.SecondaryButton
 import com.droidhands.android.ui.components.SectionHeader
+import com.droidhands.android.ui.components.SystemIntents
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.components.rememberCopier
 import com.droidhands.android.ui.components.rememberNow
@@ -68,19 +70,21 @@ import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.launch
 
 /**
- * "Add an agent", as three numbered steps: 1. the connector URL with Copy/Share, 2. per-client
- * instructions (Claude, Claude Code, ChatGPT, Other as chips), 3. a live "Waiting for your agent…"
- * that turns into "✓ Claude connected" once a pairing completes. Shared by the Connect page and the
- * last onboarding step. Scroll is up to the host.
+ * "Add an agent": pick the agent (chips), then its card with one main action ("Add to Claude" opens Claude
+ * with everything filled in; CLIs get a command to copy or send to the computer), at most two short steps,
+ * and "Tap Allow when this phone asks", spinning while it waits. A request that arrives while this is on
+ * screen opens the approval screen by itself; then "✓ Claude connected". The connection URL stays below for
+ * anything else. Shared by the Connect page and the last onboarding step. Scroll is up to the host.
  *
- * @param onConnected label and action of the button shown once an agent connected.
+ * @param onConnected label and action of the button shown once an agent connected; null for none (the host
+ *   has its own, like the wizard's Done).
  */
 @Composable
 internal fun ConnectAgentContent(
     main: MainViewModel,
     onUseToken: () -> Unit,
     onOpenConnectionSettings: (() -> Unit)?,
-    onConnected: Pair<String, (TokenRecord) -> Unit>,
+    onConnected: Pair<String, (TokenRecord) -> Unit>?,
     modifier: Modifier = Modifier,
 ) {
     val settings by main.settings.collectAsStateWithLifecycle()
@@ -98,6 +102,18 @@ internal fun ConnectAgentContent(
     val livePairings = pairings.filter { it.expiresAt > now }
     // No relay yet, but the build comes with one: offer it first.
     val offerDefault = main.defaultRelayUrl?.takeIf { DefaultRelay.canOffer(settings, it) }
+    var client by rememberSaveable { mutableStateOf(AgentClient.CLAUDE) }
+    // Once an agent connected, its setup folds away behind "Add another agent".
+    var addAnother by rememberSaveable { mutableStateOf(false) }
+    // The user is here waiting for the agent: open each new request's approval screen once, by itself,
+    // instead of making them find the notification. Requests from before the page opened only get the card.
+    val seenPairings = rememberSaveable { ArrayList(pairings.map { it.id }) }
+    LaunchedEffect(livePairings) {
+        livePairings.filter { it.id !in seenPairings }.forEach { request ->
+            seenPairings += request.id
+            main.openPairing(context, request.id)
+        }
+    }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (connected != null) {
@@ -112,10 +128,14 @@ internal fun ConnectAgentContent(
             )
         }
         when {
+            connectUrl != null && connected != null && !addAnother -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                TertiaryButton("Add another agent", onClick = { addAnother = true })
+            }
             connectUrl != null -> {
+                AgentPicker(client, onSelect = { client = it })
+                val guide = remember(client, connectUrl) { ClientInstructions.guide(client, connectUrl) }
+                GuideCard(guide, connectUrl, waiting = connected == null && livePairings.isEmpty())
                 ConnectionUrlSection(connectUrl)
-                ClientGuides(connectUrl)
-                if (connected == null && livePairings.isEmpty()) WaitingSection()
             }
             relay is RelayStatus.Connected -> Notice(
                 title = "One-tap connect isn't available",
@@ -167,23 +187,118 @@ internal fun ConnectAgentContent(
                 RelaySetupForm(settings, onConnect = main::connectRelay)
             }
         }
-        TokenAlternative(onUseToken)
+        if (connected == null || addAnother) TokenAlternative(onUseToken)
     }
 }
 
-/** Step 1: the connection URL in a code field, with Share (URL plus a hint) and Copy. */
+/** Which agent: every client as a chip, wrapping so all of them are visible at once. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AgentPicker(selected: AgentClient, onSelect: (AgentClient) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader("Your agent")
+        FlowRow(
+            Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AgentClient.entries.forEach { client ->
+                ChoiceChip(client.label, selected = client == selected, onClick = { onSelect(client) }, showCheck = true)
+            }
+        }
+    }
+}
+
+/**
+ * One client's setup as a card: its main action (a link that fills everything in, or a command to copy and
+ * send to the computer), one or two short steps, and the last step on this phone, "Tap Allow", which spins
+ * while waiting for the agent.
+ */
+@Composable
+private fun GuideCard(guide: ClientGuide, url: String, waiting: Boolean) {
+    val context = LocalContext.current
+    val copy = rememberCopier()
+    val snackbar = LocalSnackbarHostState.current
+    val scope = rememberCoroutineScope()
+    val shareFailed: () -> Unit = { scope.launch { snackbar.showSnackbar("No app can receive shared text.") } }
+    AppCard {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(guide.client.label, style = MaterialTheme.typography.titleMedium)
+            Text(
+                "For ${guide.appliesTo}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        guide.open?.let { link ->
+            PrimaryButton(link.label, fullWidth = true, onClick = {
+                if (link.copyUrlFirst) copy("Connection URL", url, false)
+                if (!SystemIntents.launch(context, SystemIntents.webPage(link.url))) {
+                    scope.launch { snackbar.showSnackbar("No browser found to open ${guide.client.label}.") }
+                }
+            })
+        }
+        guide.command?.let { command ->
+            CopyableCode(
+                command,
+                copyLabel = "${guide.client.label} command",
+                sensitive = false,
+                shareTitle = "Send to your computer",
+                onShareFailed = shareFailed,
+            )
+        }
+        if (guide.open == null && guide.command == null) {
+            CopyableCode(url, copyLabel = "Connection URL", sensitive = false, shareTitle = "Share connection URL", onShareFailed = shareFailed)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            guide.steps.forEachIndexed { index, step -> StepLine(leading = { StepNumber(index + 1) }, text = step) }
+            StepLine(
+                leading = {
+                    if (waiting) {
+                        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    } else {
+                        StepNumber(guide.steps.size + 1)
+                    }
+                },
+                text = if (waiting) ALLOW_STEP_WAITING else ALLOW_STEP,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+    }
+}
+
+/** The connection URL for any other use, one tap to copy or share; it is not a secret. */
 @Composable
 private fun ConnectionUrlSection(url: String) {
     val copy = rememberCopier()
     val context = LocalContext.current
     val snackbar = LocalSnackbarHostState.current
     val scope = rememberCoroutineScope()
-    FormSection(
-        title = "1. Copy your connection URL",
-        footer = "Paste it into your AI agent. It isn't a password: every agent still has to be allowed on this phone.",
+    ListSection(
+        title = "Your connection URL",
+        footer = "Not a password: every agent still needs your OK on this phone.",
     ) {
-        CodeBlock(url)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = CardPadding, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Text(
+                    url,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             TertiaryButton("Share", icon = Icons.Filled.Share, onClick = {
                 if (!Clipboard.share(context, "Share connection URL", ClientInstructions.shareText(url))) {
                     scope.launch { snackbar.showSnackbar("No app can receive shared text.") }
@@ -194,25 +309,9 @@ private fun ConnectionUrlSection(url: String) {
     }
 }
 
-/** Step 3: what happens next, until the agent shows up (then the pairing card above takes over). */
-@Composable
-private fun WaitingSection() {
-    ListSection(title = "3. Tap Allow on this phone", modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-        ListRow(
-            title = "Waiting for your agent…",
-            subtitle = "You'll get a prompt on this phone.",
-            leading = {
-                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                }
-            },
-        )
-    }
-}
-
 /** "✓ Claude connected", with the caller's next action ("View", "Finish"). */
 @Composable
-private fun ConnectedCard(record: TokenRecord, action: Pair<String, (TokenRecord) -> Unit>) {
+private fun ConnectedCard(record: TokenRecord, action: Pair<String, (TokenRecord) -> Unit>?) {
     AppCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconBadge(Icons.Filled.CheckCircle, statusColors().ok)
@@ -220,56 +319,25 @@ private fun ConnectedCard(record: TokenRecord, action: Pair<String, (TokenRecord
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("${record.name} connected", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Try asking it something like \"What's my battery level?\"",
+                    "Try asking it \"What's my battery level?\"",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            PrimaryButton(action.first, onClick = { action.second(record) })
-        }
-    }
-}
-
-/** Step 2: pick the client (chips), then its numbered instructions and, for Claude Code, the command. */
-@Composable
-private fun ClientGuides(url: String) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    val client = AgentClient.entries[tab.coerceIn(0, AgentClient.entries.lastIndex)]
-    val guide = remember(client, url) { ClientInstructions.guide(client, url) }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("2. Add it to your agent")
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            AgentClient.entries.forEachIndexed { index, c ->
-                ChoiceChip(c.label, selected = index == tab, onClick = { tab = index }, showCheck = true)
-            }
-        }
-        ListSection(footer = "For ${guide.appliesTo}.") {
-            Column(Modifier.padding(CardPadding), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                NumberedSteps(guide.steps, startAt = 1)
-                guide.command?.let { command ->
-                    CopyableCode(command, copyLabel = "${client.label} command", sensitive = false)
-                }
-                NumberedSteps(guide.afterCommand, startAt = guide.steps.size + 1)
+            if (action != null) {
+                Spacer(Modifier.width(8.dp))
+                PrimaryButton(action.first, onClick = { action.second(record) })
             }
         }
     }
 }
 
 @Composable
-private fun NumberedSteps(steps: List<String>, startAt: Int) {
-    steps.forEachIndexed { index, step ->
-        Row(verticalAlignment = Alignment.Top) {
-            StepNumber(startAt + index)
-            Spacer(Modifier.width(12.dp))
-            Text(step, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        }
+private fun StepLine(leading: @Composable () -> Unit, text: String, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.Top) {
+        leading()
+        Spacer(Modifier.width(12.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }
 
@@ -287,6 +355,9 @@ private fun StepNumber(number: Int) {
     }
 }
 
+private const val ALLOW_STEP = "Tap Allow when this phone asks."
+private const val ALLOW_STEP_WAITING = "Waiting for your agent… then tap Allow when this phone asks."
+
 /** A titled white group holding free-form content (a form, a URL, a button), padded like a card. */
 @Composable
 private fun FormSection(title: String, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
@@ -295,17 +366,10 @@ private fun FormSection(title: String, footer: String? = null, content: @Composa
     }
 }
 
+/** Clients without sign-in, or no relay: a token instead (works with the local server too). */
 @Composable
 private fun TokenAlternative(onUseToken: () -> Unit) {
-    ListSection(
-        title = "Advanced",
-        footer = "Client without sign-in support, or no relay? Create a token and paste it into the client's configuration " +
-            "(works with the local server too).",
-    ) {
-        ListRow(
-            title = "Use a token instead",
-            leading = { IconTile(Icons.Filled.Lock, Accents.Gray) },
-            onClick = onUseToken,
-        )
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        TertiaryButton("Agent can't sign in? Use a token instead", onClick = onUseToken)
     }
 }

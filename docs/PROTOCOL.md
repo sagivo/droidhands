@@ -285,6 +285,13 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
   The relay rewrites or adds this header, so MCP clients start (or restart) the OAuth flow.
 * `welcome` gains `"connectUrl": "{relay}/d/<deviceId>/mcp"`. The app shows it as
   **"Your connection URL"**.
+* **Setup page.** A `GET` or `HEAD` whose `Accept` includes `text/html` but not `text/event-stream`,
+  without `Authorization`, is a person opening the URL in a browser. It gets `200` with an HTML page
+  of one-click setup for common agents: claude.ai's documented install link
+  (`https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=DroidHands&connectorUrl=<url>`),
+  copyable commands for Claude Code, Codex and Gemini CLI, Cursor's `cursor://…/mcp/install` link, and the
+  URL itself. The page is the same for every device and never looks the device up, so it reveals
+  nothing (not even whether the phone is online). Every other `GET` stays `405`.
 
 ### 5.2 Discovery and registration (relay)
 
@@ -327,8 +334,8 @@ credentials) so browser-based clients work.
    ```
    `clientName` is the registered `client_name`, truncated to 60 chars and stripped of control
    characters. `redirectHost` is the host (and port, for loopback) of `redirect_uri`.
-6. The relay renders an HTML page (no external assets): "Approve on your phone. Open DroidHands on
-   **<deviceName>** and tap Allow. Check that the code shown there is **K7Q2**." The page polls
+6. The relay renders an HTML page (no external assets): "Tap Allow on your phone. **<client>** wants
+   to use **<deviceName>**. Allow it if your phone shows this code: **K7Q2**." The page polls
    `GET /oauth/pair/<id>?t=<pageToken>` every 1.5 s. That endpoint returns
    `{"status":"pending"|"approved"|"denied"|"expired","redirect":"…"}`, and `redirect` is present
    once the pairing is decided. On a decision the page navigates to `redirect`. It also has a

@@ -43,7 +43,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.droidhands.android.ui.apps.AppListing
-import com.droidhands.android.ui.components.AppCard
 import com.droidhands.android.ui.components.ButtonSize
 import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.IconBadge
@@ -101,6 +100,7 @@ internal fun PairingScreen(
     var pickingApps by rememberSaveable(request.id) { mutableStateOf(false) }
     var appQuery by rememberSaveable(request.id) { mutableStateOf("") }
     var name by rememberSaveable(request.id) { mutableStateOf(request.clientName) }
+    var editingName by rememberSaveable(request.id) { mutableStateOf(false) }
     var armed by remember(request.id) { mutableStateOf(false) }
     // Re-armed after the app picker closes too, so the tap on Done can't land on Allow.
     LaunchedEffect(request.id, pickingApps) {
@@ -157,22 +157,14 @@ internal fun PairingScreen(
                 .safeDrawingPadding()
                 .imePadding(),
         ) {
-            Text(
-                "Connect an AI agent?",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .semantics { heading() },
-            )
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Hero(request, secondsLeft)
-                CodeBox(request.displayCode)
 
                 GrantEditor(
                     grant = grant,
@@ -186,28 +178,14 @@ internal fun PairingScreen(
                     title = GrantPresentation.title(PairingPresentation.tokenName(name, request)),
                 )
 
-                AppCard {
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it.take(PairingRules.MAX_CLIENT_NAME) },
-                        label = { Text("Name in DroidHands") },
-                        supportingText = { Text("Shown in your agents list and the activity log.") },
-                        singleLine = true,
-                        enabled = !approving,
-                        shape = MaterialTheme.shapes.medium,
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                ListSection(title = "Request") {
-                    ListRow(title = "Website", trailing = { RowValue(request.redirectHost) })
-                    request.remoteAddress?.let { address ->
-                        ListDivider()
-                        // Same fact as PairingPresentation.originLine ("Requested from 203.0.113.7"), as a row.
-                        ListRow(title = "Requested from", trailing = { RowValue(address) })
-                    }
-                }
+                DetailsSection(
+                    request = request,
+                    name = name,
+                    editing = editingName,
+                    enabled = !approving,
+                    onEdit = { editingName = true },
+                    onNameChange = { name = it.take(PairingRules.MAX_CLIENT_NAME) },
+                )
             }
             Column(
                 Modifier
@@ -239,50 +217,97 @@ internal fun PairingScreen(
     }
 }
 
-/** The agent's name, where it connects from, and the time left, centered under a big badge. */
+/**
+ * Who is asking and the code to compare, as one centered block: badge, the agent's name, "wants access to
+ * this phone · claude.ai", the code in a fill box with the time left.
+ */
 @Composable
 private fun Hero(request: PairingRequest, secondsLeft: Long) {
     val colors = statusColors()
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        IconBadge(Icons.Filled.Face, MaterialTheme.colorScheme.primary, size = 64.dp)
+        IconBadge(Icons.Filled.Face, MaterialTheme.colorScheme.primary, size = 56.dp)
         Spacer(Modifier.height(4.dp))
-        Text(request.clientName, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
         Text(
-            "wants to connect from ${request.redirectHost}",
+            request.clientName,
+            style = MaterialTheme.typography.headlineMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(
+            PairingPresentation.heroLine(request),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(2.dp))
-        StatusPill(PairingPresentation.countdownLabel(secondsLeft), if (secondsLeft > 0) colors.warning else colors.error)
+        Spacer(Modifier.height(8.dp))
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp, horizontal = CardPadding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                    Text(
+                        request.displayCode,
+                        style = MaterialTheme.typography.displaySmall,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.semantics { contentDescription = "Code ${PairingPresentation.spokenCode(request.displayCode)}" },
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(PairingPresentation.CODE_HINT, style = MaterialTheme.typography.bodyMedium)
+                    StatusPill(PairingPresentation.countdownLabel(secondsLeft), if (secondsLeft > 0) colors.warning else colors.error)
+                }
+            }
+        }
     }
 }
 
-/** The pairing code in a big monospace fill box (as on Home's pairing card), with what to compare it to. */
+/** The name it gets in DroidHands (tap to rename) and where the request came from. */
 @Composable
-private fun CodeBox(code: String) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = CardPadding),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text("Code", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Text(
-                    code,
-                    style = MaterialTheme.typography.displaySmall,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.semantics { contentDescription = "Code ${PairingPresentation.spokenCode(code)}" },
-                )
-            }
-            Text(PairingPresentation.CODE_HINT, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+private fun DetailsSection(
+    request: PairingRequest,
+    name: String,
+    editing: Boolean,
+    enabled: Boolean,
+    onEdit: () -> Unit,
+    onNameChange: (String) -> Unit,
+) {
+    ListSection(title = "Details") {
+        if (editing) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                label = { Text("Name in DroidHands") },
+                singleLine = true,
+                enabled = enabled,
+                shape = MaterialTheme.shapes.medium,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(CardPadding),
+            )
+        } else {
+            ListRow(
+                title = "Name",
+                trailing = { RowValue(PairingPresentation.tokenName(name, request)) },
+                onClick = onEdit,
+                enabled = enabled,
+                showChevron = true,
+            )
+        }
+        ListDivider()
+        ListRow(title = "Website", trailing = { RowValue(request.redirectHost) })
+        request.remoteAddress?.let { address ->
+            ListDivider()
+            // Same fact as PairingPresentation.originLine ("Requested from 203.0.113.7"), as a row.
+            ListRow(title = "Requested from", trailing = { RowValue(address) })
         }
     }
 }

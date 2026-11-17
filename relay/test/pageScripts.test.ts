@@ -107,7 +107,7 @@ test('waiting page script: keeps polling while pending, then navigates to the re
   const device = await connectReady(relay);
   const page = await openAuthorize(relay, { clientId: await registerClient(relay), pkce: newPkce(), deviceId: device.identity.deviceId });
   const browser = runPageScript(page.res.body, 'pairing', relay.url);
-  assert.match(browser.elements.get('expiry')?.textContent ?? '', /expires in 3:00/);
+  assert.match(browser.elements.get('expiry')?.textContent ?? '', /Expires in 3:00/);
 
   browser.fire('poll');
   await eventually(() => browser.timers.some((t) => t.fn.name === 'poll'), 'the next poll');
@@ -118,7 +118,7 @@ test('waiting page script: keeps polling while pending, then navigates to the re
   await eventually(() => browser.navigations.length === 1, 'navigation');
   assert.match(browser.navigations[0] as string, /^http:\/\/localhost:33418\/callback\?code=[A-Za-z0-9_-]{43}&state=state-123&iss=/);
   assert.equal(browser.elements.get('next')?.href, browser.navigations[0]);
-  assert.match(browser.elements.get('status')?.textContent ?? '', /Approved/);
+  assert.match(browser.elements.get('status')?.textContent ?? '', /Allowed/);
 });
 
 test('waiting page script: a denial navigates to the access_denied redirect', async (t) => {

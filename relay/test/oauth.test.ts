@@ -392,7 +392,7 @@ test('device selection with ALLOW_IMPLICIT_DEVICE: the only online phone, unname
   const single = await openAuthorize(relay, { clientId, pkce, deviceId: null });
   assert.equal((await first.nextFrame<PairRequestFrame>('pair_request')).displayCode, single.displayCode);
   assert.doesNotMatch(single.res.body, /Pixel 8/, 'the phone is not named to someone who did not name it');
-  assert.match(single.res.body, /Open DroidHands on <strong>your phone<\/strong>/);
+  assert.match(single.res.body, /wants to use <strong>your phone<\/strong>/);
   assert.doesNotMatch((await httpRequest(single.pageUrl)).body, /Pixel 8/, 'nor on the reloadable page');
 
   const named = await openAuthorize(relay, { clientId, pkce: newPkce(), deviceId: first.identity.deviceId });

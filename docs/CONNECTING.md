@@ -14,15 +14,15 @@ logged there ([SECURITY.md](SECURITY.md)).
 | Same Wi-Fi (advanced) | Anyone on the same network | Unencrypted `http://` | No | Settings › Local server › All networks |
 | USB (developers) | The computer the phone is plugged into | Stays on the cable | No | `adb forward` |
 
-In the app, the routes are on the onboarding **Connect** step (under **More ways to connect**) and in
+In the app, the routes are under **More ways to connect** in the onboarding wizard and in
 **Settings › How agents reach this phone**, which lists the connection URL of every route that is
 on, with **Copy** and **Share**. Home shows them too.
 
 ## DroidHands relay (default)
 
-Nothing to do. On first run the app connects to the relay it comes with and the Connect step says
-**You're online**. Tap **Connect an AI agent**, paste the connection URL
-(`https://<relay>/d/<id>/mcp`) into your agent and tap **Allow** on the phone
+Nothing to do. On first run the app connects to the relay it comes with, so the wizard goes straight
+from permissions to adding an agent. Tap **Connect an AI agent**, pick your agent (**Add to Claude**
+fills everything in) and tap **Allow** on the phone
 ([GETTING_STARTED.md](GETTING_STARTED.md#3-connect-your-ai-agent)).
 
 It works with every agent, including cloud ones (claude.ai, ChatGPT), on Wi-Fi or mobile data, and
@@ -43,7 +43,7 @@ as well if you use them.
 
 1. Install Tailscale on the phone (the app offers **Get Tailscale**, which opens the Play Store) and on
    your computer, and sign in to both with the same account.
-2. In DroidHands: Connect step › **More ways to connect** › Tailscale › **Use Tailscale**, or
+2. In DroidHands: the wizard's **More ways to connect** › Tailscale › **Use Tailscale**, or
    *Settings › How agents reach this phone* › **Tailscale (private, no relay)** › **Save**.
 3. DroidHands shows the URL, for example `http://pixel-8.tail1234.ts.net:8765/mcp` (the phone's
    MagicDNS name, or its `100.x.y.z` address when MagicDNS is off). Paste it into your agent, then tap

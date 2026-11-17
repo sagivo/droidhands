@@ -76,6 +76,34 @@ test('connector: GET and DELETE -> 405; malformed ids -> 404; offline -> 503', a
   assert.equal(offline.headers['retry-after'], '30');
 });
 
+test('connector opened in a browser: the setup page with one-click links; MCP clients are unaffected', async (t) => {
+  const relay = await startRelay(t, { publicUrl: 'https://relay.example.com' });
+  const deviceId = newIdentity().deviceId;
+  const url = `https://relay.example.com/d/${deviceId}/mcp`;
+  const browser = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+  const res = await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { headers: { accept: browser } });
+  assert.equal(res.status, 200);
+  assert.match(String(res.headers['content-type']), /^text\/html/);
+  assert.match(String(res.headers['content-security-policy']), /default-src 'none'/);
+  assert.ok(res.body.includes(`connectorUrl=${encodeURIComponent(url)}`), 'Add to Claude link');
+  assert.ok(res.body.includes(`claude mcp add --transport http phone ${url}`), 'Claude Code command');
+  assert.ok(res.body.includes(`codex mcp add phone --url ${url}`), 'Codex command');
+  assert.ok(res.body.includes('cursor://anysphere.cursor-deeplink/mcp/install?name=phone&amp;config='), 'Cursor link');
+
+  // MCP clients, credentials and other methods keep the usual answers.
+  const clients: Array<Record<string, string>> = [
+    { accept: 'text/event-stream' },
+    { accept: 'application/json, text/event-stream' },
+    { accept: browser, authorization: 'Bearer x' },
+  ];
+  for (const headers of clients) {
+    assert.equal((await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { headers })).status, 405, JSON.stringify(headers));
+  }
+  assert.equal((await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { method: 'DELETE', headers: { accept: browser } })).status, 405);
+  // The legacy token endpoint has no setup page.
+  assert.equal((await httpRequest(`${relay.url}/mcp`, { headers: { accept: browser } })).status, 405);
+});
+
 test('connector discovery requests without a token do not count as auth failures', async (t) => {
   const relay = await startRelay(t, { rateLimitAuthFailuresPerMin: 2 });
   const device = await connectReady(relay);

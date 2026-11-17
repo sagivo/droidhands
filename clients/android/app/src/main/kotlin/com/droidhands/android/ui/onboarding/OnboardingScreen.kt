@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
 import com.droidhands.android.ui.components.BottomActionBar
 import com.droidhands.android.ui.components.ButtonSize
@@ -51,6 +53,7 @@ import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.connect.ConnectAgentContent
 import com.droidhands.android.ui.setup.SetupViewModel
 import com.droidhands.android.ui.theme.TINT_ALPHA
+import com.droidhands.android.ui.theme.statusColors
 import com.droidhands.core.transport.RelayStatus
 
 /** Navigation callbacks of the onboarding wizard. */
@@ -74,16 +77,21 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
     val relay by main.relayStatus.collectAsStateWithLifecycle()
     val settings by main.settings.collectAsStateWithLifecycle()
     val connected = relay is RelayStatus.Connected || settings.localServerEnabled
+    val tokens by main.tokens.collectAsStateWithLifecycle()
+    // The wizard only shows before the first agent, so any agent now is the one just added.
+    val agentAdded = tokens.any { !it.revoked }
+    val steps = OnboardingFlow.steps(defaultRelayInUse = DefaultRelay.inUse(settings))
     val go: (OnboardingStep) -> Unit = { stepName = it.name }
-    step.previous()?.let { previous -> BackHandler { go(previous) } }
+    val previousStep = OnboardingFlow.previous(step, steps)
+    previousStep?.let { previous -> BackHandler { go(previous) } }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { WizardTopBar(step, onSkip = actions.onFinish) },
+        topBar = { WizardTopBar(step, steps, onSkip = actions.onFinish) },
         bottomBar = {
             BottomActionBar {
-                step.previous()?.let { previous -> TertiaryButton("Back", onClick = { go(previous) }) }
-                val next = step.next()
+                previousStep?.let { previous -> TertiaryButton("Back", onClick = { go(previous) }) }
+                val next = OnboardingFlow.next(step, steps)
                 val wide = Modifier.weight(1f)
                 when {
                     step == OnboardingStep.WELCOME ->
@@ -93,6 +101,8 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
                         SecondaryButton(continueLabel(step, connected), onClick = { go(next) }, modifier = wide, size = ButtonSize.LARGE)
                     next != null ->
                         PrimaryButton(continueLabel(step, connected), onClick = { go(next) }, modifier = wide, size = ButtonSize.LARGE)
+                    // No agent yet: "Add to Claude" (or the command) is the main action, finishing is the way out.
+                    !agentAdded -> SecondaryButton("Finish later", onClick = actions.onFinish, modifier = wide, size = ButtonSize.LARGE)
                     else -> PrimaryButton("Done", onClick = actions.onFinish, modifier = wide, size = ButtonSize.LARGE)
                 }
             }
@@ -114,17 +124,23 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
                 OnboardingStep.PERMISSIONS -> PermissionsStep(setup)
                 OnboardingStep.CONNECT -> ConnectStep(main)
                 OnboardingStep.AGENT -> {
-                    StepHeader(
-                        Icons.Filled.Face,
-                        "Add your first agent",
-                        "Paste your connection URL into the agent, then tap Allow when this phone asks.",
-                    )
+                    if (agentAdded) {
+                        StepHeader(Icons.Filled.CheckCircle, "You're all set", "Ask your agent to do something on this phone.", color = statusColors().ok)
+                    } else {
+                        StepHeader(Icons.Filled.Face, "Add your first agent", "Pick your agent, add DroidHands to it, then tap Allow here.")
+                    }
                     ConnectAgentContent(
                         main = main,
                         onUseToken = actions.onUseToken,
                         onOpenConnectionSettings = { go(OnboardingStep.CONNECT) },
-                        onConnected = "Finish" to { _ -> actions.onFinish() },
+                        onConnected = null,
                     )
+                    if (OnboardingStep.CONNECT !in steps && !agentAdded) {
+                        // The Connect step was left out (the phone went online by itself); its other routes stay one tap away.
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            TertiaryButton("More ways to connect", onClick = { go(OnboardingStep.CONNECT) })
+                        }
+                    }
                 }
             }
         }
@@ -133,8 +149,10 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
 
 /** "Step 2 of 4 · Permissions" with Skip, over a segmented brand-colored progress bar. */
 @Composable
-private fun WizardTopBar(step: OnboardingStep, onSkip: () -> Unit) {
-    val total = OnboardingStep.entries.size
+private fun WizardTopBar(step: OnboardingStep, steps: List<OnboardingStep>, onSkip: () -> Unit) {
+    val total = steps.size
+    // A step outside the walk (Connect, opened from the agent step) shows the agent step's place.
+    val number = (steps.indexOf(step).takeIf { it >= 0 } ?: steps.indexOf(OnboardingStep.AGENT)) + 1
     Column(
         Modifier
             .fillMaxWidth()
@@ -144,7 +162,7 @@ private fun WizardTopBar(step: OnboardingStep, onSkip: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "Step ${step.number} of $total · ${step.title}",
+                "Step $number of $total · ${step.title}",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -155,16 +173,16 @@ private fun WizardTopBar(step: OnboardingStep, onSkip: () -> Unit) {
             Modifier
                 .fillMaxWidth()
                 .padding(end = 12.dp, top = 4.dp)
-                .clearAndSetSemantics { contentDescription = "Step ${step.number} of $total" },
+                .clearAndSetSemantics { contentDescription = "Step $number of $total" },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            OnboardingStep.entries.forEach { entry ->
+            steps.forEachIndexed { index, _ ->
                 val color = MaterialTheme.colorScheme.primary
                 Box(
                     Modifier
                         .weight(1f)
                         .height(4.dp)
-                        .background(if (entry.number <= step.number) color else color.copy(alpha = TINT_ALPHA), CircleShape),
+                        .background(if (index + 1 <= number) color else color.copy(alpha = TINT_ALPHA), CircleShape),
                 )
             }
         }

@@ -52,6 +52,23 @@ class OnboardingFlowTest {
     }
 
     @Test
+    fun theDefaultRelayLeavesOutTheConnectStep() {
+        val short = OnboardingFlow.steps(defaultRelayInUse = true)
+        assertEquals(listOf(OnboardingStep.WELCOME, OnboardingStep.PERMISSIONS, OnboardingStep.AGENT), short)
+        assertEquals(OnboardingStep.AGENT, OnboardingFlow.next(OnboardingStep.PERMISSIONS, short))
+        assertEquals(OnboardingStep.PERMISSIONS, OnboardingFlow.previous(OnboardingStep.AGENT, short))
+        assertNull(OnboardingFlow.next(OnboardingStep.AGENT, short))
+        // Connect opened from the agent step ("More ways to connect") leads back to it either way.
+        assertEquals(OnboardingStep.AGENT, OnboardingFlow.next(OnboardingStep.CONNECT, short))
+        assertEquals(OnboardingStep.AGENT, OnboardingFlow.previous(OnboardingStep.CONNECT, short))
+
+        val full = OnboardingFlow.steps(defaultRelayInUse = false)
+        assertEquals(OnboardingStep.entries, full)
+        assertEquals(OnboardingStep.CONNECT, OnboardingFlow.next(OnboardingStep.PERMISSIONS, full))
+        assertEquals(OnboardingStep.CONNECT, OnboardingFlow.previous(OnboardingStep.AGENT, full))
+    }
+
+    @Test
     fun grantAllSkipsGrantedBlockedAndBackgroundLocation() {
         assertEquals(
             listOf(Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
