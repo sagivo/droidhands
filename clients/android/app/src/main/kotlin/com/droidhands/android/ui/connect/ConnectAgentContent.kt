@@ -25,7 +25,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -41,6 +43,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
@@ -57,7 +61,6 @@ import com.droidhands.android.ui.components.NoticeKind
 import com.droidhands.android.ui.components.PrimaryButton
 import com.droidhands.android.ui.components.SecondaryButton
 import com.droidhands.android.ui.components.SectionHeader
-import com.droidhands.android.ui.components.SystemIntents
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.components.rememberCopier
 import com.droidhands.android.ui.components.rememberNow
@@ -102,7 +105,13 @@ internal fun ConnectAgentContent(
     val livePairings = pairings.filter { it.expiresAt > now }
     // No relay yet, but the build comes with one: offer it first.
     val offerDefault = main.defaultRelayUrl?.takeIf { DefaultRelay.canOffer(settings, it) }
-    var client by rememberSaveable { mutableStateOf(AgentClient.CLAUDE) }
+    // Agent apps on this phone, checked again each time the page comes back (one may have just been installed).
+    var appsCheck by remember { mutableIntStateOf(0) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { appsCheck++ }
+    val agentApps by produceState<List<AgentApp>?>(null, appsCheck) { value = AgentAppIntents.installed(context) }
+    // The agent app tapped last ("On this phone") and the agent picked below it.
+    var added by rememberSaveable { mutableStateOf<AgentClient?>(null) }
+    var picked by rememberSaveable { mutableStateOf<AgentClient?>(null) }
     // Once an agent connected, its setup folds away behind "Add another agent".
     var addAnother by rememberSaveable { mutableStateOf(false) }
     // The user is here waiting for the agent: open each new request's approval screen once, by itself,
@@ -129,12 +138,24 @@ internal fun ConnectAgentContent(
         }
         when {
             connectUrl != null && connected != null && !addAnother -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                TertiaryButton("Add another agent", onClick = { addAnother = true })
+                TertiaryButton("Add another agent", onClick = {
+                    addAnother = true
+                    added = null
+                })
             }
-            connectUrl != null -> {
-                AgentPicker(client, onSelect = { client = it })
-                val guide = remember(client, connectUrl) { ClientInstructions.guide(client, connectUrl) }
-                GuideCard(guide, connectUrl, waiting = connected == null && livePairings.isEmpty())
+            connectUrl != null -> agentApps?.let { apps ->
+                val waiting = connected == null && livePairings.isEmpty()
+                if (apps.isNotEmpty()) {
+                    AgentAppsSection(apps, connectUrl, added = added, waiting = waiting, onAdded = { added = it })
+                }
+                // Agents whose app is here are above; with none, the most used one is picked to begin with.
+                val others = AgentClient.entries.filter { client -> apps.none { it.client == client } }
+                val client = picked?.takeIf { it in others } ?: others.first().takeIf { apps.isEmpty() }
+                AgentPicker(others, client, title = if (apps.isEmpty()) "Your agent" else "Another agent", onSelect = { picked = it })
+                if (client != null) {
+                    val guide = remember(client, connectUrl) { ClientInstructions.guide(client, connectUrl) }
+                    GuideCard(guide, connectUrl, waiting = waiting)
+                }
                 ConnectionUrlSection(connectUrl)
             }
             relay is RelayStatus.Connected -> Notice(
@@ -191,12 +212,12 @@ internal fun ConnectAgentContent(
     }
 }
 
-/** Which agent: every client as a chip, wrapping so all of them are visible at once. */
+/** Which agent: each of [clients] as a chip, wrapping so all of them are visible at once. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AgentPicker(selected: AgentClient, onSelect: (AgentClient) -> Unit) {
+private fun AgentPicker(clients: List<AgentClient>, selected: AgentClient?, title: String, onSelect: (AgentClient) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("Your agent")
+        SectionHeader(title)
         FlowRow(
             Modifier
                 .fillMaxWidth()
@@ -204,7 +225,7 @@ private fun AgentPicker(selected: AgentClient, onSelect: (AgentClient) -> Unit) 
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            AgentClient.entries.forEach { client ->
+            clients.forEach { client ->
                 ChoiceChip(client.label, selected = client == selected, onClick = { onSelect(client) }, showCheck = true)
             }
         }
@@ -235,7 +256,7 @@ private fun GuideCard(guide: ClientGuide, url: String, waiting: Boolean) {
         guide.open?.let { link ->
             PrimaryButton(link.label, fullWidth = true, onClick = {
                 if (link.copyUrlFirst) copy("Connection URL", url, false)
-                if (!SystemIntents.launch(context, SystemIntents.webPage(link.url))) {
+                if (!AgentAppIntents.open(context, link)) {
                     scope.launch { snackbar.showSnackbar("No browser found to open ${guide.client.label}.") }
                 }
             })
@@ -256,25 +277,34 @@ private fun GuideCard(guide: ClientGuide, url: String, waiting: Boolean) {
         if (guide.open == null && guide.command == null && guide.message == null) {
             CopyableCode(url, copyLabel = "Connection URL", sensitive = false, shareTitle = "Share connection URL", onShareFailed = shareFailed)
         }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            guide.steps.forEachIndexed { index, step -> StepLine(leading = { StepNumber(index + 1) }, text = step) }
-            StepLine(
-                leading = {
-                    if (waiting) {
-                        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        }
-                    } else {
-                        StepNumber(guide.steps.size + 1)
-                    }
-                },
-                text = if (waiting) ALLOW_STEP_WAITING else ALLOW_STEP,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-            )
-        }
+        GuideSteps(guide.steps, waiting)
         guide.note?.let { note ->
             Text(note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/**
+ * [steps] numbered, then the last one on this phone, "Tap Allow when this phone asks", which spins while
+ * [waiting] for the agent.
+ */
+@Composable
+internal fun GuideSteps(steps: List<String>, waiting: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        steps.forEachIndexed { index, step -> StepLine(leading = { StepNumber(index + 1) }, text = step) }
+        StepLine(
+            leading = {
+                if (waiting) {
+                    Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                } else {
+                    StepNumber(steps.size + 1)
+                }
+            },
+            text = if (waiting) ALLOW_STEP_WAITING else ALLOW_STEP,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
     }
 }
 

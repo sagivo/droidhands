@@ -60,27 +60,39 @@ Every step can be skipped and reopened later from *Settings › About › Run se
 
 ## 3. Connect your AI agent
 
-In DroidHands, tap **Connect an AI agent** (the wizard's last step is the same page) and pick your
-agent:
+In DroidHands, tap **Connect an AI agent** (the wizard's last step is the same page).
+
+**Agent apps on this phone** are listed first under **On this phone** (Claude, ChatGPT, Muse, Grok Bot
+and Grok, whichever are installed). Tap **Add** next to one:
+
+* **Claude** opens with DroidHands filled in (claude.ai's install link). If the Claude app doesn't
+  show the form, **Didn't open? Use the browser** opens it on claude.ai.
+* **Muse** and **Grok Bot** open with a message ready to send that asks them to add DroidHands as a
+  connector. Send it. (An app that doesn't take shared text opens with the message copied: paste it.)
+* **ChatGPT** and **Grok** have no connector setup in their apps: the URL is copied and their
+  connector settings open in the browser.
+
+Under the agent you tapped, the page shows what's left and waits for the agent. For anything else,
+pick your agent under **Another agent**:
 
 | Agent | What to do |
 |---|---|
 | Claude (claude.ai, Desktop, mobile) | Tap **Add to Claude**. Claude opens with DroidHands filled in: tap *Add*, then *Connect*. |
 | ChatGPT | Tap **Copy URL and open ChatGPT**, turn on *Developer mode* under *Advanced*, then *Create*, paste, choose OAuth. |
-| Grok (grok.com, Grok apps; paid plans) | Tap **Copy URL and open Grok**, then *New Connector* › *Custom*, paste, *Connect*. In Grok Bot, add a custom MCP server with the URL. |
+| Grok (grok.com, Grok apps; paid plans) | Tap **Copy URL and open Grok**, then *New Connector* › *Custom*, paste, *Connect*. |
 | Claude Code | Copy (or **Share** to your computer) `claude mcp add --transport http phone <URL>`, then `/mcp` › *Authenticate*. |
 | Codex | `codex mcp add phone --url <URL>`. Sign-in opens in the browser (or `codex mcp login phone`). |
 | Gemini CLI | `gemini mcp add --transport http -s user phone <URL>`, then `/mcp auth phone`. |
-| Muse (Meta), Instinct, other chat agents | **Send to your agent**: *"Connect to my phone with DroidHands. Open this link for instructions: \<URL\>"* |
+| Muse (Meta), Grok Bot, Instinct, other chat agents | **Send to your agent**: *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP server, OAuth sign-in) and connect to it. If you can't add connectors, open this link for instructions."* |
 | Any other MCP client | Add a Streamable-HTTP server with your connection URL (OAuth sign-in). |
 
 Setting up on a computer? Share the connection URL to it and open it there: the page has the same
 one-click buttons and commands (plus **Add to Cursor**).
 
 Agents with connector settings open a browser page saying **"Tap Allow on your phone"** with a
-4-letter code. Agents you chat or text with (Muse, Instinct) have no connector settings: they open the
-link, which tells them how to sign in by themselves ([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)),
-and reply with the 4-letter code. If DroidHands is open, the approval screen appears by itself;
+4-letter code. Muse and Grok Bot add the connector from the chat and sign in the same way. Agents
+without connector settings (Instinct) open the link, which tells them how to sign in by themselves
+([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)), and reply with the 4-letter code. If DroidHands is open, the approval screen appears by itself;
 otherwise tap the notification. Check that the code matches and choose what the agent gets
 (**Give Claude access**):
 

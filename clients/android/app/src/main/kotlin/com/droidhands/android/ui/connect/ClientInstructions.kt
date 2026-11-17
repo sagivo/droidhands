@@ -12,12 +12,16 @@ enum class AgentClient(val label: String) {
     CODEX("Codex"),
     GEMINI_CLI("Gemini CLI"),
     MUSE("Muse"),
+    GROK_BOT("Grok Bot"),
     INSTINCT("Instinct"),
     OTHER("Other"),
 }
 
-/** A link that does the setup in the agent itself. [copyUrlFirst]: put the connection URL on the clipboard before opening. */
-data class OpenLink(val label: String, val url: String, val copyUrlFirst: Boolean = false)
+/**
+ * A link that does the setup in the agent itself. [copyUrlFirst]: put the connection URL on the clipboard before
+ * opening. [inBrowser]: a web-only settings page, opened in the browser even when the agent's app claims the link.
+ */
+data class OpenLink(val label: String, val url: String, val copyUrlFirst: Boolean = false, val inBrowser: Boolean = false)
 
 /**
  * How to add the connection URL to one client: at most one main action, either an [open] link, a [command]
@@ -66,7 +70,8 @@ object ClientInstructions {
         AgentClient.CHATGPT -> ClientGuide(
             client = client,
             appliesTo = "ChatGPT on the web, with Developer mode",
-            open = OpenLink("Copy URL and open ChatGPT", CHATGPT_CONNECTORS, copyUrlFirst = true),
+            // The ChatGPT app has no Developer mode: this is for chatgpt.com.
+            open = OpenLink("Copy URL and open ChatGPT", CHATGPT_CONNECTORS, copyUrlFirst = true, inBrowser = true),
             steps = listOf(
                 "Under Advanced, turn on Developer mode.",
                 "Tap Create, paste the URL, choose OAuth, then Create.",
@@ -75,15 +80,20 @@ object ClientInstructions {
         AgentClient.GROK -> ClientGuide(
             client = client,
             appliesTo = "grok.com and the Grok apps, on paid plans",
-            open = OpenLink("Copy URL and open Grok", GROK_CONNECTORS, copyUrlFirst = true),
+            open = OpenLink("Copy URL and open Grok", GROK_CONNECTORS, copyUrlFirst = true, inBrowser = true),
             steps = listOf("Tap New Connector, then Custom. Paste the URL and tap Connect."),
-            note = "In Grok Bot, add a custom MCP server with the same URL and sign in.",
         )
         AgentClient.MUSE -> ClientGuide(
             client = client,
             appliesTo = "Meta Muse, in chat",
             message = agentMessage(url),
-            steps = listOf("Send this to Muse. It opens the link and shows you a 4-letter code."),
+            steps = listOf("Send the message to Muse. It adds DroidHands and shows you a 4-letter code."),
+        )
+        AgentClient.GROK_BOT -> ClientGuide(
+            client = client,
+            appliesTo = "Grok Bot, on your phone or computer",
+            message = agentMessage(url),
+            steps = listOf("Send the message to your Bot, then tap Connect on the card it shows. A 4-letter code appears."),
         )
         AgentClient.INSTINCT -> ClientGuide(
             client = client,
@@ -129,8 +139,13 @@ object ClientInstructions {
         "https://claude.ai/customize/connectors?modal=add-custom-connector" +
             "&connectorName=${encode(CONNECTOR_NAME)}&connectorUrl=${encode(url)}"
 
-    /** One line to send an agent in chat: it opens [url], which answers agents with sign-in instructions. */
-    fun agentMessage(url: String): String = "Connect to my phone with DroidHands. Open this link for instructions: $url"
+    /**
+     * One line to send an agent in chat. Agents that add connectors from chat (Muse, Grok Bot) add [url] and sign
+     * in like any connector; the others open it, which answers agents with sign-in instructions.
+     */
+    fun agentMessage(url: String): String =
+        "Connect to my phone with DroidHands: add $url as a custom connector (remote MCP server, OAuth sign-in) and " +
+            "connect to it. If you can't add connectors, open this link for instructions."
 
     /**
      * Text for the share sheet: one line plus the URL. It works sent to a computer (open it for setup buttons,

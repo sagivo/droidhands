@@ -33,9 +33,10 @@ class ConnectLogicTest {
     @Test
     fun chatAgentsGetAMessageToSendAndCompareTheAgentsCode() {
         val message = ClientInstructions.agentMessage(url)
-        assertTrue(message.contains(url) && message.contains("Open this link"))
+        // Agents that add connectors from chat add the URL; the others open it for sign-in instructions.
+        assertTrue(message.contains("add $url as a custom connector") && message.contains("open this link for instructions"))
         assertTrue("one line", '\n' !in message)
-        listOf(AgentClient.MUSE to "Muse", AgentClient.INSTINCT to "Instinct").forEach { (client, name) ->
+        listOf(AgentClient.MUSE to "Muse", AgentClient.GROK_BOT to "Bot", AgentClient.INSTINCT to "Instinct").forEach { (client, name) ->
             val guide = ClientInstructions.guide(client, url)
             assertEquals(message, guide.message)
             assertTrue(guide.viaChat)
@@ -47,14 +48,14 @@ class ConnectLogicTest {
     }
 
     @Test
-    fun grokCopiesTheUrlOpensItsConnectorsAndMentionsGrokBot() {
+    fun grokCopiesTheUrlAndOpensItsConnectorsInTheBrowser() {
         val guide = ClientInstructions.guide(AgentClient.GROK, url)
         assertEquals(ClientInstructions.GROK_CONNECTORS, guide.open!!.url)
         assertTrue(guide.open!!.copyUrlFirst)
+        assertTrue(guide.open!!.inBrowser)
         assertTrue(guide.steps.first().contains("Custom"))
         assertNull(guide.command)
         assertTrue(guide.appliesTo.contains("paid"))
-        assertTrue(guide.note.orEmpty().contains("Grok Bot"))
     }
 
     @Test
@@ -66,6 +67,8 @@ class ConnectLogicTest {
             open.url,
         )
         assertFalse(open.copyUrlFirst)
+        // The Claude app opens it when it can; the page offers the browser if it didn't.
+        assertFalse(open.inBrowser)
         assertTrue(ClientInstructions.claudeAddLink("https://h/a b?c=d&e").endsWith("connectorUrl=https%3A%2F%2Fh%2Fa%20b%3Fc%3Dd%26e"))
     }
 
@@ -73,6 +76,8 @@ class ConnectLogicTest {
     fun chatGptCopiesTheUrlBeforeOpeningItsSettings() {
         val guide = ClientInstructions.guide(AgentClient.CHATGPT, url)
         assertTrue(guide.open!!.copyUrlFirst)
+        // Developer mode is on chatgpt.com only, not in the ChatGPT app.
+        assertTrue(guide.open!!.inBrowser)
         assertTrue(guide.steps.first().contains("Developer mode"))
         assertFalse(guide.onComputer)
     }

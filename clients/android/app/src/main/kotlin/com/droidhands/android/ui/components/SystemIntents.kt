@@ -7,7 +7,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import com.droidhands.android.access.BridgeAccessibilityService
@@ -62,6 +65,46 @@ object SystemIntents {
 
     /** An https:// page in the user's browser (e.g. the latest release's APK download). */
     fun webPage(url: String) = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)
+
+    /**
+     * [webPage] in the browser even when an installed app claims the link (that app may lack the page): sent to
+     * the default browser, or the first one when none is the default. Plain [webPage] when there is no browser.
+     */
+    fun inBrowser(context: Context, url: String): Intent {
+        val page = webPage(url)
+        // A page no app claims: only browsers handle it.
+        val probe = webPage("https://example.com/")
+        val pm = context.packageManager
+        val browsers = try {
+            queryActivities(pm, probe).mapNotNull { it.activityInfo?.packageName }.distinct()
+        } catch (_: RuntimeException) {
+            emptyList()
+        }
+        val default = try {
+            resolveActivity(pm, probe)?.activityInfo?.packageName
+        } catch (_: RuntimeException) {
+            null
+        }
+        // With no default browser, resolving gives the system's chooser, which isn't in the list.
+        val browser = default?.takeIf { it in browsers } ?: browsers.firstOrNull()
+        return if (browser != null) page.setPackage(browser) else page
+    }
+
+    @Suppress("DEPRECATION")
+    private fun queryActivities(pm: PackageManager, intent: Intent): List<ResolveInfo> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+        } else {
+            pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+
+    @Suppress("DEPRECATION")
+    private fun resolveActivity(pm: PackageManager, intent: Intent): ResolveInfo? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.resolveActivity(intent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+        } else {
+            pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        }
 
     /** [packageName]'s Play Store page: the store app, else the web page. Pass both to [launch]. */
     fun playStore(packageName: String): Array<Intent> = arrayOf(
