@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 class ConnectLogicTest {
     private val url = "https://relay.example.com/d/mmg42klgyqzwneiskrelxms3j4/mcp"
@@ -19,37 +20,42 @@ class ConnectLogicTest {
         PairingRequest("p_1", name, host, "K7Q2", null, null, expiresAt, viaAgent)
 
     @Test
-    fun everyGuideIsShortWithOneMainAction() {
-        AgentClient.entries.forEach { client ->
-            val guide = ClientInstructions.guide(client, url)
-            assertTrue(client.name, guide.steps.size in 1..2)
-            assertTrue(client.name, guide.appliesTo.isNotBlank())
-            // One main action at most: a link that does the setup, or a command to copy.
-            assertTrue(client.name, listOfNotNull(guide.open, guide.command, guide.message).size <= 1)
-        }
-        assertEquals(AgentClient.OTHER, AgentClient.entries.last())
+    fun theListIsTheAgentsPeopleUseThenOther() {
+        assertEquals(
+            listOf("Claude", "ChatGPT", "Muse", "Grok", "Grok Bot", "Other agent"),
+            AgentClient.entries.map { it.label },
+        )
+        // Every agent but Other has its own app; each app once.
+        assertEquals(listOf(AgentClient.OTHER), AgentClient.entries.filter { it.packageName == null })
+        val packages = AgentClient.entries.mapNotNull { it.packageName }
+        assertEquals(packages.size, packages.toSet().size)
     }
 
     @Test
-    fun chatAgentsGetAMessageToSendAndCompareTheAgentsCode() {
+    fun everyGuideIsOneActionAndAtMostTwoSteps() {
+        AgentClient.entries.forEach { client ->
+            val guide = ClientInstructions.guide(client, url)
+            assertTrue(client.name, guide.steps.size in 1..2)
+            assertEquals(client.name, 1, listOfNotNull(guide.open, guide.message).size)
+        }
+    }
+
+    @Test
+    fun chatAgentsAndOtherGetTheSameMessage() {
         val message = ClientInstructions.agentMessage(url)
         // Agents that add connectors from chat add the URL; the others open it for sign-in instructions.
         assertTrue(message.contains("add $url as a custom connector") && message.contains("it shows how to sign in yourself"))
         // Clients that need a client ID typed in (Muse) get the relay's public one.
         assertTrue(message.contains("client ID, use droidhands"))
         assertTrue("one line", '\n' !in message)
-        listOf(AgentClient.MUSE to "Muse", AgentClient.GROK_BOT to "Bot", AgentClient.INSTINCT to "Instinct").forEach { (client, name) ->
-            val guide = ClientInstructions.guide(client, url)
-            assertEquals(message, guide.message)
-            assertTrue(guide.viaChat)
-            assertTrue(guide.steps.first().contains(name))
-            assertTrue(guide.steps.none { it.contains("browser") })
+        listOf(AgentClient.MUSE, AgentClient.GROK_BOT, AgentClient.OTHER).forEach { client ->
+            assertEquals(client.name, message, ClientInstructions.guide(client, url).message)
         }
-        assertTrue(ClientInstructions.guide(AgentClient.INSTINCT, url).steps.single().contains("4-letter code"))
-        assertTrue(ClientInstructions.guide(AgentClient.MUSE, url).steps.any { it.contains("Client ID, paste it (droidhands") })
-        assertTrue(ClientInstructions.guide(AgentClient.GROK_BOT, url).steps.any { it.contains("Authorize") })
-        assertTrue(ClientInstructions.guide(AgentClient.OTHER, url).note.orEmpty().contains("chat"))
-        assertFalse(ClientInstructions.guide(AgentClient.CLAUDE, url).viaChat)
+        val muse = ClientInstructions.guide(AgentClient.MUSE, url)
+        assertEquals("droidhands", muse.clientId)
+        assertTrue(muse.steps.any { it.contains("Client ID, paste it (droidhands") })
+        assertTrue(ClientInstructions.guide(AgentClient.GROK_BOT, url).steps.first().contains("Authorize"))
+        assertNull(ClientInstructions.guide(AgentClient.GROK_BOT, url).clientId)
     }
 
     @Test
@@ -59,8 +65,7 @@ class ConnectLogicTest {
         assertTrue(guide.open!!.copyUrlFirst)
         assertTrue(guide.open!!.inBrowser)
         assertTrue(guide.steps.first().contains("Custom"))
-        assertNull(guide.command)
-        assertTrue(guide.appliesTo.contains("paid"))
+        assertTrue(guide.steps.first().contains("paid"))
     }
 
     @Test
@@ -72,7 +77,7 @@ class ConnectLogicTest {
             open.url,
         )
         assertFalse(open.copyUrlFirst)
-        // The Claude app opens it when it can; the page offers the browser if it didn't.
+        // The Claude app opens it when it can; the card offers the browser if it didn't.
         assertFalse(open.inBrowser)
         assertTrue(ClientInstructions.claudeAddLink("https://h/a b?c=d&e").endsWith("connectorUrl=https%3A%2F%2Fh%2Fa%20b%3Fc%3Dd%26e"))
     }
@@ -85,23 +90,15 @@ class ConnectLogicTest {
         assertTrue(guide.open!!.inBrowser)
         assertEquals("https://chatgpt.com/plugins", guide.open!!.url)
         assertTrue(guide.steps.first().contains("Add custom MCP server"))
-        assertFalse(guide.onComputer)
     }
 
     @Test
-    fun computerClientsGetACopyableCommandWithoutAToken() {
-        val guide = ClientInstructions.guide(AgentClient.CLAUDE_CODE, url)
-        assertEquals("claude mcp add --transport http phone $url", guide.command)
-        assertTrue(guide.steps.first().contains("/mcp"))
-        assertTrue(guide.onComputer)
-        assertEquals("claude mcp add --transport http phone 'https://h/a b'", ClientInstructions.claudeCodeCommand("https://h/a b"))
-        assertEquals("codex mcp add phone --url $url", ClientInstructions.guide(AgentClient.CODEX, url).command)
-        assertEquals("gemini mcp add --transport http -s user phone $url", ClientInstructions.guide(AgentClient.GEMINI_CLI, url).command)
-        assertNull(ClientInstructions.guide(AgentClient.CLAUDE, url).command)
-        assertTrue(ClientInstructions.shareCommand(guide).endsWith(guide.command!!))
-        val share = ClientInstructions.shareText(url)
-        assertTrue(share.endsWith("\n$url"))
-        assertTrue(share.contains("AI agents get instructions"))
+    fun theManifestCanSeeEveryAgentApp() {
+        // Unit tests run in the module directory.
+        val manifest = File("src/main/AndroidManifest.xml").readText()
+        AgentClient.entries.mapNotNull { it.packageName }.forEach { packageName ->
+            assertTrue(packageName, manifest.contains("<package android:name=\"$packageName\" />"))
+        }
     }
 
     @Test

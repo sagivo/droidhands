@@ -1,5 +1,64 @@
 # DroidHands on iPhone
 
+There are two ways to use DroidHands with an iPhone:
+
+| | DroidHands for iPhone (App Store) | Mac host + runner |
+|---|---|---|
+| What it is | A native app on the phone, `clients/ios/app` | A process on your Mac driving the phone through XCUITest, `clients/ios/host` + `clients/ios/runner` |
+| Install | From the App Store (or TestFlight) | `scripts/ios-host.sh`, with Xcode and a paired iPhone in Developer Mode |
+| Agents can | Contacts, calendar, reminders, location, links, messages and calls (the user taps Send or Call), device status, flashlight, clipboard, speech, the user's shortcuts | Everything on screen: phone use in any app, the app list, what each app declares |
+| Runs while | The DroidHands app is open on the phone | The Mac is on and the phone is reachable |
+
+## DroidHands for iPhone (the App Store app)
+
+A SwiftUI app with no dependencies. It speaks the same protocols as the Android app ([PROTOCOL.md](PROTOCOL.md)):
+an outbound WebSocket to the relay, the same tokens, one-tap OAuth pairing and agent sign-in, the same grant
+(Everything, or chosen abilities, plus "ask me before sensitive actions"), per-tool rules, pause, revoke and an
+activity log. The Kotlin core runs only on the JVM, so the app has a Swift port of the parts a phone needs:
+
+| Swift (`clients/ios/app/DroidHands`) | Kotlin counterpart (`clients/android/core`) |
+|---|---|
+| `Core/Encoding.swift`, `Tokens.swift`: identity (secret in the Keychain, this device only), tokens (only SHA-256 stored) | `auth/DeviceIdentity`, `auth/TokenManager` |
+| `Core/McpServer.swift`: auth, JSON-RPC, `tools/list`, the `tools/call` pipeline (scope, pause, BLOCK rule, risk cap, approval, timeout paused while asking, one audit entry per call, Stop/Revoke cancel running calls) | `mcp/McpServer`, `mcp/ToolCalls` |
+| `Core/RelayClient.swift`, `Pairing.swift`: hello/welcome, tunneled requests, keepalive and heartbeat, close codes, backoff; pairing prompts with relay-clock expiry | `transport/RelayClient`, `transport/RelayPairings` |
+| `Core/Access.swift`, `AccessSummary.swift`: scopes, abilities, the grant, refusal texts, `initialize` instructions | `auth/Grant`, `auth/GrantText`, `mcp/AccessSummary` |
+| `Tools/`: the iPhone tools ([TOOLS.md](TOOLS.md#platforms)) on public APIs only: Contacts, EventKit, CoreLocation, MessageUI, CallKit's call observer, `UIApplication.open`, Shortcuts' x-callback-url | `clients/android/app/.../tools` |
+
+The abilities are the iPhone's own set over the shared scope names: *Read contacts, calendar & reminders*
+(`contacts.read`, `calendar.read`), *Location*, *Open links and apps* (`apps`), *Send messages* (`messages.send`),
+*Make calls* (`calls`), *Change calendar & reminders* (`calendar.write`), *Device* (`device`) and *Run your
+shortcuts* (`intents`). The test vectors of PROTOCOL.md §1 are in `DroidHandsTests`.
+
+**When it works.** iOS runs an app only while it is on screen, plus about 30 seconds after the user leaves it.
+DroidHands stays connected for that time, then closes the relay connection (code 1000), so agents get `503 Device
+offline` at once instead of waiting for a timeout. Tools that need the screen (opening links, the message composer,
+calls, shortcuts, the flashlight, speech, location) say so when the app is in the background. Waking the app with a
+push notification when an agent calls is not built yet: it needs an APNs key, and the relay must send HTTP/2
+requests to APNs.
+
+**What it can't do, by iOS design.** No access to other apps' screens or notifications, SMS history, the call log,
+the list of installed apps, volume, ringer or alarms. Messages and calls always need the user's tap (the message
+composer's Send, iOS's Call prompt); `sms_send` waits for it and reports whether the user sent the message, and
+`phone_call` watches CallKit for the call to start. The user's shortcuts are the escape hatch: a shortcut can send a
+message without a tap or run another app's actions, and `shortcut_run` returns its output.
+
+### Building and testing
+
+```
+./scripts/ios-app.sh test                          # unit tests on a simulator
+./scripts/ios-app.sh run --relay http://127.0.0.1:8788   # Debug build against a local relay, with a test token
+./scripts/ios-app.sh screenshots                   # every screen as a PNG (App Store screenshots on a 6.9" simulator)
+./scripts/store-release.sh ios                     # signed build → App Store Connect (docs/RELEASING.md)
+```
+
+`run --relay` uses Debug-only hooks (`DebugHooks` in `DroidHandsApp.swift`, compiled out of Release builds): it
+points the app at the relay and writes a Full-access token for an agent named "Test" to the app's
+`Documents/test-token.txt`. With it, `scripts/e2e/pairing.mjs <connectUrl>` runs the OAuth pairing (approve on the
+simulator). The App Store listing, review notes and privacy answers are in
+[clients/ios/app/APPSTORE.md](../clients/ios/app/APPSTORE.md).
+
+## The Mac host (full phone use)
+
 DroidHands gives agents the same three layers on iPhone as on Android, from the same core, with the same tool
 names ([TOOLS.md](TOOLS.md)):
 
@@ -10,7 +69,7 @@ names ([TOOLS.md](TOOLS.md)):
    elements), `ui_tap`, `ui_type`, `ui_scroll`, `ui_swipe`, `ui_global_action`. The agent looks and decides where
    to tap.
 
-## Why it runs this way
+### Why it runs this way
 
 iOS gives an App Store app no way to list other apps, read their declarations, see their screens or tap in them.
 The one channel Apple provides for all four is UI testing: an XCUITest runner can screenshot the screen, read the
@@ -48,7 +107,7 @@ What is shared and what is per platform:
 `InstalledApp.packageName` holds the bundle id on iOS, so app access, tool rules (`com.spotify.client/open_link`),
 the never-allow list and the audit log work unchanged.
 
-## Discovered actions on iOS
+### Discovered actions on iOS
 
 Everything below is read from the installed version of each app, every time it changes:
 
@@ -64,7 +123,7 @@ Plugins add `ios:` recipes next to `android:` ones ([PLUGINS.md](PLUGINS.md)): `
 recipe is offered only when the installed app declares the link's scheme (or domain), the iOS form of checking a
 recipe against the installed app.
 
-## Runner protocol (host ⇄ runner)
+### Runner protocol (host ⇄ runner)
 
 The runner is an HTTP/1.1 server inside the XCUITest process on the phone, port `8101` by default
 (`PB_RUNNER_PORT`). Every request carries `Authorization: Bearer <secret>`; the host generates the secret and passes
@@ -96,7 +155,7 @@ secure?, children: [Element]}`. `type` is the `XCUIElement.ElementType` name wit
 The runner does no policy: the host checks the agent's grant, app access, pause and approvals before every
 call, as the Android app does before its accessibility service acts.
 
-## Running it
+### Running it
 
 ```
 scripts/ios-host.sh --simulator          # boots/uses a simulator, builds and starts the runner, starts the host

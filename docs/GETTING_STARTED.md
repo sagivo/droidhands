@@ -62,32 +62,24 @@ Every step can be skipped and reopened later from *Settings › About › Run se
 
 In DroidHands, tap **Connect an AI agent** (the wizard's last step is the same page).
 
-**Agent apps on this phone** are listed first under **On this phone** (Claude, ChatGPT, Muse, Grok Bot
-and Grok, whichever are installed). Tap **Add** next to one:
+Pick your agent from the list. Each one opens a card with one button and at most two steps:
 
-* **Claude** opens with DroidHands filled in (claude.ai's install link). If the Claude app doesn't
-  show the form, **Didn't open? Use the browser** opens it on claude.ai.
-* **Muse** and **Grok Bot** open with a message ready to send that asks them to add DroidHands as a
-  connector. Send it. (An app that doesn't take shared text opens with the message copied: paste it.)
-* **ChatGPT** and **Grok** have no connector setup in their apps: the URL is copied and their
-  connector settings open in the browser.
+| Agent | Button | Then |
+|---|---|---|
+| Claude (claude.ai, Desktop, mobile) | **Add to Claude**: Claude opens with DroidHands filled in | Tap *Add*, then *Connect*. If the Claude app doesn't show the form, **Didn't open? Use the browser** opens it on claude.ai. |
+| ChatGPT (chatgpt.com) | **Copy URL and open ChatGPT** (in the browser) | *Add* › *Add custom MCP server*: name it DroidHands, paste, keep OAuth, tick *I understand*, *Create as a plugin*. |
+| Muse (Meta) | **Send to Muse**: Muse opens with a message ready to send | Send it and tap *Connect* on its card. If it asks for a Client ID, paste `droidhands` (it's copied). |
+| Grok (grok.com, Grok apps; paid plans) | **Copy URL and open Grok** | *New Connector* › *Custom*, paste, *Connect*. |
+| Grok Bot | **Send to Grok Bot**: the Bot opens with a message ready to send | Send it and tap *Authorize* on its card (or *Connect apps* › *Your plugins* › *Authorize*). |
+| **Other agent** (Claude Code, Codex, Gemini CLI, Instinct, anything else) | A message to **Share** or **Copy** | Send it to the agent, in its chat or on the computer it runs on. |
 
-Under the agent you tapped, the page shows what's left and waits for the agent. For anything else,
-pick your agent under **Another agent**:
-
-| Agent | What to do |
-|---|---|
-| Claude (claude.ai, Desktop, mobile) | Tap **Add to Claude**. Claude opens with DroidHands filled in: tap *Add*, then *Connect*. |
-| ChatGPT (chatgpt.com) | Tap **Copy URL and open ChatGPT** (stay in the browser), then *Add* › *Add custom MCP server*: name it DroidHands, paste, keep OAuth, tick *I understand*, *Create as a plugin*. |
-| Grok (grok.com, Grok apps; paid plans) | Tap **Copy URL and open Grok**, then *New Connector* › *Custom*, paste, *Connect*. |
-| Claude Code | Copy (or **Share** to your computer) `claude mcp add --transport http phone <URL>`, then `/mcp` › *Authenticate*. |
-| Codex | `codex mcp add phone --url <URL>`. Sign-in opens in the browser (or `codex mcp login phone`). |
-| Gemini CLI | `gemini mcp add --transport http -s user phone <URL>`, then `/mcp auth phone`. |
-| Muse (Meta), Grok Bot, Instinct, other chat agents | **Send to your agent**: *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. No connector settings? Open that link: it shows how to sign in yourself."* Muse: tap *Connect* on its card, type `droidhands` as the Client ID, *Add*. Grok Bot: tap *Authorize* on its card. |
-| Any other MCP client | Add a Streamable-HTTP server with your connection URL (OAuth sign-in). |
-
-Setting up on a computer? Share the connection URL to it and open it there: the page has the same
-one-click buttons and commands (plus **Add to Cursor**).
+The message is *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP
+server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. No
+connector settings? Open that link: it shows how to sign in yourself."* Agents that can add MCP
+servers add it themselves; opened in a browser, the link is a setup page with one-click buttons and
+commands for common agents (plus **Add to Cursor**). When Muse or Grok Bot isn't on this phone,
+**Send** opens the share sheet instead. Clients that can't sign in at all (config-file only) take a
+token: **Agent can't sign in? Use a token instead**, on the *Other agent* card.
 
 Agents with connector settings open a browser page saying **"Tap Allow on your phone"** with a
 4-letter code. Muse and Grok Bot add the connector from the chat and sign in the same way. Agents

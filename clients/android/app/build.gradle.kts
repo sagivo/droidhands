@@ -73,12 +73,12 @@ if (!releaseSigningConfigured) {
 
 android {
     namespace = "com.droidhands.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.droidhands.android"
         minSdk = 30
-        targetSdk = 35
+        targetSdk = 36
         versionCode = pbVersionCode
         versionName = pbVersionName
         buildConfigField("String", "DEFAULT_RELAY_URL", literal(defaultRelayUrl))

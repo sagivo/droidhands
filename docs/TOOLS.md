@@ -29,6 +29,17 @@ that no other contact shares as a prefix. Otherwise the tool fails with an error
 candidates, so the agent can ask the user. It never guesses. `to` must be a plain phone number (digits,
 an optional leading `+`, and spacing or punctuation). USSD/MMI codes containing `*` or `#` are refused.
 
+## Platforms
+
+Android has every tool below except those marked iPhone only. **DroidHands for iPhone** (the App Store app,
+[IOS.md](IOS.md#droidhands-for-iphone-the-app-store-app)) has `bridge_capabilities`, `device_status`,
+`flashlight_set`, `clipboard_set`, `speak`, `url_open`, `contacts_search`, `sms_send` (the user taps Send in the
+message composer), `phone_call` (the user taps Call), `call_status`, `calendar_list`, `calendar_events_list`,
+`calendar_event_create`, `reminders_list`, `reminder_create`, `reminder_complete`, `location_get` and
+`shortcut_run`. iOS gives App Store apps no access to other apps' screens or notifications, SMS history, the call
+log, the app list, volume or alarms, so those tools don't exist there. The Mac-hosted iPhone route
+([IOS.md](IOS.md)) has the phone-use and app tools instead.
+
 ## Common result conventions
 
 * List results are compact JSON, optionally followed by a short plain-text footer (for example
@@ -160,6 +171,25 @@ Messages, Slack…).
 | `calendar_list` | calendar.read | READ | – → calendars `[{id,name,account,writable,primary}]` |
 | `calendar_events_list` | calendar.read | READ | `from` (ISO-8601, default now), `to` (ISO-8601) or `days` (default 7), `query`, `limit` (default 50) |
 | `calendar_event_create` | calendar.write | ACTION | `title` (req), `start` (ISO-8601, req), `end` or `duration_minutes` (default 60), `all_day`, `location`, `description`, `calendar_id` (default: primary writable) |
+
+## Reminders — scopes `calendar.read`, `calendar.write`
+
+iPhone only for now (EventKit). The grant's calendar abilities cover reminders.
+
+| tool | scope | risk | args |
+|---|---|---|---|
+| `reminders_list` | calendar.read | READ | `list` (name), `query`, `include_completed` bool (default false), `limit` (default 50) → `[{id,title,due?,completed,priority,list,notes?}]`, soonest due first |
+| `reminder_create` | calendar.write | ACTION | `title` (req), `due` (ISO-8601 date-time, which also sets an alert, or a date), `notes`, `list` (name; default list), `priority`: `none\|low\|medium\|high` |
+| `reminder_complete` | calendar.write | ACTION | `id` (req, from `reminders_list`), `completed` bool (default true) |
+
+## Shortcuts — scope `intents` (advanced)
+
+iPhone only. The iOS counterpart of `intent_start`: the user's own shortcuts can do what no other tool can (send a
+message without a tap, control HomeKit, run other apps' App Intents).
+
+| tool | risk | args |
+|---|---|---|
+| `shortcut_run` | SENSITIVE (pre) | `name` (req; exact, as in the Shortcuts app), `input` (text), `wait_seconds` (default 60) → `{ran, finished, output}`: runs it through `shortcuts://x-callback-url/run-shortcut` and returns its output. The Shortcuts app comes to the front while it runs. |
 
 ## Location — scope `location`
 

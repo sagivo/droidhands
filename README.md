@@ -11,7 +11,7 @@ phone: DroidHands doesn't hard-code apps or Android versions. It reads what each
 for everything else the agent uses the screen like a person would ("phone use", like browser use). It only acts
 inside the access you granted when you connected it, and the live notification lets you watch it and press Stop.
 
-DroidHands is an Android app, plus an iPhone host that runs on your Mac ([docs/IOS.md](docs/IOS.md)), that exposes the phone's capabilities as an
+DroidHands is an Android app and an iPhone app (plus an iPhone host on your Mac for full phone use; [docs/IOS.md](docs/IOS.md)) that exposes the phone's capabilities as an
 [MCP](https://modelcontextprotocol.io) server. Agents reach it through a small relay (the one the
 app comes with, or your own self-hosted one; works over LTE and behind NAT) or directly over
 Tailscale, privately and without a relay (also USB / LAN). Routes combine; see
@@ -103,7 +103,7 @@ The phone is the only authority ([docs/SECURITY.md](docs/SECURITY.md)):
 | `scripts/relay-tailscale.sh` | Run your own relay on your computer, published over Tailscale (tailnet only, or `--public` with Funnel) |
 | `scripts/make-release-key.sh`, `.github/workflows/` | Release signing key, CI (tests and builds on every push) and releases (signed APK and relay image for every `v*` tag). [docs/RELEASING.md](docs/RELEASING.md) |
 | `scripts/e2e/` | End-to-end scenarios (real MCP calls through the relay to a device/emulator) and the pairing flow test |
-| `clients/ios/` | iPhone support ([docs/IOS.md](docs/IOS.md)): `host/` runs the same core on your Mac (Gradle module `:ios-host`); `runner/` is the XCUITest bundle on the iPhone that sees and operates the screen. Start both with `scripts/ios-host.sh`. |
+| `clients/ios/` | iPhone support ([docs/IOS.md](docs/IOS.md)): `app/` is DroidHands for iPhone, the SwiftUI App Store app (`scripts/ios-app.sh`); `host/` runs the same core on your Mac (Gradle module `:ios-host`); `runner/` is the XCUITest bundle on the iPhone that sees and operates the screen. Start both with `scripts/ios-host.sh`. |
 | `clients/android/fixtures` | Emulator-only stand-ins for WhatsApp and a mail app used by the E2E tests |
 | `clients/android/core` | Bridge core in pure Kotlin: MCP server, tokens, policy, audit, relay client, local HTTP server. Platform-neutral. |
 | `clients/android/app` | The Android app: services, setup UI, tool implementations |

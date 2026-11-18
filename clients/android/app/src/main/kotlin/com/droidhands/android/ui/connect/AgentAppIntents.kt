@@ -4,44 +4,45 @@ import android.content.Context
 import android.content.Intent
 import com.droidhands.android.ui.components.Clipboard
 import com.droidhands.android.ui.components.SystemIntents
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
-/** The Android side of [AgentApps]: which agent apps are on this phone, and opening them. */
+/** The Android side of the agent list: sending to an agent, and opening its setup link. */
 internal object AgentAppIntents {
     /** What [send] did, so the page can say what to do next. */
     enum class Sent {
-        /** The app opened with the message in its chat box. */
-        IN_CHAT,
+        /** The agent's app (or the share sheet) opened with the message. */
+        SENT,
 
-        /** The app takes no shared text: it opened with the message on the clipboard. */
+        /** The agent's app takes no shared text: it opened with the message on the clipboard. */
         COPIED,
 
-        /** The app couldn't be opened (uninstalled or disabled since the page loaded). */
+        /** Nothing could take the message. */
         FAILED,
     }
 
-    /** The agent apps installed (and launchable) on this phone, in [AgentApps.KNOWN] order. */
-    suspend fun installed(context: Context): List<AgentApp> = withContext(Dispatchers.IO) {
-        AgentApps.installed { packageName -> SystemIntents.openApp(context, packageName) != null }
-    }
-
     /**
-     * Opens [packageName] with [text] ready to send in its chat: a share to that app only, no share sheet.
-     * Apps that don't take shared text open with [text] on the clipboard instead.
+     * Sends [text] to [client]: straight into its app's chat when it's installed (a share to that app only, no
+     * share sheet; an app that takes no shared text opens with [text] copied), otherwise through the share sheet.
+     * [clientId] goes on the clipboard afterwards, for the agent's screen that asks for it.
      */
-    fun send(context: Context, packageName: String, text: String, clientId: String? = null): Sent {
-        val share = Intent(Intent.ACTION_SEND)
-            .setType("text/plain")
-            .putExtra(Intent.EXTRA_TEXT, text)
-            .setPackage(packageName)
-        if (SystemIntents.launch(context, share)) {
-            clientId?.let { Clipboard.copy(context, "Client ID", it, false) }
-            return Sent.IN_CHAT
+    fun send(context: Context, client: AgentClient, text: String, clientId: String? = null): Sent {
+        val packageName = client.packageName?.takeIf { SystemIntents.openApp(context, it) != null }
+        val sent = if (packageName == null) {
+            if (Clipboard.share(context, "Send to your agent", text)) Sent.SENT else Sent.FAILED
+        } else {
+            val share = Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_TEXT, text)
+                .setPackage(packageName)
+            when {
+                SystemIntents.launch(context, share) -> Sent.SENT
+                else -> SystemIntents.openApp(context, packageName)?.takeIf { SystemIntents.launch(context, it) }?.let {
+                    Clipboard.copy(context, "Message", text, false)
+                    Sent.COPIED
+                } ?: Sent.FAILED
+            }
         }
-        val open = SystemIntents.openApp(context, packageName) ?: return Sent.FAILED
-        Clipboard.copy(context, "Message", text, false)
-        return if (SystemIntents.launch(context, open)) Sent.COPIED else Sent.FAILED
+        if (sent == Sent.SENT) clientId?.let { Clipboard.copy(context, "Client ID", it, false) }
+        return sent
     }
 
     /** Opens [link] (in the browser if [OpenLink.inBrowser], or [forceBrowser]). False if nothing could open it. */

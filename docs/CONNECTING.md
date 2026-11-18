@@ -50,7 +50,7 @@ as well if you use them.
 3. DroidHands shows the URL, for example `http://pixel-8.tail1234.ts.net:8765/mcp` (the phone's
    MagicDNS name, or its `100.x.y.z` address when MagicDNS is off). Paste it into your agent, then tap
    **Allow** on the phone. If your version of the app has no one-tap connect on this route yet,
-   create a token instead (**Use a token instead** on the *Connect an AI agent* page) and use the
+   create a token instead (**Create a token** on the *Connect an AI agent* page) and use the
    snippet it shows.
 
    | Agent (on a computer in your tailnet) | How |

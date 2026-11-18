@@ -1,5 +1,5 @@
 # Tests and builds on every push and pull request: the Android core and app (unit tests, plugin
-# checks, debug APK) and the relay (tests, build). No secrets are used.
+# checks, debug APK), the iPhone app (unit tests) and the relay (tests, build). No secrets are used.
 name: CI
 
 on:
@@ -80,3 +80,13 @@ jobs:
         run: npm run conformance:worker
         env:
           WRANGLER_SEND_METRICS: 'false'
+
+  ios:
+    name: iPhone app
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - name: Unit tests on a simulator
+        run: ./scripts/ios-app.sh test

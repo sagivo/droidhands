@@ -81,6 +81,68 @@ Then, in the workflow run and on the release page:
 3. Install the new APK over the previous release on a phone: it should update in place, keeping
    agents and settings. Phones on the previous release show "Update available" within a day.
 
+## App stores
+
+[`scripts/store-release.sh`](../scripts/store-release.sh) builds the signed release on your computer and
+uploads it to Google Play and App Store Connect. The GitHub workflow above is separate: it still publishes the
+APK. Both use the same version rule, so `v1.2.3` is `versionCode` 10203 everywhere.
+
+```sh
+git tag v1.2.3
+./scripts/store-release.sh android                  # signed .aab → Google Play, internal track
+./scripts/store-release.sh android --track beta --notes "What's new"
+./scripts/store-release.sh ios                      # signed .ipa → App Store Connect / TestFlight
+./scripts/store-release.sh all --build-only         # build and sign both, upload nothing
+```
+
+Settings come from environment variables or `~/.droidhands/store.env` (`KEY=VALUE` lines, `chmod 600`; the
+file is parsed, never run, and environment variables win):
+
+```sh
+# Android signing: defaults to the key scripts/make-release-key.sh wrote
+PB_KEYSTORE_PATH=~/.droidhands/droidhands-release.jks
+DROIDHANDS_DEFAULT_RELAY_URL=https://connect.droidhands.com
+# Google Play
+PLAY_SERVICE_ACCOUNT_JSON=~/.droidhands/play-service-account.json
+# App Store Connect
+ASC_KEY_ID=ABC123DEFG
+ASC_ISSUER_ID=00000000-0000-0000-0000-000000000000
+ASC_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_ABC123DEFG.p8
+APPLE_TEAM_ID=ABCDE12345
+```
+
+### Google Play, one-time setup
+
+1. In the [Play Console](https://play.google.com/console), create the app (`com.droidhands.android`) and
+   complete its store listing, content rating, data safety and app access forms. The API can't do this.
+2. Make the first release by hand, or with `--draft` (an app that was never published only accepts drafts), and
+   finish it in the console. After that the script can roll out to any track.
+3. *Setup › API access*: link a Google Cloud project, create a service account there, create a JSON key for it,
+   and invite its e-mail address under *Users and permissions* with permission to release the app.
+4. **Signing key.** Play re-signs what you upload with an app signing key it holds. If you let Play create one,
+   the Play build is signed differently from the GitHub APK, and a phone can't update from one to the other
+   without uninstalling. To keep one identity, choose *Use a key exported from Java Keystore* when you enable
+   Play App Signing and upload the release key's export (Play Console shows the PEPK command).
+5. The script builds with the GitHub update check switched off (Play installs update through Play).
+
+### App Store Connect, one-time setup
+
+1. *Users and Access › Integrations › App Store Connect API*: create a key with the *App Manager* role,
+   download `AuthKey_<id>.p8` (Apple lets you download it once), and note the key id and the issuer id.
+2. Register the bundle id `com.droidhands.ios` (or your own, via `IOS_APP_BUNDLE_ID`) under *Certificates,
+   Identifiers & Profiles › Identifiers*, then create the app in App Store Connect (*Apps › +*) with it. Automatic
+   signing creates the distribution certificate and profile through the API key.
+3. Fill in the listing, the App Privacy answers and the review notes from
+   [clients/ios/app/APPSTORE.md](../clients/ios/app/APPSTORE.md). The privacy policy URL is
+   `https://github.com/sagivo/droidhands/blob/main/docs/PRIVACY.md`. Screenshots: `scripts/ios-app.sh screenshots`
+   on a 6.9" iPhone simulator.
+4. After an upload, the build appears in TestFlight once Apple has processed it. Adding it to a version and
+   submitting for review is done in App Store Connect.
+
+The iOS lane builds DroidHands for iPhone (`clients/ios/app`, [docs/IOS.md](IOS.md)). It bakes in
+`DROIDHANDS_DEFAULT_RELAY_URL` when set, otherwise `project.yml`'s default (`https://connect.droidhands.com`).
+Unit tests run with `scripts/ios-app.sh test` (and in CI), not in this lane.
+
 ## Build inputs
 
 The Android build reads these Gradle properties (`-Pname=value`) or environment variables. All are
