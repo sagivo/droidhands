@@ -92,7 +92,7 @@ internal fun ConnectAgentContent(
     val now by rememberNow(intervalMs = if (pairings.isEmpty()) 30_000 else 1_000)
     val context = LocalContext.current
     // Agents that existed when the page opened; anything newer is "the one you just connected".
-    val baseline = rememberSaveable { ArrayList(tokens.map { it.id }) }
+    var baseline by rememberSaveable { mutableStateOf(ArrayList(tokens.map { it.id })) }
     val connected = remember(tokens, baseline) { PairingWatch.newlyPaired(tokens, baseline.toSet()) }
     val connectUrl = (relay as? RelayStatus.Connected)?.connectUrl?.takeIf { it.isNotBlank() }
     val livePairings = pairings.filter { it.expiresAt > now }
@@ -132,6 +132,8 @@ internal fun ConnectAgentContent(
                 TertiaryButton("Add another agent", onClick = {
                     addAnother = true
                     picked = null
+                    // The agent that just connected is done: the next one is what the page waits for.
+                    baseline = ArrayList(baseline + connected.id)
                 })
             }
             connectUrl != null -> when (val client = picked) {

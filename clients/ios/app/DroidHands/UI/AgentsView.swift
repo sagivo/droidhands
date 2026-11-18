@@ -158,10 +158,11 @@ struct RenameView: View {
             .onAppear { name = agent.name }
             .toolbar {
                 Button("Save") {
-                    model.update(agent.id) { $0.name = name }
+                    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    model.update(agent.id) { $0.name = trimmed }
                     dismiss()
                 }
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.trimmingCharacters(in: .whitespacesAndNewlines) == agent.name)
             }
     }
 }

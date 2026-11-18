@@ -77,6 +77,7 @@ private struct Point: View {
 
 private struct PermissionsRows: View {
     @State private var refresh = 0
+    @State private var notifications: UNAuthorizationStatus = .notDetermined
 
     var body: some View {
         Section {
@@ -97,12 +98,23 @@ private struct PermissionsRows: View {
             HStack {
                 TileRow(symbol: "bell.badge.fill", color: Palette.brand, title: "Notifications", subtitle: "When an agent waits for you")
                 Spacer()
-                Button("Allow") {
-                    Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) }
+                switch notifications {
+                case .authorized, .provisional, .ephemeral:
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.ok)
+                case .notDetermined:
+                    Button("Allow") {
+                        Task {
+                            _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+                            notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+                        }
+                    }
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                default:
+                    Text("Off").foregroundStyle(.secondary)
                 }
-                .buttonStyle(.bordered).buttonBorderShape(.capsule)
             }
         }
         .id(refresh)
+        .task { notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus }
     }
 }

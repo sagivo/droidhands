@@ -89,7 +89,7 @@ struct ConnectionSettingsView: View {
             }
             Section {
                 Button("Save and reconnect") {
-                    model.applyRelay(url: relay.trimmingCharacters(in: .whitespaces), key: key.trimmingCharacters(in: .whitespaces).isEmpty ? nil : key)
+                    model.applyRelay(url: relay.trimmingCharacters(in: .whitespaces), key: key.trimmingCharacters(in: .whitespaces).isEmpty ? nil : key.trimmingCharacters(in: .whitespaces))
                 }
                 .disabled(!changed || !Settings.isValidRelay(relay))
                 if model.settings.relayURL != Settings.defaultRelay {

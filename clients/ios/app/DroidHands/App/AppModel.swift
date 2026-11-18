@@ -40,6 +40,9 @@ final class AppModel {
     /// A `droidhands://configure` link waiting for "Connect to relay …?".
     var pendingRelayChange: (relay: String, key: String?)?
     var startupError: String?
+    /// Screens that can show the prompt sheet, outermost first. Only the topmost may present: SwiftUI can't
+    /// show a sheet from a view that already has one on top (the Connect screen is open when agents connect).
+    private(set) var promptHosts: [UUID] = []
 
     @ObservationIgnored private var pairingWaiters: [String: CheckedContinuation<PairingDecision, Never>] = [:]
     @ObservationIgnored private var cancelledPairings: Set<String> = []
@@ -155,8 +158,11 @@ final class AppModel {
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "DroidHands relay") { [weak self] in
             // iOS calls this on the main thread and expects the task to end before it returns.
             MainActor.assumeIsolated {
-                self?.relay?.stop()
-                self?.endBackgroundTask()
+                guard let self else { return }
+                self.backgroundTimer?.invalidate()
+                self.backgroundTimer = nil
+                if !self.isInForeground { self.stop(); self.isAsleep = true }
+                self.endBackgroundTask()
             }
         }
         // Say goodbye while there is still time for the close frame to go out.
@@ -253,6 +259,9 @@ final class AppModel {
     }
 
     // MARK: Prompts
+
+    func addPromptHost(_ id: UUID) { if !promptHosts.contains(id) { promptHosts.append(id) } }
+    func removePromptHost(_ id: UUID) { promptHosts.removeAll { $0 == id } }
 
     func approve(_ prompt: PairingPrompt) {
         guard let waiter = pairingWaiters.removeValue(forKey: prompt.id) else { return dismissPairing(prompt.id) }

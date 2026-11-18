@@ -7,6 +7,7 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+
 ---
 
 <!doctype html>
@@ -29,3 +30,14 @@ const { title, description } = Astro.props;
     <slot />
   </body>
 </html>
+
+<script>
+  import posthog from "posthog-js";
+
+  // Public project key (write-only); safe to ship in client code.
+  posthog.init("phc_sVEjReJk87Sn5JdQVGt55sA7dB5AcxXG49WsbdzffAYN", {
+    api_host: "https://us.i.posthog.com",
+    defaults: "2025-11-30",
+    person_profiles: "identified_only",
+  });
+</script>

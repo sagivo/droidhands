@@ -123,6 +123,7 @@ struct ConnectView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $showToken) { ManualTokenView() }
         }
+        .promptSheets()
     }
 }
 
@@ -171,5 +172,6 @@ struct ManualTokenView: View {
                 }
             }
         }
+        .promptSheets()
     }
 }

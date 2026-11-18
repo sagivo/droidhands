@@ -57,7 +57,8 @@ struct PairingSheet: View {
                     .buttonStyle(.bordered)
                     Button {
                         var p = prompt
-                        p.name = name.trimmingCharacters(in: .whitespaces).isEmpty ? r.clientName : name
+                        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        p.name = trimmed.isEmpty ? r.clientName : trimmed
                         p.grant = grant
                         model.approve(p)
                     } label: {
@@ -164,6 +165,6 @@ struct ApprovalSheet: View {
             .padding(.horizontal)
         }
         .padding(.bottom)
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }

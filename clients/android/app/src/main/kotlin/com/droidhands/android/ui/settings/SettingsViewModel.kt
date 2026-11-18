@@ -25,6 +25,7 @@ import com.droidhands.android.ui.apps.LaunchableApps
 import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -214,9 +215,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setLocalPluginsEnabled(on: Boolean) {
         val success = if (on) "Local plugins on: their actions always ask for your approval." else "Local plugins off."
-        saveSecurity("Couldn't change the setting", success) { it.copy(localPluginsEnabled = on) }
-        graph.appDirectory.invalidate()
-        refreshLocalPlugins()
+        val saved = saveSecurity("Couldn't change the setting", success) { it.copy(localPluginsEnabled = on) }
+        // The catalog reads the saved switch: refresh only once it is written, not while the save is still running.
+        viewModelScope.launch {
+            saved.join()
+            graph.appDirectory.invalidate()
+            refreshLocalPlugins()
+        }
     }
 
     /** Re-reads the local plugins folder (it also changes through scripts/plugin-push.sh). */
@@ -282,7 +287,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         return graph.plugins.local.import(text, name, graph.plugins.bundled())
     }
 
-    private fun saveSecurity(failure: String, success: String? = null, transform: (BridgeSettings) -> BridgeSettings) {
+    private fun saveSecurity(failure: String, success: String? = null, transform: (BridgeSettings) -> BridgeSettings): Job =
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { graph.settings.update(transform) }
@@ -294,7 +299,6 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 _messages.send("$failure: ${e.message ?: e.javaClass.simpleName}")
             }
         }
-    }
 
     private fun savedMessage(s: BridgeSettings): String {
         val local = if (s.localServerBind == LocalBind.TAILSCALE) "listening on your tailnet" else "starting the local server"
