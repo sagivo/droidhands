@@ -44,9 +44,11 @@ class ConnectLogicTest {
     fun chatAgentsAndOtherGetTheSameMessage() {
         val message = ClientInstructions.agentMessage(url)
         // Agents that add connectors from chat add the URL; the others open it for sign-in instructions.
-        assertTrue(message.contains("add $url as a custom connector") && message.contains("it shows how to sign in yourself"))
+        assertTrue(message.contains("add $url as a custom connector") && message.contains("sign in yourself"))
         // Clients that need a client ID typed in (Muse) get the relay's public one.
-        assertTrue(message.contains("client ID, use droidhands"))
+        assertTrue(message.contains("client ID droidhands"))
+        // Nothing secret goes through the person: they only tap Allow.
+        assertTrue(message.contains("tap Allow") && message.contains("don't ask me for a password"))
         assertTrue("one line", '\n' !in message)
         listOf(AgentClient.MUSE, AgentClient.GROK_BOT, AgentClient.OTHER).forEach { client ->
             assertEquals(client.name, message, ClientInstructions.guide(client, url).message)

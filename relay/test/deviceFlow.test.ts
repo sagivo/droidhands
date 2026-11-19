@@ -11,6 +11,7 @@ interface DeviceAuthorization {
   device_code: string;
   user_code: string;
   verification_uri: string;
+  verification_uri_complete: string;
   expires_in: number;
   interval: number;
   token_endpoint: string;
@@ -38,7 +39,9 @@ test('agent sign-in: code, pending, approve, token, pair_complete; the device co
   const device = await connectReady(relay);
   const auth = await startSignIn(relay.url, device);
   assert.match(auth.user_code, /^[A-HJ-NP-Z2-9]{4}$/);
-  assert.equal(auth.verification_uri, `${relay.url}/d/${device.identity.deviceId}/mcp`);
+  assert.equal(auth.verification_uri, `${relay.url}/approve`);
+  assert.equal(auth.verification_uri_complete, `${relay.url}/approve?code=${auth.user_code}`);
+  assert.match(auth.message, new RegExp(`/approve\\?code=${auth.user_code}`));
   assert.equal(auth.interval, 5);
   assert.ok(auth.expires_in > 0 && auth.expires_in <= 180);
   assert.equal(auth.token_endpoint, `${relay.url}/oauth/token`);
@@ -180,4 +183,20 @@ test('deviceFlow units: body parsing, device codes, names, guide detection', () 
   assert.equal(wantsAgentGuide('HEAD', 'text/html'), true);
   assert.equal(wantsAgentGuide('GET', 'application/json, text/event-stream'), false);
   assert.equal(wantsAgentGuide('POST', 'text/html'), false);
+});
+
+test('/approve: says to tap Allow, shows a valid code, opens the app; never echoes anything else', async (t) => {
+  const relay = await startRelay(t);
+  const page = await fetch(`${relay.url}/approve?code=k7q2`);
+  assert.equal(page.status, 200);
+  assert.ok(page.headers.get('content-security-policy'));
+  const html = await page.text();
+  assert.match(html, /tap <strong>Allow<\/strong>/);
+  assert.match(html, /K7Q2/);
+  assert.match(html, /href="droidhands:\/\/approve\?code=K7Q2"/);
+
+  const hostile = await (await fetch(`${relay.url}/approve?code=${encodeURIComponent('<b>x')}`)).text();
+  assert.doesNotMatch(hostile, /<b>x|&lt;b&gt;x/);
+  assert.match(hostile, /href="droidhands:\/\/approve"/);
+  assert.equal((await fetch(`${relay.url}/approve`, { method: 'POST' })).status, 405);
 });

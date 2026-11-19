@@ -443,11 +443,16 @@ and the phone still mints the token.
    pairing exactly as in §5.3 steps 2-5 and answers `200`:
    ```json
    { "device_code": "<pairing id>.<page token>", "user_code": "K7Q2",
-     "verification_uri": "{relay}/d/<id>/mcp", "expires_in": 180, "interval": 5,
-     "token_endpoint": "{relay}/oauth/token", "message": "Tell the user: …" }
+     "verification_uri": "{relay}/approve", "verification_uri_complete": "{relay}/approve?code=K7Q2",
+     "expires_in": 180, "interval": 5,
+     "token_endpoint": "{relay}/oauth/token", "message": "Send the user this link now: …" }
    ```
    `user_code` is the display code; nothing is typed anywhere, the user compares it with the phone.
-   `verification_uri` is the connection URL, whose page (§5.7) tells a person to answer on the phone.
+   The agent sends the person `verification_uri_complete`: a static page ("Open DroidHands and tap Allow",
+   the code, and an **Open DroidHands** button linking `droidhands://approve?code=K7Q2`). It looks nothing up
+   and grants nothing; only a display code is echoed. The app opens its open prompt with that code (never
+   another one), or the newest prompt for a link without a code. The person never handles a password,
+   key or token.
    `token_endpoint` and `message` are extensions for agents that read the answer rather than
    implement the RFC. Errors (RFC 6749 shape): `invalid_request` (missing or repeated parameter,
    unreadable body), `invalid_target` (not a connection URL of this relay), `503

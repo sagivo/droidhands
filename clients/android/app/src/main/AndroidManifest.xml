@@ -91,6 +91,13 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="droidhands" android:host="configure" />
             </intent-filter>
+            <!-- droidhands://approve?code=K7Q2 (relay /approve page an agent sends): opens that connection prompt. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="droidhands" android:host="approve" />
+            </intent-filter>
         </activity>
 
         <!-- One-tap agent pairing approval (docs/PROTOCOL.md §5). -->

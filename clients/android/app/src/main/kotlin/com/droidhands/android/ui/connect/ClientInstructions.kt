@@ -87,7 +87,7 @@ object ClientInstructions {
         AgentClient.OTHER -> ClientGuide(
             client = client,
             message = agentMessage(url),
-            steps = listOf("Send this to your agent, in its chat or on the computer it runs on."),
+            steps = listOf("Send this to your agent, in its chat or on the computer it runs on. If it sends back a link, open it."),
         )
     }
 
@@ -101,14 +101,13 @@ object ClientInstructions {
 
     /**
      * One line to send any agent. Agents that add connectors (Muse, Grok Bot, coding agents) add [url] and sign
-     * in like any connector; the others open it, which answers agents with sign-in instructions and people
-     * with a setup page.
+     * in like any connector; the others open it and sign in themselves (they send the person a link that opens
+     * the Allow prompt). Nothing secret ever passes through the person.
      */
     fun agentMessage(url: String): String =
-        "Connect to my phone with DroidHands: add $url as a custom connector (remote MCP server, OAuth sign-in; " +
-            "if it needs a client ID, use droidhands with no secret) and connect to it. If I have to fill in a form, " +
-            "tell me exactly what to type: Client ID droidhands, nothing else. No connector settings? Open " +
-            "that link: it shows how to sign in yourself."
+        "Connect to my phone with DroidHands: add $url as a custom connector (remote MCP server, OAuth, " +
+            "client ID droidhands, no secret). Can't add connectors? Open that link and sign in yourself as it " +
+            "explains. Either way I just tap Allow in the DroidHands app: don't ask me for a password, key or token."
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 }

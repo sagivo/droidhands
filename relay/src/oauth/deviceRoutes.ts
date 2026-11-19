@@ -4,6 +4,7 @@ import { readBody } from '../body.js';
 import { admit, clientInfo, relayBase, type HttpDeps } from '../httpDeps.js';
 import { allowMethods, applyOpenCors, sendBody, sendJson } from '../httpUtil.js';
 import { headerValue } from '../net.js';
+import { approveCode, approvePage } from '../pages/approvePage.js';
 import { connectorSetupPage, wantsSetupPage } from '../pages/connectorPage.js';
 import { sendPage } from '../pages/html.js';
 import { cleanUserAgent } from './authorizeRoutes.js';
@@ -72,6 +73,13 @@ export function handleAgentGuide(deps: HttpDeps, req: IncomingMessage, res: Serv
     return sendPage(req, res, 200, connectorSetupPage(connectorUrl(base, deviceId), agentGuide(base, deviceId)));
   }
   sendBody(req, res, 200, agentGuideContentType(accept), agentGuide(base, deviceId));
+}
+
+/** `GET /approve?code=…`: the page an agent sends the person (§5.6). */
+export function handleApprovePage(deps: HttpDeps, req: IncomingMessage, res: ServerResponse, url: URL): void {
+  if (!allowMethods(req, res, 'GET, HEAD')) return;
+  if (!admit(deps, clientInfo(deps, req)).allowed) return sendJson(res, 429, { error: 'rate_limited' });
+  sendPage(req, res, 200, approvePage(approveCode(url.searchParams.get('code'))));
 }
 
 /** `GET /llms.txt`. */

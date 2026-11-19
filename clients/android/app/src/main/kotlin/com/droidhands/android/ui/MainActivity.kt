@@ -13,6 +13,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.droidhands.android.ui.deeplink.ApproveLinks
 import com.droidhands.android.ui.deeplink.ConfigureLinkViewModel
 import com.droidhands.android.ui.nav.NavState
 import com.droidhands.android.ui.theme.DroidHandsTheme
@@ -21,11 +22,15 @@ import com.droidhands.android.ui.theme.DroidHandsTheme
  * The app's single activity: onboarding, Home, Agents, Activity and Settings. Other components can
  * open a specific place with [intent] (e.g. a notification opening Home to show pending approvals).
  * It also handles `droidhands://configure?relay=…&key=…` setup links (docs/PROTOCOL.md §5.5),
- * which are only ever applied after the user confirms.
+ * which are only ever applied after the user confirms, and `droidhands://approve` links, which open the
+ * connection prompt an agent is waiting on.
  */
 class MainActivity : ComponentActivity() {
     /** Place requested by the launching intent; consumed by the UI once applied. */
     private var requestedNav by mutableStateOf<NavState?>(null)
+
+    /** Code of a `droidhands://approve` link ("" for none) whose prompt the UI should open. */
+    private var requestedApproval by mutableStateOf<String?>(null)
 
     private val links: ConfigureLinkViewModel by viewModels()
 
@@ -43,6 +48,8 @@ class MainActivity : ComponentActivity() {
                 DroidHandsRoot(
                     requestedNav = requestedNav,
                     onNavHandled = { requestedNav = null },
+                    requestedApproval = requestedApproval,
+                    onApprovalHandled = { requestedApproval = null },
                     links = links,
                 )
             }
@@ -57,6 +64,9 @@ class MainActivity : ComponentActivity() {
 
     private fun handle(intent: Intent?) {
         if (links.offer(intent)) return
+        if (intent?.action == Intent.ACTION_VIEW && intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
+            ApproveLinks.codeOf(intent.dataString)?.let { requestedApproval = it; return }
+        }
         Destination.navStateFor(intent?.getStringExtra(EXTRA_DESTINATION))?.let { requestedNav = it }
     }
 

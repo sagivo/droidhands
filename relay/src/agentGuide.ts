@@ -64,31 +64,31 @@ MCP server URL: ${mcp}
 
 ## If you are a person
 
-Paste this URL into your AI agent as a custom connector or remote MCP server, or send it to your agent in a chat.
-Then open DroidHands on your phone: a prompt shows a 4-letter code. Tap Allow if your agent (or the page your
-browser opened) shows the same code.
+Paste this URL into your AI agent as a custom connector (remote MCP server), or just send it to your agent in a
+chat. Then switch to DroidHands on your phone and tap Allow. No password, no key to copy.
 
 ## If you are an AI agent
 
-### Option A: your app supports remote MCP servers with OAuth
+### Option A: your app supports remote MCP servers
 
-Add ${mcp} as a remote MCP server (Streamable HTTP). Sign-in is standard MCP authorization (OAuth 2.1 with dynamic
-client registration and PKCE); the person approves on their phone. If the app asks for a client ID, use
-\`droidhands\` and leave the client secret empty. Nothing else to do.
+Add ${mcp} as a remote MCP server (Streamable HTTP, OAuth sign-in). If it asks for a client ID, use
+\`droidhands\` with no client secret. The person taps Allow on their phone. That's all.
 
-### Option B: sign in yourself (no browser needed)
+### Option B: sign in yourself (any agent that can make HTTP requests)
 
-For agents that can make HTTP requests (curl, fetch, a code tool) but have no MCP connector settings.
+The person only opens one link and taps Allow in the DroidHands app. Never ask them for a password, an API key or
+a token, and don't ask them to create or store one.
 
-1. Ask for a code. Put your own name in client_name; the person sees it on their phone.
+1. Start the sign-in. Put your own name in client_name; the person sees it on their phone.
 
        curl -s -X POST ${base}${DEVICE_AUTHORIZATION_PATH} \\
          --data-urlencode 'resource=${mcp}' \\
          --data-urlencode 'client_name=YOUR NAME'
 
-   The JSON answer has device_code, user_code (4 letters) and expires_in (about 3 minutes).
+   The JSON answer has device_code, verification_uri_complete (a link) and expires_in (about 3 minutes).
 
-2. Tell the person right away: "Open DroidHands on your phone and tap Allow if it shows the code <user_code>."
+2. Right away, send the person the verification_uri_complete link, for example: "Open this link and tap Allow
+   in DroidHands: <link>". It opens the app; they approve there and come back.
 
 3. Every ${POLL_INTERVAL_SEC} seconds, ask for the token:
 
@@ -97,16 +97,11 @@ For agents that can make HTTP requests (curl, fetch, a code tool) but have no MC
          --data-urlencode 'device_code=<device_code>'
 
    * {"error":"authorization_pending",…}: not answered yet. Keep polling.
-   * {"access_token":"pb1.…","token_type":"Bearer",…}: connected. Stop polling.
+   * {"access_token":"pb1.…",…}: connected. Stop polling and tell the person.
    * access_denied or expired_token: tell the person. Start again only if they ask.
 
-   Fetch the token within 2 minutes of the approval; after that the phone deletes it.
-
-4. Keep the access token secret: save it in your credential store or secret manager, never in a chat message,
-   file or log. It does not expire. If a request later gets HTTP 401, the person revoked it: sign in again.
-
-If your platform has its own place for an API key or bearer token (a secure credential prompt), the person can
-instead create a token in the DroidHands app (Connect an AI agent › Use a token instead) and enter it there.
+4. Send the access token as a Bearer token on every call below. Keep it to yourself (never show it in the chat).
+   If you lose it, or a call gets HTTP 401, just sign in again: the person taps Allow once more.
 
 ### Calling the phone
 

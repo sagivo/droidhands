@@ -44,6 +44,9 @@ internal fun WithSetupActions(vm: SetupViewModel, content: @Composable (SetupAct
     val snackbar = LocalSnackbarHostState.current
     val scope = rememberCoroutineScope()
     var backgroundLocationDialog by rememberSaveable { mutableStateOf(false) }
+    // Google Play's prominent disclosure: DroidHands isn't an accessibility tool, so the user must see what the
+    // service reads and does, and agree, before we send them to the system switch.
+    var accessibilityDialog by rememberSaveable { mutableStateOf(false) }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         vm.refresh(activity)
@@ -73,6 +76,7 @@ internal fun WithSetupActions(vm: SetupViewModel, content: @Composable (SetupAct
                         open(SystemIntents.appNotificationSettings(context), SystemIntents.appDetails(context))
                     item.blocked -> open(SystemIntents.appDetails(context))
                     item.id == SetupLogic.BACKGROUND_LOCATION -> backgroundLocationDialog = true
+                    item.id == SetupLogic.ACCESSIBILITY && item.status != SetupStatus.DONE -> accessibilityDialog = true
                     item.permissions.isNotEmpty() -> request(item.permissions)
                     else -> open(*specialAccessIntents(context, item.id))
                 }
@@ -102,6 +106,33 @@ internal fun WithSetupActions(vm: SetupViewModel, content: @Composable (SetupAct
                 })
             },
             dismissButton = { TertiaryButton("Not now", onClick = { backgroundLocationDialog = false }) },
+        )
+    }
+
+    if (accessibilityDialog) {
+        AlertDialog(
+            onDismissRequest = { accessibilityDialog = false },
+            title = { Text("Let agents use your apps?") },
+            text = {
+                Text(
+                    "DroidHands uses Android's Accessibility Service so the AI agents you connect can use other apps " +
+                        "for you, as you would: it reads what is on the screen and taps, types and scrolls.\n\n" +
+                        "It acts only when an agent you allowed asks, and only in apps that agent may use. What it " +
+                        "reads goes only to that agent, in answer to its request. DroidHands doesn't store it, send " +
+                        "it anywhere else, or use it for ads or analytics. Every action is logged in Activity, and you " +
+                        "can turn the service off at any time.\n\n" +
+                        "Tap Agree, then turn on DroidHands on the next screen.",
+                )
+            },
+            confirmButton = {
+                TertiaryButton("Agree", onClick = {
+                    accessibilityDialog = false
+                    if (!SystemIntents.launch(context, SystemIntents.accessibilitySettings(context))) {
+                        scope.launch { snackbar.showSnackbar("Couldn't open Accessibility settings. Open Settings > Accessibility instead.") }
+                    }
+                })
+            },
+            dismissButton = { TertiaryButton("No thanks", onClick = { accessibilityDialog = false }) },
         )
     }
 }

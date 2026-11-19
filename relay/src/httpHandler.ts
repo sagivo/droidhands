@@ -11,7 +11,8 @@ import { CONNECTOR_PATH_REGEX, deviceIdFromMetadataPath, isAuthorizationServerMe
 import { handleToken } from './oauth/tokenRoute.js';
 import { LLMS_TXT_PATH, bannerText, wantsAgentGuide } from './agentGuide.js';
 import { DEVICE_AUTHORIZATION_PATH } from './oauth/deviceFlow.js';
-import { handleAgentGuide, handleDeviceAuthorization, handleLlmsTxt } from './oauth/deviceRoutes.js';
+import { handleAgentGuide, handleApprovePage, handleDeviceAuthorization, handleLlmsTxt } from './oauth/deviceRoutes.js';
+import { APPROVE_PATH } from './pages/approvePage.js';
 import { DEVICE_WS_PATH } from './protocol.js';
 import { APK_PATH, SETUP_QR_PATH, handleApkDownload, handleSetupPage, handleSetupQr } from './setup/setupRoutes.js';
 import { SETUP_PATH } from './setup/setupUrl.js';
@@ -106,6 +107,8 @@ function matchRoute(deps: HttpDeps, pathname: string, prefix: string, req: Incom
       return { origin: 'open', handle: handleDeviceAuthorization };
     case LLMS_TXT_PATH:
       return { origin: 'open', handle: handleLlmsTxt };
+    case APPROVE_PATH:
+      return { origin: 'page', handle: handleApprovePage };
     case '/oauth/authorize':
       return { origin: 'page', handle: handleAuthorize };
     case SETUP_PATH:

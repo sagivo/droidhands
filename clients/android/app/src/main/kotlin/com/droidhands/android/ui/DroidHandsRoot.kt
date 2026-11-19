@@ -30,7 +30,13 @@ import com.droidhands.android.ui.nav.NavState
 
 /** Root composable: waits for the bridge graph (initialized off the main thread), then shows the app. */
 @Composable
-fun DroidHandsRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: ConfigureLinkViewModel) {
+fun DroidHandsRoot(
+    requestedNav: NavState?,
+    onNavHandled: () -> Unit,
+    requestedApproval: String?,
+    onApprovalHandled: () -> Unit,
+    links: ConfigureLinkViewModel,
+) {
     val context = LocalContext.current
     var warmup by remember { mutableStateOf(if (GraphWarmup.isReady) WarmupState.Ready else WarmupState.Loading) }
     var attempt by remember { mutableIntStateOf(0) }
@@ -46,7 +52,7 @@ fun DroidHandsRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: Con
                 warmup = WarmupState.Loading
                 attempt++
             })
-            WarmupState.Ready -> AppRoot(requestedNav, onNavHandled, links)
+            WarmupState.Ready -> AppRoot(requestedNav, onNavHandled, requestedApproval, onApprovalHandled, links)
         }
     }
 }

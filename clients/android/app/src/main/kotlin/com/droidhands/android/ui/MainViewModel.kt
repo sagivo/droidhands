@@ -20,6 +20,7 @@ import com.droidhands.android.ui.activity.ActivityQuery
 import com.droidhands.android.ui.agents.AgentPresentation
 import com.droidhands.android.ui.apps.ActionNames
 import com.droidhands.android.ui.connect.ConnectionRoutes
+import com.droidhands.android.ui.deeplink.ApproveLinks
 import com.droidhands.android.ui.deeplink.ConfigureRequest
 import com.droidhands.android.ui.home.StatusPresentation
 import com.droidhands.android.ui.onboarding.OnboardingFlow
@@ -39,10 +40,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Activity-scoped access to the bridge state shared by Home, Activity, onboarding and the connect
@@ -174,6 +177,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * A `droidhands://approve` link from the page an agent sent: opens the prompt showing [code] (any code
+     * when blank). Waits briefly, since a cold start may still be reconnecting when the link arrives.
+     */
+    @MainThread
+    fun openApproveLink(context: Context, code: String) {
+        viewModelScope.launch {
+            val request = withTimeoutOrNull(APPROVE_LINK_WAIT_MS) {
+                pendingPairings.first { ApproveLinks.pick(it, code, System.currentTimeMillis()) != null }
+                    .let { ApproveLinks.pick(it, code, System.currentTimeMillis()) }
+            }
+            if (request != null) {
+                openPairing(context, request.id)
+            } else {
+                _messages.trySend(
+                    if (code.isEmpty()) "No agent is waiting for approval. Ask your agent to try again."
+                    else "No request with code $code is waiting. Ask your agent to try again.",
+                )
+            }
+        }
+    }
+
     /** The user is adding [label] on the Connect page: its pairing request is shown under that name. */
     fun expectAgent(label: String) = graph.expectedAgent.set(label)
 
@@ -261,6 +286,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val TAG = "DroidHandsUi"
+
+        /** How long an approve link waits for its request to show up. */
+        const val APPROVE_LINK_WAIT_MS = 8_000L
         const val STOP_TIMEOUT_MS = 5_000L
     }
 }

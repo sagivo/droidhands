@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { DEFAULT_CLIENT_NAME, decodeClientId, PUBLIC_CLIENT_ID, sanitizeClientName } from './clientRegistration.js';
-import { connectorUrl, deviceIdFromResource } from './metadata.js';
+import { APPROVE_PATH, approveUrl } from '../pages/approvePage.js';
+import { deviceIdFromResource } from './metadata.js';
 import { DEVICE_FLOW_REDIRECT_URI, type AuthorizationRequest, type CreateFailure, type PairingView, type RedeemResult } from './pairingStore.js';
 import { PAIRING_ID_REGEX, createFailureError } from './authorizeRoutes.js';
 
@@ -133,22 +134,24 @@ export function parseDeviceCode(code: string): { id: string; pageToken: string }
 
 /**
  * RFC 8628 §3.2 response, plus `message` and `token_endpoint` for agents that read it rather than
- * implement the RFC. `verification_uri` is the connection URL, whose page tells a person to answer
- * on the phone; there is nothing to type anywhere.
+ * implement the RFC. `verification_uri_complete` is the page to send the person: it says to switch to
+ * DroidHands and tap Allow, and opens the app on the prompt. There is nothing to type anywhere.
  */
 export function deviceAuthorizationResponse(pairing: PairingView, base: string, now: number): Record<string, unknown> {
-  const url = connectorUrl(base, pairing.deviceId);
+  const link = approveUrl(base, pairing.displayCode);
   return {
     device_code: deviceCode(pairing),
     user_code: pairing.displayCode,
-    verification_uri: url,
+    verification_uri: `${base}${APPROVE_PATH}`,
+    verification_uri_complete: link,
     expires_in: Math.max(0, Math.round((pairing.expiresAt - now) / 1000)),
     interval: POLL_INTERVAL_SEC,
     token_endpoint: `${base}/oauth/token`,
     message:
-      `Tell the user: "Open DroidHands on your phone and tap Allow if it shows the code ${pairing.displayCode}." ` +
+      `Send the user this link now: ${link} (it opens DroidHands; they tap Allow and come back). ` +
       `Then POST grant_type=${DEVICE_CODE_GRANT} and device_code to ${base}/oauth/token every ${POLL_INTERVAL_SEC} seconds ` +
-      'until it returns access_token (authorization_pending means: keep waiting).',
+      'until it returns access_token (authorization_pending means: keep waiting). ' +
+      'Do not ask the user for a password, key or token.',
   };
 }
 

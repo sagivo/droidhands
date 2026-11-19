@@ -59,7 +59,7 @@ enum AgentClient: String, CaseIterable, Identifiable {
     }
 
     static func message(_ url: String) -> String {
-        "Connect to my phone with DroidHands: add \(url) as a custom connector (remote MCP server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. If I have to fill in a form, tell me exactly what to type: Client ID droidhands, nothing else. No connector settings? Open that link: it shows how to sign in yourself."
+        "Connect to my phone with DroidHands: add \(url) as a custom connector (remote MCP server, OAuth, client ID droidhands, no secret). Can't add connectors? Open that link and sign in yourself as it explains. Either way I just tap Allow in the DroidHands app: don't ask me for a password, key or token."
     }
 }
 

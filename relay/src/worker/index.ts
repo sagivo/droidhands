@@ -50,6 +50,7 @@ import {
   isFormContentType,
   isTokenContentType,
 } from '../oauth/tokenRoute.js';
+import { APPROVE_PATH, approveCode, approvePage } from '../pages/approvePage.js';
 import { LLMS_TXT_PATH, agentGuide, agentGuideContentType, bannerText as relayBanner, llmsTxt, wantsAgentGuide } from '../agentGuide.js';
 import {
   DEVICE_AUTHORIZATION_PATH,
@@ -252,6 +253,8 @@ function match(ctx: Ctx, pathname: string): { policy: OriginPolicy; rpc: boolean
       return open(() => handleDeviceAuthorization(ctx));
     case LLMS_TXT_PATH:
       return open(() => methodNotAllowed(ctx.method, 'GET, HEAD') ?? guideText(ctx, llmsTxt(ctx.base)));
+    case APPROVE_PATH:
+      return pageRoute(() => methodNotAllowed(ctx.method, 'GET, HEAD') ?? approvePageFor(ctx));
     case '/oauth/authorize':
       return pageRoute(() => handleAuthorize(ctx));
     case SETUP_PATH:
@@ -279,6 +282,12 @@ function notFound(): Response {
 
 function bannerText(ctx: Ctx): Response {
   return respond(200, relayBanner(ctx.base), { 'Content-Type': 'text/plain; charset=utf-8' });
+}
+
+/** The page an agent sends the person after starting agent sign-in (§5.6). */
+function approvePageFor(ctx: Ctx): Response {
+  if (!admit(ctx).allowed) return json(429, { error: 'rate_limited' });
+  return page(200, approvePage(approveCode(ctx.url.searchParams.get('code'))));
 }
 
 /** The agent guide or llms.txt (§5.7). */

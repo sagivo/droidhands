@@ -104,7 +104,13 @@ private val NavStateSaver = Saver<NavState, ArrayList<String>>(
  * handling and the setup-link confirmation.
  */
 @Composable
-internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: ConfigureLinkViewModel) {
+internal fun AppRoot(
+    requestedNav: NavState?,
+    onNavHandled: () -> Unit,
+    requestedApproval: String?,
+    onApprovalHandled: () -> Unit,
+    links: ConfigureLinkViewModel,
+) {
     val activity = LocalContext.current.findActivity()
     val snackbar = remember { SnackbarHostState() }
     var nav by rememberSaveable(stateSaver = NavStateSaver) { mutableStateOf(NavState()) }
@@ -139,6 +145,12 @@ internal fun AppRoot(requestedNav: NavState?, onNavHandled: () -> Unit, links: C
         if (requestedNav != null) {
             navigate(requestedNav)
             onNavHandled()
+        }
+    }
+    LaunchedEffect(requestedApproval) {
+        if (requestedApproval != null) {
+            activity?.let { main.openApproveLink(it, requestedApproval) }
+            onApprovalHandled()
         }
     }
     // The token flow and the wizard must start from scratch next time (the token screen's

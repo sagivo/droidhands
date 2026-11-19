@@ -726,6 +726,14 @@ async function pollDeviceToken(deviceCode, { json = false } = {}) {
   return res;
 }
 
+test('/approve: the page an agent sends the person', async () => {
+  const res = await fetch(`${base}/approve?code=K7Q2`);
+  assert.equal(res.status, 200);
+  const page = await res.text();
+  assert.match(page, /K7Q2/);
+  assert.match(page, /href="droidhands:\/\/approve\?code=K7Q2"/);
+});
+
 test('agent sign-in: device code, pending, approve, token, pair_complete; single-use', async (t) => {
   const d = await device(t);
   const res = await postForm(`${base}/oauth/device_authorization`, { resource: connectorUrl(d.deviceId), client_name: 'Instinct' });
@@ -733,7 +741,8 @@ test('agent sign-in: device code, pending, approve, token, pair_complete; single
   assert.equal(res.headers['access-control-allow-origin'], '*');
   const auth = JSON.parse(res.body);
   assert.match(auth.user_code, /^[A-HJ-NP-Z2-9]{4}$/);
-  assert.equal(auth.verification_uri, connectorUrl(d.deviceId));
+  assert.equal(auth.verification_uri, `${base}/approve`);
+  assert.equal(auth.verification_uri_complete, `${base}/approve?code=${auth.user_code}`);
   assert.equal(auth.interval, 5);
   assert.ok(auth.expires_in > 0);
   const pending = await postForm(`${base}/oauth/token`, { grant_type: DEVICE_GRANT, device_code: auth.device_code });
