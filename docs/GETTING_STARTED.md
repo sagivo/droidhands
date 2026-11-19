@@ -74,8 +74,8 @@ Pick your agent from the list. Each one opens a card with one button and at most
 | **Other agent** (Claude Code, Codex, Gemini CLI, Instinct, anything else) | A message to **Share** or **Copy** | Send it to the agent, in its chat or on the computer it runs on. |
 
 The message is *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP
-server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. No
-connector settings? Open that link: it shows how to sign in yourself."* Agents that can add MCP
+server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. If I have to fill in a
+form, tell me exactly what to type: Client ID droidhands, nothing else. No connector settings? Open that link: it shows how to sign in yourself."* Agents that can add MCP
 servers add it themselves; opened in a browser, the link is a setup page with one-click buttons and
 commands for common agents (plus **Add to Cursor**). When Muse or Grok Bot isn't on this phone,
 **Send** opens the share sheet instead. Clients that can't sign in at all (config-file only) take a

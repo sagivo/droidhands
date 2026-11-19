@@ -53,7 +53,7 @@ class ConnectLogicTest {
         }
         val muse = ClientInstructions.guide(AgentClient.MUSE, url)
         assertEquals("droidhands", muse.clientId)
-        assertTrue(muse.steps.any { it.contains("Client ID, paste it (droidhands") })
+        assertTrue(muse.steps.any { it.contains("paste droidhands (already copied) into Client ID") })
         assertTrue(ClientInstructions.guide(AgentClient.GROK_BOT, url).steps.first().contains("Authorize"))
         assertNull(ClientInstructions.guide(AgentClient.GROK_BOT, url).clientId)
     }

@@ -2,6 +2,7 @@ package com.droidhands.android.ui.connect
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -39,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
-import com.droidhands.android.ui.apps.AppIcon
+import com.droidhands.android.R
 import com.droidhands.android.ui.components.AppCard
 import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.CopyableCode
@@ -56,8 +58,6 @@ import com.droidhands.android.ui.components.SectionHeader
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.components.rememberCopier
 import com.droidhands.android.ui.components.rememberNow
-import com.droidhands.android.ui.deeplink.ConfigureLinks
-import com.droidhands.android.ui.onboarding.DEFAULT_RELAY_NOTE
 import com.droidhands.android.ui.theme.TINT_ALPHA
 import com.droidhands.android.ui.theme.statusColors
 import com.droidhands.core.auth.TokenRecord
@@ -184,14 +184,10 @@ internal fun ConnectAgentContent(
                 }
             }
             offerDefault != null -> Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                FormSection(title = "First, get this phone online", footer = DEFAULT_RELAY_NOTE) {
-                    Text(
-                        "Use ${ConfigureLinks.hostOf(offerDefault) ?: offerDefault}, the relay this app comes with.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                FormSection(title = "Use DroidHands Connect") {
                     PrimaryButton("Go online", onClick = main::useDefaultRelay, fullWidth = true)
                 }
-                FormSection(title = "Or connect to your own relay") {
+                FormSection(title = "Or use your own relay") {
                     RelaySetupForm(settings.copy(relayUrl = "", relayAccessKey = ""), onConnect = main::connectRelay)
                 }
             }
@@ -225,14 +221,21 @@ private fun AgentList(onPick: (AgentClient) -> Unit) {
     }
 }
 
-/** The agent's app icon (a letter when the app isn't here); a send icon for "Other agent". */
+/** The agent's logo on its brand color; a send icon for "Other agent". */
 @Composable
 private fun AgentIcon(client: AgentClient) {
-    val packageName = client.packageName
-    if (packageName == null) {
+    val logo = when (client) {
+        AgentClient.CLAUDE -> R.drawable.ic_agent_claude
+        AgentClient.CHATGPT -> R.drawable.ic_agent_chatgpt
+        AgentClient.MUSE -> R.drawable.ic_agent_muse
+        AgentClient.GROK -> R.drawable.ic_agent_grok
+        AgentClient.GROK_BOT -> R.drawable.ic_agent_grok_bot
+        AgentClient.OTHER -> null
+    }
+    if (logo == null) {
         IconBadge(Icons.AutoMirrored.Filled.Send, MaterialTheme.colorScheme.primary)
     } else {
-        AppIcon(packageName, label = client.label)
+        Image(painterResource(logo), contentDescription = null, modifier = Modifier.size(40.dp))
     }
 }
 

@@ -5,6 +5,17 @@ enum AgentClient: String, CaseIterable, Identifiable {
     case claude = "Claude", chatgpt = "ChatGPT", grok = "Grok", muse = "Muse", claudeCode = "Claude Code", other = "Other agent"
     var id: String { rawValue }
 
+    /// The logo asset for this agent; nil for "Other agent".
+    var logo: String? {
+        switch self {
+        case .claude, .claudeCode: "Agent-claude"
+        case .chatgpt: "Agent-chatgpt"
+        case .grok: "Agent-grok"
+        case .muse: "Agent-muse"
+        case .other: nil
+        }
+    }
+
     static let connectorName = "DroidHands"
 
     struct Guide {
@@ -30,7 +41,7 @@ enum AgentClient: String, CaseIterable, Identifiable {
         case .muse:
             return Guide(message: AgentClient.message(url),
                          steps: ["Send the message in Muse, then tap Connect on the card it shows.",
-                                 "If Muse asks for a Client ID, type droidhands. Tap Add."])
+                                 "On the form Muse opens, type droidhands into Client ID and tap Add."])
         case .claudeCode:
             return Guide(command: "claude mcp add --transport http droidhands \(url)",
                          steps: ["Run this on your computer, then type /mcp in Claude Code and sign in."])
@@ -48,7 +59,7 @@ enum AgentClient: String, CaseIterable, Identifiable {
     }
 
     static func message(_ url: String) -> String {
-        "Connect to my phone with DroidHands: add \(url) as a custom connector (remote MCP server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. No connector settings? Open that link: it shows how to sign in yourself."
+        "Connect to my phone with DroidHands: add \(url) as a custom connector (remote MCP server, OAuth sign-in; if it needs a client ID, use droidhands with no secret) and connect to it. If I have to fill in a form, tell me exactly what to type: Client ID droidhands, nothing else. No connector settings? Open that link: it shows how to sign in yourself."
     }
 }
 
@@ -65,7 +76,18 @@ struct ConnectView: View {
                 if let url = model.connectURL {
                     Section {
                         Picker("Agent", selection: $client) {
-                            ForEach(AgentClient.allCases) { Text($0.rawValue).tag($0) }
+                            ForEach(AgentClient.allCases) { agent in
+                                Label {
+                                    Text(agent.rawValue)
+                                } icon: {
+                                    if let logo = agent.logo {
+                                        Image(logo).resizable().frame(width: 24, height: 24)
+                                    } else {
+                                        Image(systemName: "paperplane.fill")
+                                    }
+                                }
+                                .tag(agent)
+                            }
                         }
                     } footer: {
                         Text("Keep DroidHands open: when the agent connects, you tap Allow here.")

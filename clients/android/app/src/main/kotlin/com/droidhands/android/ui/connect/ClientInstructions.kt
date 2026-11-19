@@ -5,8 +5,8 @@ import java.net.URLEncoder
 
 /**
  * The agents on the Connect page, in list order; [OTHER] stays last. [packageName] is the agent's Android app:
- * when it's installed, its row shows the app's icon and sending goes straight into it. A new one is one line here
- * plus its guide in [ClientInstructions]; its package also goes in the manifest's `<queries>`.
+ * when it's installed, sending goes straight into it. A new one is one line here, its guide in
+ * [ClientInstructions], its logo in `res/drawable/ic_agent_*` (shown by `AgentIcon`); its package also goes in the manifest's `<queries>`.
  */
 enum class AgentClient(val label: String, val packageName: String? = null) {
     CLAUDE("Claude", "com.anthropic.claude"),
@@ -73,7 +73,7 @@ object ClientInstructions {
             clientId = OAuthClients.PUBLIC_CLIENT_ID,
             steps = listOf(
                 "Send the message in Muse, then tap Connect on the card it shows.",
-                "If Muse asks for a Client ID, paste it (droidhands is copied). Tap Add.",
+                "On the form Muse opens, paste droidhands (already copied) into Client ID and tap Add.",
             ),
         )
         AgentClient.GROK_BOT -> ClientGuide(
@@ -106,7 +106,8 @@ object ClientInstructions {
      */
     fun agentMessage(url: String): String =
         "Connect to my phone with DroidHands: add $url as a custom connector (remote MCP server, OAuth sign-in; " +
-            "if it needs a client ID, use droidhands with no secret) and connect to it. No connector settings? Open " +
+            "if it needs a client ID, use droidhands with no secret) and connect to it. If I have to fill in a form, " +
+            "tell me exactly what to type: Client ID droidhands, nothing else. No connector settings? Open " +
             "that link: it shows how to sign in yourself."
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
