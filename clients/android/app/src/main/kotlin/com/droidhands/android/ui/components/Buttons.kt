@@ -47,6 +47,7 @@ fun PrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    leading: (@Composable () -> Unit)? = null,
     enabled: Boolean = true,
     destructive: Boolean = false,
     size: ButtonSize = ButtonSize.REGULAR,
@@ -59,7 +60,7 @@ fun PrimaryButton(
     } else {
         ButtonDefaults.buttonColors()
     }
-    PillButton(text, onClick, modifier, icon, enabled && !loading, size, fullWidth, colors, loading)
+    PillButton(text, onClick, modifier, icon, leading, enabled && !loading, size, fullWidth, colors, loading)
 }
 
 @Composable
@@ -79,7 +80,7 @@ fun SecondaryButton(
         contentColor = tint,
         disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
     )
-    PillButton(text, onClick, modifier, icon, enabled, size, fullWidth, colors)
+    PillButton(text, onClick, modifier, icon, leading = null, enabled, size, fullWidth, colors)
 }
 
 @Composable
@@ -112,6 +113,7 @@ private fun PillButton(
     onClick: () -> Unit,
     modifier: Modifier,
     icon: ImageVector?,
+    leading: (@Composable () -> Unit)?,
     enabled: Boolean,
     size: ButtonSize,
     fullWidth: Boolean,
@@ -137,15 +139,21 @@ private fun PillButton(
             )
             Spacer(Modifier.width(8.dp))
         }
-        ButtonContent(text, icon.takeUnless { loading })
+        ButtonContent(text, icon.takeUnless { loading }, leading.takeUnless { loading })
     }
 }
 
 @Composable
-private fun ButtonContent(text: String, icon: ImageVector?) {
-    if (icon != null) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
+private fun ButtonContent(text: String, icon: ImageVector?, leading: (@Composable () -> Unit)? = null) {
+    when {
+        leading != null -> {
+            leading()
+            Spacer(Modifier.width(10.dp))
+        }
+        icon != null -> {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+        }
     }
     Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }

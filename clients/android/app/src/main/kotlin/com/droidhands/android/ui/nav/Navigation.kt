@@ -21,6 +21,11 @@ sealed interface Screen {
         override val route = "connect"
     }
 
+    /** "More ways to connect": self-hosted relay, Tailscale, local server. */
+    data object MoreConnectOptions : Screen {
+        override val route = "connect-more"
+    }
+
     /** Settings > Permissions & access (the setup checklist). */
     data object Permissions : Screen {
         override val route = "permissions"
@@ -39,6 +44,7 @@ sealed interface Screen {
     companion object {
         fun fromRoute(route: String): Screen? = when {
             route == ConnectAgent.route -> ConnectAgent
+            route == MoreConnectOptions.route -> MoreConnectOptions
             route == Permissions.route -> Permissions
             route == NeverAllowApps.route -> NeverAllowApps
             route.startsWith("agent/") -> route.removePrefix("agent/").takeIf { it.isNotEmpty() }?.let(::AgentDetail)

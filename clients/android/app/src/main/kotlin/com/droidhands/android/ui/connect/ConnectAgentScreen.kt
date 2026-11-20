@@ -21,6 +21,7 @@ class ConnectActions(
     val onBack: () -> Unit,
     val onUseToken: () -> Unit,
     val onOpenConnectionSettings: () -> Unit,
+    val onOpenMoreOptions: () -> Unit,
     val onOpenAgent: (String) -> Unit,
 )
 
@@ -45,6 +46,7 @@ fun ConnectAgentScreen(main: MainViewModel, actions: ConnectActions) {
                 main = main,
                 onUseToken = actions.onUseToken,
                 onOpenConnectionSettings = actions.onOpenConnectionSettings,
+                onOpenMoreOptions = actions.onOpenMoreOptions,
                 onConnected = "View" to { record -> actions.onOpenAgent(record.id) },
             )
         }

@@ -65,6 +65,7 @@ import com.droidhands.android.ui.components.findActivity
 import com.droidhands.android.ui.components.rememberNow
 import com.droidhands.android.ui.connect.ConnectActions
 import com.droidhands.android.ui.connect.ConnectAgentScreen
+import com.droidhands.android.ui.connect.MoreConnectOptionsScreen
 import com.droidhands.android.ui.deeplink.ConfigureLinkDialog
 import com.droidhands.android.ui.deeplink.ConfigureLinkViewModel
 import com.droidhands.android.ui.home.HomeActions
@@ -377,12 +378,14 @@ private fun Page(
                 onBack = pop,
                 onUseToken = tokens::startCreate,
                 onOpenConnectionSettings = { onSelectTab(Destination.SETTINGS) },
+                onOpenMoreOptions = { push(Screen.MoreConnectOptions) },
                 onOpenAgent = { id ->
                     pop()
                     push(Screen.AgentDetail(id))
                 },
             ),
         )
+        Screen.MoreConnectOptions -> MoreConnectOptionsScreen(main, onBack = pop, onContinue = pop)
         Screen.Permissions -> SetupScreen(setup, onBack = pop)
         Screen.NeverAllowApps -> NeverAllowScreen(settings, onBack = pop)
         is Screen.AppDetail -> AppDetailScreen(apps, screen.packageName, onBack = pop)

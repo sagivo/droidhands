@@ -26,7 +26,7 @@ class NavigationTest {
     fun encodeDecodeRoundTrip() {
         val state = NavState(Destination.AGENTS, listOf(Screen.AgentDetail("abcdefghijkl"), Screen.AgentApps("abcdefghijkl")))
         assertEquals(state, NavState.decode(state.encode()))
-        val pages = NavState(Destination.SETTINGS, listOf(Screen.Permissions, Screen.NeverAllowApps, Screen.ConnectAgent))
+        val pages = NavState(Destination.SETTINGS, listOf(Screen.Permissions, Screen.NeverAllowApps, Screen.ConnectAgent, Screen.MoreConnectOptions))
         assertEquals(pages, NavState.decode(pages.encode()))
         val app = NavState(Destination.APPS, listOf(Screen.AppDetail("com.spotify.music")))
         assertEquals(listOf("apps", "app/com.spotify.music"), app.encode())

@@ -1,7 +1,12 @@
 package com.droidhands.android.ui.account
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.MaterialTheme
@@ -10,10 +15,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.droidhands.android.R
 import com.droidhands.android.account.SignInState
 import com.droidhands.android.ui.MainViewModel
 import com.droidhands.android.ui.components.Accents
@@ -63,10 +72,28 @@ internal fun SignInWithGoogle(main: MainViewModel, modifier: Modifier = Modifier
         PrimaryButton(
             "Continue with Google",
             onClick = { main.signIn(context) },
+            leading = { GoogleLogo() },
             fullWidth = true,
             loading = state == SignInState.Finishing,
         )
         (state as? SignInState.Failed)?.let { Notice(it.message, kind = NoticeKind.DANGER) }
+    }
+}
+
+/** The 4-color Google "G" on a crisp white circle so it reads cleanly against the brand button. */
+@Composable
+private fun GoogleLogo() {
+    Box(
+        Modifier
+            .size(22.dp)
+            .background(Color.White, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_google),
+            contentDescription = null,
+            modifier = Modifier.size(15.dp),
+        )
     }
 }
 

@@ -52,6 +52,7 @@ import com.droidhands.android.ui.components.PrimaryButton
 import com.droidhands.android.ui.components.SecondaryButton
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.connect.ConnectAgentContent
+import com.droidhands.android.ui.connect.MoreConnectOptionsScreen
 import com.droidhands.android.ui.setup.SetupViewModel
 import com.droidhands.android.ui.theme.TINT_ALPHA
 import com.droidhands.android.ui.theme.statusColors
@@ -72,7 +73,10 @@ class OnboardingActions(
 @Composable
 fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: OnboardingActions) {
     var stepName by rememberSaveable { mutableStateOf(OnboardingStep.WELCOME.name) }
+    var showMoreConnect by rememberSaveable { mutableStateOf(false) }
+    var visitedConnect by rememberSaveable { mutableStateOf(false) }
     val step = OnboardingStep.fromName(stepName)
+    LaunchedEffect(step) { if (step == OnboardingStep.CONNECT) visitedConnect = true }
     val relay by main.relayStatus.collectAsStateWithLifecycle()
     val settings by main.settings.collectAsStateWithLifecycle()
     val setupState by setup.state.collectAsStateWithLifecycle()
@@ -81,9 +85,21 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
     val tokens by main.tokens.collectAsStateWithLifecycle()
     // The wizard only shows before the first agent, so any agent now is the one just added.
     val agentAdded = tokens.any { !it.revoked }
-    val steps = OnboardingFlow.steps(defaultRelayInUse = DefaultRelay.inUse(settings))
+    val steps = OnboardingFlow.steps(defaultRelayInUse = DefaultRelay.inUse(settings) && !visitedConnect)
     val go: (OnboardingStep) -> Unit = { stepName = it.name }
     val previousStep = OnboardingFlow.previous(step, steps)
+    if (showMoreConnect) {
+        BackHandler { showMoreConnect = false }
+        MoreConnectOptionsScreen(
+            main = main,
+            onBack = { showMoreConnect = false },
+            onContinue = {
+                showMoreConnect = false
+                if (step == OnboardingStep.CONNECT) go(OnboardingStep.AGENT)
+            },
+        )
+        return
+    }
     previousStep?.let { previous -> BackHandler { go(previous) } }
 
     Scaffold(
@@ -126,7 +142,7 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
             when (step) {
                 OnboardingStep.WELCOME -> WelcomeStep()
                 OnboardingStep.PERMISSIONS -> PermissionsStep(setup)
-                OnboardingStep.CONNECT -> ConnectStep(main, expandMoreInitially = OnboardingStep.CONNECT !in steps)
+                OnboardingStep.CONNECT -> ConnectStep(main, onOpenMoreOptions = { showMoreConnect = true })
                 OnboardingStep.AGENT -> {
                     if (agentAdded) {
                         StepHeader(Icons.Filled.CheckCircle, "You're all set", "Ask your agent to do something on this phone.", color = statusColors().ok)
@@ -141,12 +157,13 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
                         main = main,
                         onUseToken = actions.onUseToken,
                         onOpenConnectionSettings = { go(OnboardingStep.CONNECT) },
+                        onOpenMoreOptions = { showMoreConnect = true },
                         onConnected = null,
                     )
                     if (OnboardingStep.CONNECT !in steps && !agentAdded) {
                         // The Connect step was left out (the phone went online by itself); its other routes stay one tap away.
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            TertiaryButton("More ways to connect", onClick = { go(OnboardingStep.CONNECT) })
+                            TertiaryButton("More ways to connect", onClick = { showMoreConnect = true })
                         }
                     }
                 }
