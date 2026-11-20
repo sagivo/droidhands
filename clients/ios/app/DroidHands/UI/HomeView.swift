@@ -27,7 +27,7 @@ struct HomeView: View {
 
                 Section {
                     Button { showConnect = true } label: {
-                        TileRow(symbol: "plus", color: Palette.brand, title: "Connect an AI agent", subtitle: "Claude, ChatGPT, Grok, Muse or any MCP client")
+                        TileRow(symbol: "plus", color: Palette.brand, title: "Connect an AI agent", subtitle: "Claude, ChatGPT or any other AI agent")
                     }
                     .foregroundStyle(.primary)
                     if !model.activeAgents.isEmpty {

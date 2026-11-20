@@ -20,87 +20,32 @@ class ConnectLogicTest {
         PairingRequest("p_1", name, host, "K7Q2", null, null, expiresAt, viaAgent)
 
     @Test
-    fun theListIsTheAgentsPeopleUseThenOther() {
+    fun oneMessageForEveryAgent() {
+        val message = AgentPrompt.signIn(url)
         assertEquals(
-            listOf("Claude", "ChatGPT", "Muse", "Grok", "Grok Bot", "Other agent"),
-            AgentClient.entries.map { it.label },
+            "Add a new connector named DroidHands with the URL $url and follow the instructions at " +
+                "https://droidhands.com/connect.md. No password or token is needed: I'll tap Allow in the DroidHands app on my phone.",
+            message,
         )
-        // Every agent but Other has its own app; each app once.
-        assertEquals(listOf(AgentClient.OTHER), AgentClient.entries.filter { it.packageName == null })
-        val packages = AgentClient.entries.mapNotNull { it.packageName }
-        assertEquals(packages.size, packages.toSet().size)
-    }
-
-    @Test
-    fun everyGuideIsOneActionAndAtMostTwoSteps() {
-        AgentClient.entries.forEach { client ->
-            val guide = ClientInstructions.guide(client, url)
-            assertTrue(client.name, guide.steps.size in 1..2)
-            assertEquals(client.name, 1, listOfNotNull(guide.open, guide.message).size)
-        }
-    }
-
-    @Test
-    fun chatAgentsAndOtherGetTheSameMessage() {
-        val message = ClientInstructions.agentMessage(url)
-        // Agents that add connectors from chat add the URL; the others open it for sign-in instructions.
-        assertTrue(message.contains("add $url as a custom connector") && message.contains("sign in yourself"))
-        // Clients that need a client ID typed in (Muse) get the relay's public one.
-        assertTrue(message.contains("client ID droidhands"))
-        // Nothing secret goes through the person: they only tap Allow.
-        assertTrue(message.contains("tap Allow") && message.contains("don't ask me for a password"))
         assertTrue("one line", '\n' !in message)
-        listOf(AgentClient.MUSE, AgentClient.GROK_BOT, AgentClient.OTHER).forEach { client ->
-            assertEquals(client.name, message, ClientInstructions.guide(client, url).message)
-        }
-        val muse = ClientInstructions.guide(AgentClient.MUSE, url)
-        assertEquals("droidhands", muse.clientId)
-        assertTrue(muse.steps.any { it.contains("paste droidhands (already copied) into Client ID") })
-        assertTrue(ClientInstructions.guide(AgentClient.GROK_BOT, url).steps.first().contains("Authorize"))
-        assertNull(ClientInstructions.guide(AgentClient.GROK_BOT, url).clientId)
     }
 
     @Test
-    fun grokCopiesTheUrlAndOpensItsConnectorsInTheBrowser() {
-        val guide = ClientInstructions.guide(AgentClient.GROK, url)
-        assertEquals(ClientInstructions.GROK_CONNECTORS, guide.open!!.url)
-        assertTrue(guide.open!!.copyUrlFirst)
-        assertTrue(guide.open!!.inBrowser)
-        assertTrue(guide.steps.first().contains("Custom"))
-        assertTrue(guide.steps.first().contains("paid"))
+    fun tokenMessageCarriesTheTokenAndAnyExtraStep() {
+        val message = AgentPrompt.withToken(url, "pb1.abc", extraStep = "Run adb forward first.")
+        assertTrue(message.startsWith("Add a new connector named DroidHands with the URL $url and follow the instructions at "))
+        assertTrue(message.endsWith("Use this token as the bearer token: pb1.abc Run adb forward first."))
+        assertFalse(message.contains("No password"))
+        assertTrue(AgentPrompt.withToken(url, "pb1.abc").endsWith("bearer token: pb1.abc"))
     }
 
     @Test
-    fun claudeOpensItsPrefilledAddConnectorDialog() {
-        val open = ClientInstructions.guide(AgentClient.CLAUDE, url).open!!
-        assertEquals(
-            "https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=DroidHands" +
-                "&connectorUrl=https%3A%2F%2Frelay.example.com%2Fd%2Fmmg42klgyqzwneiskrelxms3j4%2Fmcp",
-            open.url,
-        )
-        assertFalse(open.copyUrlFirst)
-        // The Claude app opens it when it can; the card offers the browser if it didn't.
-        assertFalse(open.inBrowser)
-        assertTrue(ClientInstructions.claudeAddLink("https://h/a b?c=d&e").endsWith("connectorUrl=https%3A%2F%2Fh%2Fa%20b%3Fc%3Dd%26e"))
-    }
-
-    @Test
-    fun chatGptCopiesTheUrlBeforeOpeningItsSettings() {
-        val guide = ClientInstructions.guide(AgentClient.CHATGPT, url)
-        assertTrue(guide.open!!.copyUrlFirst)
-        // Custom MCP servers are added on chatgpt.com only, not in the ChatGPT app.
-        assertTrue(guide.open!!.inBrowser)
-        assertEquals("https://chatgpt.com/plugins", guide.open!!.url)
-        assertTrue(guide.steps.first().contains("Add custom MCP server"))
-    }
-
-    @Test
-    fun theManifestCanSeeEveryAgentApp() {
-        // Unit tests run in the module directory.
-        val manifest = File("src/main/AndroidManifest.xml").readText()
-        AgentClient.entries.mapNotNull { it.packageName }.forEach { packageName ->
-            assertTrue(packageName, manifest.contains("<package android:name=\"$packageName\" />"))
-        }
+    fun theInstructionsTheMessageLinksToShipWithTheWebsite() {
+        // Unit tests run in the module directory; the website serves website/public at its root.
+        val page = File("../../../website/public/connect.md")
+        assertTrue(page.path, page.isFile)
+        assertTrue(AgentPrompt.INSTRUCTIONS_URL.endsWith("/" + page.name))
+        assertTrue(page.readText().contains("named DroidHands"))
     }
 
     @Test

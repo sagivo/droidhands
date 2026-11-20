@@ -1,73 +1,28 @@
 import SwiftUI
 
-/// How to add DroidHands to each agent: one action, then at most two short steps; the phone's "Allow" follows.
-enum AgentClient: String, CaseIterable, Identifiable {
-    case claude = "Claude", chatgpt = "ChatGPT", grok = "Grok", muse = "Muse", claudeCode = "Claude Code", other = "Other agent"
-    var id: String { rawValue }
-
-    /// The logo asset for this agent; nil for "Other agent".
-    var logo: String? {
-        switch self {
-        case .claude, .claudeCode: "Agent-claude"
-        case .chatgpt: "Agent-chatgpt"
-        case .grok: "Agent-grok"
-        case .muse: "Agent-muse"
-        case .other: nil
-        }
-    }
-
+/// The one message that adds DroidHands to any agent; the agent-specific steps live at `instructionsURL`.
+enum AgentPrompt {
     static let connectorName = "DroidHands"
+    static let instructionsURL = "https://droidhands.com/connect.md"
 
-    struct Guide {
-        var openLabel: String?
-        var openURL: URL?
-        var copyFirst = false
-        var message: String?
-        var command: String?
-        var steps: [String]
+    /// For a URL the agent signs in to: the person only taps Allow.
+    static func signIn(_ url: String) -> String {
+        "\(intro(url)) No password or token is needed: I'll tap Allow in the DroidHands app on my phone."
     }
 
-    func guide(_ url: String) -> Guide {
-        switch self {
-        case .claude:
-            return Guide(openLabel: "Add to Claude", openURL: AgentClient.claudeLink(url), steps: ["Claude opens with DroidHands filled in. Tap Add, then Connect."])
-        case .chatgpt:
-            return Guide(openLabel: "Copy URL and open ChatGPT", openURL: URL(string: "https://chatgpt.com/plugins"), copyFirst: true,
-                         steps: ["Stay in the browser if it offers the ChatGPT app. Tap Add, then Add custom MCP server.",
-                                 "Name it DroidHands, paste the URL, keep OAuth, tick I understand, then Create as a plugin."])
-        case .grok:
-            return Guide(openLabel: "Copy URL and open Grok", openURL: URL(string: "https://grok.com/connectors"), copyFirst: true,
-                         steps: ["Tap New Connector, then Custom. Paste the URL and tap Connect. Needs a paid Grok plan."])
-        case .muse:
-            return Guide(message: AgentClient.message(url),
-                         steps: ["Send the message in Muse, then tap Connect on the card it shows.",
-                                 "On the form Muse opens, type droidhands into Client ID and tap Add."])
-        case .claudeCode:
-            return Guide(command: "claude mcp add --transport http droidhands \(url)",
-                         steps: ["Run this on your computer, then type /mcp in Claude Code and sign in."])
-        case .other:
-            return Guide(message: AgentClient.message(url), steps: ["Send this to your agent, in its chat or on the computer it runs on."])
-        }
+    /// For a token made on the phone, sent as a bearer token.
+    static func withToken(_ url: String, token: String) -> String {
+        "\(intro(url)) Use this token as the bearer token: \(token)"
     }
 
-    static func claudeLink(_ url: String) -> URL? {
-        var c = URLComponents(string: "https://claude.ai/customize/connectors")!
-        c.queryItems = [URLQueryItem(name: "modal", value: "add-custom-connector"),
-                        URLQueryItem(name: "connectorName", value: connectorName),
-                        URLQueryItem(name: "connectorUrl", value: url)]
-        return c.url
-    }
-
-    static func message(_ url: String) -> String {
-        "Connect to my phone with DroidHands: add \(url) as a custom connector (remote MCP server, OAuth, client ID droidhands, no secret). Can't add connectors? Open that link and sign in yourself as it explains. Either way I just tap Allow in the DroidHands app: don't ask me for a password, key or token."
+    private static func intro(_ url: String) -> String {
+        "Add a new connector named \(connectorName) with the URL \(url) and follow the instructions at \(instructionsURL)."
     }
 }
 
 struct ConnectView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
-    @State private var client: AgentClient = .claude
     @State private var showToken = false
 
     var body: some View {
@@ -75,53 +30,20 @@ struct ConnectView: View {
             List {
                 if let url = model.connectURL {
                     Section {
-                        Picker("Agent", selection: $client) {
-                            ForEach(AgentClient.allCases) { agent in
-                                Label {
-                                    Text(agent.rawValue)
-                                } icon: {
-                                    if let logo = agent.logo {
-                                        Image(logo).resizable().frame(width: 24, height: 24)
-                                    } else {
-                                        Image(systemName: "paperplane.fill")
-                                    }
-                                }
-                                .tag(agent)
-                            }
-                        }
-                    } footer: {
-                        Text("Keep DroidHands open: when the agent connects, you tap Allow here.")
-                    }
-                    let guide = client.guide(url)
-                    Section {
-                        if let label = guide.openLabel, let link = guide.openURL {
-                            Button {
-                                if guide.copyFirst { UIPasteboard.general.string = url }
-                                openURL(link)
-                            } label: {
-                                Label(label, systemImage: "arrow.up.forward.app")
-                                    .frame(maxWidth: .infinity).padding(.vertical, 4)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.capsule)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                        }
-                        if let message = guide.message { CopyableCode(text: message, label: "Copy message") }
-                        if let command = guide.command { CopyableCode(text: command, label: "Copy command") }
-                        ForEach(Array(guide.steps.enumerated()), id: \.offset) { i, step in
-                            HStack(alignment: .top, spacing: 10) {
-                                Text("\(i + 1)").font(.footnote.weight(.bold)).foregroundStyle(.white)
-                                    .frame(width: 22, height: 22).background(Palette.brand, in: Circle())
-                                Text(step).font(.subheadline)
-                            }
+                        CopyableCode(text: AgentPrompt.signIn(url), label: "Copy message")
+                        HStack(alignment: .top, spacing: 10) {
+                            Text("1").font(.footnote.weight(.bold)).foregroundStyle(.white)
+                                .frame(width: 22, height: 22).background(Palette.brand, in: Circle())
+                            Text("Send it to your agent (Claude, ChatGPT, Grok or any other) in a chat, or on the computer it runs on.").font(.subheadline)
                         }
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "hand.tap.fill").foregroundStyle(Palette.brand).frame(width: 22)
                             Text("Tap Allow when DroidHands asks.").font(.subheadline)
                         }
                     } header: {
-                        Text(client.rawValue)
+                        Text("Send this to your AI agent")
+                    } footer: {
+                        Text("Keep DroidHands open: when the agent connects, you tap Allow here.")
                     }
                     Section {
                         CopyableCode(text: url, label: "Copy URL")
@@ -131,7 +53,7 @@ struct ConnectView: View {
                     Section {
                         Button("Use a token instead") { showToken = true }
                     } footer: {
-                        Text("For MCP clients that can't sign in: make a token here and paste it as a bearer token.")
+                        Text("For agents that can't sign in: make a token here, and DroidHands gives you a message with it.")
                     }
                 } else {
                     Section {
@@ -170,8 +92,12 @@ struct ManualTokenView: View {
                         Text("Shown only now. Send it as “Authorization: Bearer <token>” to \(model.connectURL.map { URL(string: $0)?.host ?? $0 } ?? "the relay")'s /mcp. Revoke it in Agents any time.")
                     }
                     if let url = model.connectURL {
-                        Section("Claude Code") {
-                            CopyableCode(text: "claude mcp add --transport http droidhands \(url) --header \"Authorization: Bearer \(token)\"", label: "Copy command")
+                        Section {
+                            CopyableCode(text: AgentPrompt.withToken(url, token: token), label: "Copy message")
+                        } header: {
+                            Text("Send this to your agent")
+                        } footer: {
+                            Text("It has the token: send it only to this agent.")
                         }
                     }
                 } else {

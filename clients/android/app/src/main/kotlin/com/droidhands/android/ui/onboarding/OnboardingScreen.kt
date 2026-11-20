@@ -15,13 +15,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -65,10 +66,8 @@ class OnboardingActions(
 )
 
 /**
- * First-run wizard, full screen: Welcome → Permissions → Connect → Add your first agent. Every
- * step can be skipped, and the whole wizard can be re-opened from Settings > About. Laid out like
- * the Revolut / Linear onboarding: segmented progress and Skip on top, a hero header per step, and
- * Back · Continue in a sticky bar.
+ * First-run wizard, full screen: Welcome → Permissions → (Connect) → Add your first agent. Every
+ * step can be skipped, and the whole wizard can be re-opened from Settings > About.
  */
 @Composable
 fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: OnboardingActions) {
@@ -76,7 +75,9 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
     val step = OnboardingStep.fromName(stepName)
     val relay by main.relayStatus.collectAsStateWithLifecycle()
     val settings by main.settings.collectAsStateWithLifecycle()
+    val setupState by setup.state.collectAsStateWithLifecycle()
     val connected = relay is RelayStatus.Connected || settings.localServerEnabled
+    val permissionsReady = setupState.loaded && OnboardingFlow.essentialsDone(setupState.items)
     val tokens by main.tokens.collectAsStateWithLifecycle()
     // The wizard only shows before the first agent, so any agent now is the one just added.
     val agentAdded = tokens.any { !it.revoked }
@@ -96,12 +97,15 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
                 when {
                     step == OnboardingStep.WELCOME ->
                         PrimaryButton("Get started", onClick = { go(OnboardingStep.PERMISSIONS) }, size = ButtonSize.LARGE, fullWidth = true)
+                    // Keep one primary action per screen: while permissions aren't ready, the next Allow row is primary.
+                    next != null && step == OnboardingStep.PERMISSIONS && !permissionsReady ->
+                        SecondaryButton("Continue", onClick = { go(next) }, modifier = wide, size = ButtonSize.LARGE)
                     // Not online yet: moving on is skipping, so it doesn't get the primary look.
                     next != null && step == OnboardingStep.CONNECT && !connected ->
                         SecondaryButton(continueLabel(step, connected), onClick = { go(next) }, modifier = wide, size = ButtonSize.LARGE)
                     next != null ->
                         PrimaryButton(continueLabel(step, connected), onClick = { go(next) }, modifier = wide, size = ButtonSize.LARGE)
-                    // No agent yet: "Add to Claude" (or the command) is the main action, finishing is the way out.
+                    // No agent yet: sending the message is the main action, finishing is the way out.
                     !agentAdded -> SecondaryButton("Finish later", onClick = actions.onFinish, modifier = wide, size = ButtonSize.LARGE)
                     else -> PrimaryButton("Done", onClick = actions.onFinish, modifier = wide, size = ButtonSize.LARGE)
                 }
@@ -122,12 +126,16 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
             when (step) {
                 OnboardingStep.WELCOME -> WelcomeStep()
                 OnboardingStep.PERMISSIONS -> PermissionsStep(setup)
-                OnboardingStep.CONNECT -> ConnectStep(main)
+                OnboardingStep.CONNECT -> ConnectStep(main, expandMoreInitially = OnboardingStep.CONNECT !in steps)
                 OnboardingStep.AGENT -> {
                     if (agentAdded) {
                         StepHeader(Icons.Filled.CheckCircle, "You're all set", "Ask your agent to do something on this phone.", color = statusColors().ok)
                     } else {
-                        StepHeader(Icons.Filled.Face, "Add your first agent", "Pick your agent, add DroidHands to it, then tap Allow here.")
+                        StepHeader(
+                            Icons.AutoMirrored.Filled.Send,
+                            "Connect your first agent",
+                            "Copy or share the message below with any AI agent, then tap Allow here.",
+                        )
                     }
                     ConnectAgentContent(
                         main = main,
@@ -147,33 +155,24 @@ fun OnboardingScreen(main: MainViewModel, setup: SetupViewModel, actions: Onboar
     }
 }
 
-/** "Step 2 of 4 · Permissions" with Skip, over a segmented brand-colored progress bar. */
+/** Slim segmented progress bar with Skip on the right. */
 @Composable
 private fun WizardTopBar(step: OnboardingStep, steps: List<OnboardingStep>, onSkip: () -> Unit) {
     val total = steps.size
     // A step outside the walk (Connect, opened from the agent step) shows the agent step's place.
     val number = (steps.indexOf(step).takeIf { it >= 0 } ?: steps.indexOf(OnboardingStep.AGENT)) + 1
-    Column(
+    Row(
         Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 8.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Step $number of $total · ${step.title}",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            TertiaryButton("Skip", onClick = onSkip, modifier = Modifier.semantics { contentDescription = "Skip setup" })
-        }
         Row(
             Modifier
-                .fillMaxWidth()
-                .padding(end = 12.dp, top = 4.dp)
-                .clearAndSetSemantics { contentDescription = "Step $number of $total" },
+                .weight(1f)
+                .clearAndSetSemantics { contentDescription = "Step $number of $total · ${step.title}" },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             steps.forEachIndexed { index, _ ->
@@ -186,11 +185,13 @@ private fun WizardTopBar(step: OnboardingStep, steps: List<OnboardingStep>, onSk
                 )
             }
         }
+        Spacer(Modifier.width(8.dp))
+        TertiaryButton("Skip", onClick = onSkip, modifier = Modifier.semantics { contentDescription = "Skip setup" })
     }
 }
 
 /**
- * The hero of a wizard step: a big tinted icon, the step title and one sentence below it, centered.
+ * The hero of a wizard step: a tinted icon badge, the step title and one sentence below it, centered.
  * [color] tints the icon (brand by default; green once a step is done).
  */
 @Composable
@@ -198,12 +199,12 @@ internal fun StepHeader(icon: ImageVector, title: String, text: String, color: C
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
+            .padding(top = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconBadge(icon, color, size = 64.dp)
-        Spacer(Modifier.height(4.dp))
+        IconBadge(icon, color, size = 56.dp)
+        Spacer(Modifier.height(2.dp))
         Text(
             title,
             style = MaterialTheme.typography.headlineMedium,

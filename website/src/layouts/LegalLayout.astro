@@ -1,0 +1,210 @@
+---
+import Layout from "./Layout.astro";
+import GitHubMark from "../components/GitHubMark.astro";
+import Icon from "../components/Icon.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import { GITHUB_URL, PRIVACY_URL, TERMS_URL } from "../site";
+
+export interface TocItem {
+  id: string;
+  label: string;
+}
+
+interface Props {
+  title: string;
+  description: string;
+  eyebrow: string;
+  heading: string;
+  subtitle: string;
+  lastUpdated: string;
+  current: "privacy" | "terms";
+  toc: readonly TocItem[];
+}
+
+const { title, description, eyebrow, heading, subtitle, lastUpdated, current, toc } = Astro.props;
+---
+
+<Layout title={title} description={description}>
+  <header class="sticky top-0 z-50 border-b border-white/[0.07] bg-ink-950/80 backdrop-blur-md">
+    <nav class="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
+      <a href="/" class="flex items-center gap-2.5 font-display text-[17px] font-semibold tracking-tight text-white">
+        <img src="/favicon.png" alt="" class="size-8" />
+        DroidHands
+      </a>
+      <div class="hidden items-center gap-8 text-sm text-slate-400 md:flex">
+        <a href="/" class="transition-colors hover:text-white">Home</a>
+        <a
+          href={PRIVACY_URL}
+          aria-current={current === "privacy" ? "page" : undefined}
+          class={current === "privacy" ? "font-medium text-white" : "transition-colors hover:text-white"}
+        >
+          Privacy
+        </a>
+        <a
+          href={TERMS_URL}
+          aria-current={current === "terms" ? "page" : undefined}
+          class={current === "terms" ? "font-medium text-white" : "transition-colors hover:text-white"}
+        >
+          Terms
+        </a>
+      </div>
+      <a
+        href={GITHUB_URL}
+        class="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-2 text-sm font-medium text-slate-200 ring-1 ring-white/10 transition-all duration-300 hover:bg-white/[0.1] hover:text-white hover:ring-white/20"
+      >
+        <GitHubMark class="size-4" />
+        <span>GitHub</span>
+      </a>
+    </nav>
+  </header>
+
+  <main class="relative overflow-hidden">
+    <div class="pointer-events-none absolute top-[-22rem] right-[-10rem] -z-10 size-[38rem] rounded-full bg-brand-600/20 blur-[120px]"></div>
+    <div class="pointer-events-none absolute top-[-6rem] left-[-14rem] -z-10 size-[28rem] rounded-full bg-agent-500/10 blur-[120px]"></div>
+
+    <!-- Page header -->
+    <section class="border-b border-white/[0.06] pt-14 pb-12 sm:pt-20 sm:pb-14">
+      <div class="mx-auto max-w-6xl px-5">
+        <p class="eyebrow text-brand-300">{eyebrow}</p>
+        <h1 class="mt-3 font-display text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+          {heading}
+        </h1>
+        <p class="mt-4 max-w-2xl text-lg leading-relaxed text-slate-400">
+          {subtitle}
+        </p>
+
+        <div class="mt-7 flex flex-wrap items-center gap-3 text-xs">
+          <span class="inline-flex items-center gap-2 rounded-full bg-white/[0.04] px-3.5 py-1.5 font-mono text-slate-300 ring-1 ring-white/10">
+            <Icon name="clock" class="size-3.5 text-brand-300" />
+            Last updated: {lastUpdated}
+          </span>
+          <a
+            href={current === "privacy" ? TERMS_URL : PRIVACY_URL}
+            class="inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 px-3.5 py-1.5 font-mono text-brand-200 ring-1 ring-brand-400/25 transition-colors hover:bg-brand-500/20 hover:text-white"
+          >
+            {current === "privacy" ? "Read Terms of Service" : "Read Privacy Policy"}
+            <Icon name="arrowRight" class="size-3" />
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Body with sticky TOC -->
+    <section class="py-12 sm:py-16">
+      <div class="mx-auto grid max-w-6xl gap-12 px-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside class="lg:sticky lg:top-24 lg:self-start">
+          <nav aria-label="On this page" class="rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/[0.07]">
+            <p class="eyebrow text-slate-400">Contents</p>
+            <ol class="mt-4 space-y-2 text-sm">
+              {
+                toc.map((item, i) => (
+                  <li>
+                    <a
+                      href={`#${item.id}`}
+                      class="group flex items-baseline gap-2.5 text-slate-400 transition-colors hover:text-white"
+                    >
+                      <span class="font-mono text-[11px] text-slate-600 transition-colors group-hover:text-brand-300">
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                      <span class="leading-snug">{item.label}</span>
+                    </a>
+                  </li>
+                ))
+              }
+            </ol>
+          </nav>
+        </aside>
+
+        <article class="legal-prose max-w-3xl space-y-12 text-[15px] leading-relaxed text-slate-300">
+          <slot />
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <SiteFooter />
+</Layout>
+
+<style is:global>
+  .legal-prose section {
+    scroll-margin-top: 5.5rem;
+  }
+  .legal-prose h2 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+    line-height: 1.25;
+  }
+  .legal-prose h3 {
+    margin-top: 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #f1f5f9;
+  }
+  .legal-prose p {
+    margin-top: 0.9rem;
+    color: #cbd5e1;
+  }
+  .legal-prose ul,
+  .legal-prose ol {
+    margin-top: 0.9rem;
+    padding-left: 1.25rem;
+    color: #cbd5e1;
+  }
+  .legal-prose ul {
+    list-style: disc;
+  }
+  .legal-prose ol {
+    list-style: decimal;
+  }
+  .legal-prose li {
+    margin-top: 0.5rem;
+  }
+  .legal-prose li strong,
+  .legal-prose p strong {
+    color: #fff;
+    font-weight: 600;
+  }
+  .legal-prose a {
+    color: var(--color-brand-300);
+    text-decoration: underline;
+    text-decoration-color: rgb(168 170 255 / 0.35);
+    text-underline-offset: 3px;
+    transition: color 0.2s ease, text-decoration-color 0.2s ease;
+  }
+  .legal-prose a:hover {
+    color: #fff;
+    text-decoration-color: rgb(255 255 255 / 0.7);
+  }
+  .legal-prose code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    border-radius: 0.375rem;
+    background: rgb(255 255 255 / 0.06);
+    padding: 0.12rem 0.38rem;
+    color: #e2e8f0;
+  }
+  .legal-prose .legal-caps {
+    border-radius: 1rem;
+    border: 1px solid rgb(255 255 255 / 0.12);
+    background: rgb(255 255 255 / 0.03);
+    padding: 1.25rem 1.4rem;
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+  }
+  .legal-prose .legal-callout {
+    border-radius: 1.25rem;
+    border: 1px solid rgb(134 132 255 / 0.25);
+    background: rgb(111 102 247 / 0.08);
+    padding: 1.35rem 1.5rem;
+  }
+  .legal-prose .legal-warn {
+    border-radius: 1.25rem;
+    border: 1px solid rgb(217 119 87 / 0.3);
+    background: rgb(217 119 87 / 0.08);
+    padding: 1.35rem 1.5rem;
+  }
+</style>

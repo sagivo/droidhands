@@ -4,8 +4,7 @@ Three steps, about five minutes, all on the phone (Android 11 or newer):
 
 1. Download and install the app.
 2. Open it: the wizard grants the permissions, and the phone goes online by itself.
-3. Connect your AI agent: pick it, tap **Add to Claude** (or copy one command), and tap **Allow** on
-   the phone.
+3. Connect your AI agent: copy one message, send it to your agent, and tap **Allow** on the phone.
 
 ## 1. Install the app
 
@@ -62,26 +61,22 @@ Every step can be skipped and reopened later from *Settings › About › Run se
 
 In DroidHands, tap **Connect an AI agent** (the wizard's last step is the same page).
 
-Pick your agent from the list. Each one opens a card with one button and at most two steps:
+Copy (or **Share**) the message shown there and send it to your agent, whichever it is (Claude,
+ChatGPT, Grok, Claude Code, Codex, an agent you chat with), in its chat or on the computer it runs on:
 
-| Agent | Button | Then |
-|---|---|---|
-| Claude (claude.ai, Desktop, mobile) | **Add to Claude**: Claude opens with DroidHands filled in | Tap *Add*, then *Connect*. If the Claude app doesn't show the form, **Didn't open? Use the browser** opens it on claude.ai. |
-| ChatGPT (chatgpt.com) | **Copy URL and open ChatGPT** (in the browser) | *Add* › *Add custom MCP server*: name it DroidHands, paste, keep OAuth, tick *I understand*, *Create as a plugin*. |
-| Muse (Meta) | **Send to Muse**: Muse opens with a message ready to send | Send it and tap *Connect* on its card. If it asks for a Client ID, paste `droidhands` (it's copied). |
-| Grok (grok.com, Grok apps; paid plans) | **Copy URL and open Grok** | *New Connector* › *Custom*, paste, *Connect*. |
-| Grok Bot | **Send to Grok Bot**: the Bot opens with a message ready to send | Send it and tap *Authorize* on its card (or *Connect apps* › *Your plugins* › *Authorize*). |
-| **Other agent** (Claude Code, Codex, Gemini CLI, Instinct, anything else) | A message to **Share** or **Copy** | Send it to the agent, in its chat or on the computer it runs on. |
+> Add a new connector named DroidHands with the URL \<your connection URL\> and follow the instructions
+> at https://droidhands.com/connect.md. No password or token is needed: I'll tap Allow in the
+> DroidHands app on my phone.
 
-The message is *"Connect to my phone with DroidHands: add \<URL\> as a custom connector (remote MCP server, OAuth, client ID droidhands, no secret). Can't add connectors? Open that link and sign in yourself as it explains. Either way I just tap Allow in the DroidHands app: don't ask me for a password, key or token."* Agents that can add MCP
-servers add it themselves; opened in a browser, the link is a setup page with one-click buttons and
-commands for common agents (plus **Add to Cursor**). When Muse or Grok Bot isn't on this phone,
-**Send** opens the share sheet instead. Clients that can't sign in at all (config-file only) take a
-token: **Agent can't sign in? Use a token instead**, on the *Other agent* card.
+[connect.md](../website/public/connect.md) has the full instructions for agents: agents that can add MCP
+servers add it themselves, chat assistants walk you through their app's connector settings, and
+agents without connector settings sign in by themselves. Opened in a browser, the connection URL
+shows the same message. Clients that can't sign in at all (config-file only) take a token: **Agent
+can't sign in? Use a token instead** makes one, and the token screen gives you the same message with
+the token in it.
 
 Agents with connector settings open a browser page saying **"Tap Allow on your phone"** with a
-4-letter code. Muse and Grok Bot add the connector from the chat and sign in the same way. Agents
-without connector settings (Instinct) open the link, which tells them how to sign in by themselves
+4-letter code. Agents without connector settings (Instinct) open the link, which tells them how to sign in by themselves
 ([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)), and reply with the 4-letter code. If DroidHands is open, the approval screen appears by itself;
 otherwise tap the notification. Check that the code matches and choose what the agent gets
 (**Give Claude access**):

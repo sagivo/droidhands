@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -58,8 +57,8 @@ import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.launch
 
 /**
- * One-time display of a new token with ready-to-paste client configs: a success hero, the
- * "shown only once" warning, the token itself, then the setup per client. The window is
+ * One-time display of a new token: a success hero, the "shown only once" warning, the token itself,
+ * then the message that adds it to any agent ([ConnectionSnippets.prompt]). The window is
  * FLAG_SECURE while shown; Done (or back, after confirming) drops the plaintext.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -85,8 +84,8 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
     }
     var selected by rememberSaveable { mutableIntStateOf(0) }
     val endpoint = endpoints.getOrNull(selected) ?: endpoints.firstOrNull()
-    val snippets = remember(endpoint, token.plaintext, settings.localServerPort) {
-        endpoint?.let { ConnectionSnippets.forEndpoint(it, token.plaintext, settings.localServerPort) }.orEmpty()
+    val prompt = remember(endpoint, token.plaintext, settings.localServerPort) {
+        endpoint?.let { ConnectionSnippets.prompt(it, token.plaintext, settings.localServerPort) }
     }
 
     var copiedOnce by rememberSaveable { mutableStateOf(false) }
@@ -175,22 +174,26 @@ internal fun TokenCreatedScreen(token: IssuedToken, main: MainViewModel, onDone:
                             Notice(RelayUrls.INSECURE_WARNING, kind = NoticeKind.DANGER)
                         }
                         if (endpoint.kind == EndpointKind.RELAY && relay !is RelayStatus.Connected) {
-                            Notice("The relay isn't connected right now. The setup below works once it is.", kind = NoticeKind.WARNING)
+                            Notice("The relay isn't connected right now. The message below works once it is.", kind = NoticeKind.WARNING)
                         }
                     }
                 }
             }
-            items(snippets, key = { "snippet-${it.id}" }) { snippet ->
-                CardSection(title = snippet.title, footer = snippet.hint) {
-                    val secret = token.plaintext in snippet.text
-                    CopyableCode(
-                        snippet.text,
-                        copyLabel = snippet.title,
-                        sensitive = secret,
-                        shareTitle = "Share setup for ${snippet.title}",
-                        onShareFailed = shareFailed,
-                        onCopied = { if (secret) markCopied() },
-                    )
+            if (prompt != null) {
+                item(key = "prompt") {
+                    CardSection(
+                        title = "Send this to your agent",
+                        footer = "Send it to your agent in a chat, or on the computer it runs on. It has the token: send it only to this agent.",
+                    ) {
+                        CopyableCode(
+                            prompt,
+                            copyLabel = "Message",
+                            sensitive = true,
+                            shareTitle = "Send to your agent",
+                            onShareFailed = shareFailed,
+                            onCopied = markCopied,
+                        )
+                    }
                 }
             }
         }

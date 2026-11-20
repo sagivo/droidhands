@@ -82,16 +82,4 @@ class PairingPresentationTest {
     fun codeIsSpelledForScreenReaders() {
         assertEquals("K 7 Q 2", PairingPresentation.spokenCode("K7Q2"))
     }
-
-    @Test
-    fun labeledRequestSaysWhatItCallsItself() {
-        val grokBot = PairingRules.labeled(pairingRequest(clientName = "Cursor", redirectHost = "www.cursor.com"), "Grok Bot")
-        assertEquals("Grok Bot wants to connect", PairingPresentation.notificationTitle(grokBot))
-        assertEquals("wants access to this phone · www.cursor.com · calls itself Cursor", PairingPresentation.heroLine(grokBot))
-        assertTrue(PairingPresentation.notificationBigText(grokBot).startsWith("From www.cursor.com (it calls itself Cursor). "))
-        // A typed-in client ID is named after its website: no need to repeat it.
-        val muse = PairingRules.labeled(pairingRequest(clientName = "agent.meta.ai", redirectHost = "agent.meta.ai"), "Muse")
-        assertEquals("wants access to this phone · agent.meta.ai", PairingPresentation.heroLine(muse))
-        assertEquals(null, PairingPresentation.callsItself(pairingRequest()))
-    }
 }

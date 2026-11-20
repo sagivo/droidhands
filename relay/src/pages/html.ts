@@ -164,6 +164,7 @@ li{margin:.4rem 0}
 .hidden{display:none}
 .copyrow{display:flex;gap:.5rem;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:.5rem .5rem .5rem .75rem;margin:.5rem 0}
 .cmd{flex:1;font-size:.85rem;overflow-x:auto;white-space:nowrap;word-break:normal}
+.cmd.prompt{white-space:normal;overflow-wrap:anywhere;line-height:1.5}
 button.copy{flex:none;background:var(--accent);color:var(--accent-fg);border:0;border-radius:999px;padding:.4rem .9rem;font:600 .875rem system-ui,sans-serif;cursor:pointer}
 .card h2{margin-bottom:.25rem}
 summary{cursor:pointer;font-weight:600}

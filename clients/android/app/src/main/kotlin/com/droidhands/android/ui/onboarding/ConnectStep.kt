@@ -67,7 +67,7 @@ import com.droidhands.core.transport.RelayStatus
  * use Tailscale or the local server. Routes combine (the relay and Tailscale at once).
  */
 @Composable
-internal fun ConnectStep(main: MainViewModel) {
+internal fun ConnectStep(main: MainViewModel, expandMoreInitially: Boolean = false) {
     val settings by main.settings.collectAsStateWithLifecycle()
     val relay by main.relayStatus.collectAsStateWithLifecycle()
     val local by main.localServerStatus.collectAsStateWithLifecycle()
@@ -76,7 +76,7 @@ internal fun ConnectStep(main: MainViewModel) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { main.refreshTailscale() }
 
     if (DefaultRelay.inUse(settings)) {
-        DefaultRelayOnline(main, settings, relay, local, tailscale)
+        DefaultRelayOnline(main, settings, relay, local, tailscale, expandMoreInitially)
         return
     }
     val online = relay is RelayStatus.Connected
@@ -117,8 +117,9 @@ private fun DefaultRelayOnline(
     relay: RelayStatus,
     local: LocalServerStatus,
     tailscale: TailscaleState,
+    expandMoreInitially: Boolean,
 ) {
-    var more by rememberSaveable { mutableStateOf(settings.localServerEnabled) }
+    var more by rememberSaveable { mutableStateOf(expandMoreInitially || settings.localServerEnabled) }
     val host = ConfigureLinks.hostOf(settings.relayUrl) ?: settings.relayUrl
     if (relay is RelayStatus.Connected) {
         StepHeader(

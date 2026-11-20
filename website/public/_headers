@@ -1,0 +1,4 @@
+# Cloudflare Pages response headers.
+/connect.md
+  Content-Type: text/markdown; charset=utf-8
+  Access-Control-Allow-Origin: *

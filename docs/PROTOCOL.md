@@ -289,10 +289,9 @@ Every device has a fixed connector URL: `{relay}/d/<deviceId>/mcp`. It behaves e
 * **Setup page.** A `GET` or `HEAD` whose `Accept` includes `text/html` but not `text/event-stream`,
   without `Authorization`, is a person opening the URL in a browser (or a link fetcher that looks like
   one). It gets `200` with an HTML page
-  of one-click setup for common agents: claude.ai's documented install link
-  (`https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=DroidHands&connectorUrl=<url>`),
-  copyable commands for Claude Code, Codex and Gemini CLI, Cursor's `cursor://…/mcp/install` link, and the
-  URL itself, and the agent guide (§5.7) folded away for agents. The page is the same for every device
+  holding the same message the app copies for any agent ("Add a new connector named DroidHands with the
+  URL <url> and follow the instructions at https://droidhands.com/connect.md. …"), and the agent guide
+  (§5.7) folded away for agents. The page is the same for every device
   and never looks the device up, so it reveals nothing (not even whether the phone is online). Other
   `GET`s get the agent guide as text (§5.7), except `Accept: text/event-stream`, which stays `405`.
 

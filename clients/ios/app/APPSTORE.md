@@ -103,9 +103,10 @@ hashing, which are exempt. No questionnaire appears on upload.
 >
 > To test (about 3 minutes):
 > 1. Open DroidHands, tap Get started, and allow Calendar and Reminders.
-> 2. On Home, tap "Connect an AI agent". With ChatGPT (a free account works): choose ChatGPT, tap "Copy URL and
->    open ChatGPT", then on chatgpt.com/plugins tap Add › Add custom MCP server, name it DroidHands, paste the URL,
->    keep OAuth and tap Create. With Claude: choose Claude, tap "Add to Claude", then Add and Connect.
+> 2. On Home, tap "Connect an AI agent", tap "Copy message" and send the message to Claude or ChatGPT (a free
+>    account works). The agent explains where to add the connector in its settings: on chatgpt.com/plugins, Add ›
+>    Add custom MCP server, name it DroidHands, paste the URL, keep OAuth and tap Create; on claude.ai, Settings ›
+>    Connectors › Add custom connector.
 > 3. DroidHands shows "Claude wants to use this iPhone" with a code that matches the one in the browser. Tap Allow.
 > 4. Keep DroidHands open and ask the agent: "Add a meeting with Alex tomorrow at 3 pm to my calendar" or "Remind me
 >    to buy milk at 6 pm". The event or reminder appears in Calendar / Reminders, and in DroidHands › Activity.

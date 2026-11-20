@@ -1,8 +1,5 @@
 package com.droidhands.android.ui.connect
 
-import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,22 +29,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
-import com.droidhands.android.R
 import com.droidhands.android.ui.components.AppCard
 import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.CopyableCode
 import com.droidhands.android.ui.components.IconBadge
-import com.droidhands.android.ui.components.ListDivider
-import com.droidhands.android.ui.components.ListRow
 import com.droidhands.android.ui.components.ListSection
 import com.droidhands.android.ui.components.LocalSnackbarHostState
 import com.droidhands.android.ui.components.Notice
@@ -56,7 +48,6 @@ import com.droidhands.android.ui.components.PrimaryButton
 import com.droidhands.android.ui.components.SecondaryButton
 import com.droidhands.android.ui.components.SectionHeader
 import com.droidhands.android.ui.components.TertiaryButton
-import com.droidhands.android.ui.components.rememberCopier
 import com.droidhands.android.ui.components.rememberNow
 import com.droidhands.android.ui.theme.TINT_ALPHA
 import com.droidhands.android.ui.theme.statusColors
@@ -65,12 +56,10 @@ import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.launch
 
 /**
- * "Add an agent": a list of agents (Claude, ChatGPT, Muse, Grok, Grok Bot, Other agent). Tapping one opens its
- * card: one button that does the setup (opens the agent with DroidHands filled in, or sends it a message), at
- * most two short steps, and "Tap Allow when this phone asks", spinning once the button was tapped. "Other agent"
- * is just a message to share with any agent. A request that arrives while this is on screen opens the approval
- * screen by itself; then "✓ Claude connected". Shared by the Connect page and the last onboarding step. Scroll
- * is up to the host.
+ * "Add an agent": one message for every agent ([AgentPrompt]) to copy or share, then "Tap Allow when this phone
+ * asks", spinning once it was copied. A request that arrives while this is on screen opens the approval screen by
+ * itself; then "✓ Claude connected". Shared by the Connect page and the last onboarding step. Scroll is up to the
+ * host.
  *
  * @param onConnected label and action of the button shown once an agent connected; null for none (the host
  *   has its own, like the wizard's Done).
@@ -98,13 +87,10 @@ internal fun ConnectAgentContent(
     val livePairings = pairings.filter { it.expiresAt > now }
     // No relay yet, but the build comes with one: offer it first.
     val offerDefault = main.defaultRelayUrl?.takeIf { DefaultRelay.canOffer(settings, it) }
-    // The agent tapped in the list, and whether its button was tapped (then the last step waits for it).
-    var picked by rememberSaveable { mutableStateOf<AgentClient?>(null) }
+    // Whether the message was copied or shared (then the last step waits for the agent).
     var started by rememberSaveable { mutableStateOf(false) }
     // Once an agent connected, its setup folds away behind "Add another agent".
     var addAnother by rememberSaveable { mutableStateOf(false) }
-    // Back from an agent's card goes to the list, not off the page.
-    BackHandler(enabled = picked != null && connectUrl != null) { picked = null }
     // The user is here waiting for the agent: open each new request's approval screen once, by itself,
     // instead of making them find the notification. Requests from before the page opened only get the card.
     val seenPairings = rememberSaveable { ArrayList(pairings.map { it.id }) }
@@ -131,28 +117,17 @@ internal fun ConnectAgentContent(
             connectUrl != null && connected != null && !addAnother -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 TertiaryButton("Add another agent", onClick = {
                     addAnother = true
-                    picked = null
+                    started = false
                     // The agent that just connected is done: the next one is what the page waits for.
                     baseline = ArrayList(baseline + connected.id)
                 })
             }
-            connectUrl != null -> when (val client = picked) {
-                null -> AgentList(onPick = {
-                    picked = it
-                    started = false
-                    // "Other agent" names no agent.
-                    if (it != AgentClient.OTHER) main.expectAgent(it.label)
-                })
-                else -> GuideCard(
-                    guide = remember(client, connectUrl) { ClientInstructions.guide(client, connectUrl) },
-                    url = connectUrl,
-                    started = started,
-                    waiting = started && connected == null && livePairings.isEmpty(),
-                    onStarted = { started = true },
-                    onChange = { picked = null },
-                    onUseToken = onUseToken,
-                )
-            }
+            connectUrl != null -> PromptCard(
+                prompt = remember(connectUrl) { AgentPrompt.signIn(connectUrl) },
+                waiting = started && connected == null && livePairings.isEmpty(),
+                onStarted = { started = true },
+                onUseToken = onUseToken,
+            )
             relay is RelayStatus.Connected -> Notice(
                 title = "One-tap connect isn't available",
                 text = "Your relay is an older version without one-tap connect. Update the relay, or use a token below.",
@@ -202,111 +177,31 @@ internal fun ConnectAgentContent(
     }
 }
 
-/** Where the text of a row led by a 40dp icon starts. */
-private val AgentRowInset = CardPadding + 40.dp + 14.dp
-
-/** "Choose your agent": every [AgentClient], one row each, its app's icon when it's on this phone. */
-@Composable
-private fun AgentList(onPick: (AgentClient) -> Unit) {
-    ListSection(title = "Choose your agent") {
-        AgentClient.entries.forEachIndexed { index, client ->
-            if (index > 0) ListDivider(AgentRowInset)
-            ListRow(
-                title = client.label,
-                subtitle = if (client == AgentClient.OTHER) "Get a message to send to any agent" else null,
-                leading = { AgentIcon(client) },
-                onClick = { onPick(client) },
-            )
-        }
-    }
-}
-
-/** The agent's logo on its brand color; a send icon for "Other agent". */
-@Composable
-private fun AgentIcon(client: AgentClient) {
-    val logo = when (client) {
-        AgentClient.CLAUDE -> R.drawable.ic_agent_claude
-        AgentClient.CHATGPT -> R.drawable.ic_agent_chatgpt
-        AgentClient.MUSE -> R.drawable.ic_agent_muse
-        AgentClient.GROK -> R.drawable.ic_agent_grok
-        AgentClient.GROK_BOT -> R.drawable.ic_agent_grok_bot
-        AgentClient.OTHER -> null
-    }
-    if (logo == null) {
-        IconBadge(Icons.AutoMirrored.Filled.Send, MaterialTheme.colorScheme.primary)
-    } else {
-        Image(painterResource(logo), contentDescription = null, modifier = Modifier.size(40.dp))
-    }
-}
-
 /**
- * One agent's setup as a card: its one action (a link that fills everything in, or a message to send it), one
- * or two short steps, then "Tap Allow when this phone asks", which spins while [waiting]. [onStarted] runs
- * once the action did its part; [onChange] goes back to the list.
+ * The message to send any agent, with Copy and Share, then the steps: send it, then "Tap Allow when this phone
+ * asks", which spins while [waiting]. [onStarted] runs once it was copied or shared.
  */
 @Composable
-private fun GuideCard(
-    guide: ClientGuide,
-    url: String,
-    started: Boolean,
-    waiting: Boolean,
-    onStarted: () -> Unit,
-    onChange: () -> Unit,
-    onUseToken: () -> Unit,
-) {
-    val context = LocalContext.current
-    val copy = rememberCopier()
+private fun PromptCard(prompt: String, waiting: Boolean, onStarted: () -> Unit, onUseToken: () -> Unit) {
     val snackbar = LocalSnackbarHostState.current
     val scope = rememberCoroutineScope()
-    val tell: (String) -> Unit = { message -> scope.launch { snackbar.showSnackbar(message) } }
-    val label = guide.client.label
-    val other = guide.client == AgentClient.OTHER
     AppCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AgentIcon(guide.client)
+            IconBadge(Icons.AutoMirrored.Filled.Send, MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(14.dp))
-            Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TertiaryButton("Change", onClick = onChange, modifier = Modifier.semantics { contentDescription = "Choose another agent" })
+            Text("Send this to your AI agent", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         }
-        guide.open?.let { link ->
-            PrimaryButton(link.label, fullWidth = true, onClick = {
-                if (link.copyUrlFirst) copy("Connection URL", url, false)
-                if (AgentAppIntents.open(context, link)) onStarted() else tell("No browser found to open $label.")
-            })
-        }
-        guide.message?.let { message ->
-            if (other) {
-                // Any agent, anywhere: the message itself, to share or copy.
-                CopyableCode(
-                    message,
-                    copyLabel = "Message",
-                    sensitive = false,
-                    shareTitle = "Send to your agent",
-                    onShareFailed = { tell("No app can receive shared text.") },
-                    onCopied = onStarted,
-                )
-            } else {
-                PrimaryButton("Send to $label", fullWidth = true, onClick = {
-                    when (AgentAppIntents.send(context, guide.client, message, guide.clientId)) {
-                        AgentAppIntents.Sent.SENT -> onStarted()
-                        // A toast, since the user is in the agent's app by now.
-                        AgentAppIntents.Sent.COPIED -> onStarted().also {
-                            Toast.makeText(context, "Message copied. Paste it in $label and send it.", Toast.LENGTH_LONG).show()
-                        }
-                        AgentAppIntents.Sent.FAILED -> tell("No app can receive shared text.")
-                    }
-                })
-            }
-        }
-        GuideSteps(guide.steps, waiting)
-        // An install link may land in an app that has no such screen yet: the browser always has it.
-        guide.open?.takeIf { started && !it.inBrowser }?.let { link ->
-            TertiaryButton("Didn't open? Use the browser", onClick = {
-                if (!AgentAppIntents.open(context, link, forceBrowser = true)) tell("No browser found.")
-            })
-        }
+        CopyableCode(
+            prompt,
+            copyLabel = "Message",
+            sensitive = false,
+            shareTitle = "Send to your agent",
+            onShareFailed = { scope.launch { snackbar.showSnackbar("No app can receive shared text.") } },
+            onCopied = onStarted,
+        )
+        GuideSteps(listOf(SEND_STEP), waiting)
         // Clients that can't sign in at all (config-file clients) take a token instead.
-        if (other) TertiaryButton("Agent can't sign in? Use a token instead", onClick = onUseToken)
+        TertiaryButton("Agent can't sign in? Use a token instead", onClick = onUseToken)
     }
 }
 
@@ -380,6 +275,7 @@ private fun StepNumber(number: Int) {
     }
 }
 
+private const val SEND_STEP = "Send it to your agent (Claude, ChatGPT, Grok or any other) in a chat, or on the computer it runs on."
 private const val ALLOW_STEP = "Tap Allow when this phone asks."
 private const val ALLOW_STEP_WAITING = "Waiting for your agent… then tap Allow when this phone asks."
 

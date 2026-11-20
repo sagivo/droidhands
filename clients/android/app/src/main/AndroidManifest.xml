@@ -55,12 +55,6 @@
         </intent>
         <!-- The Tailscale route: "Get Tailscale" or "Open Tailscale". -->
         <package android:name="com.tailscale.ipn" />
-        <!-- Agent apps the Connect page adds DroidHands to in one tap (ui/connect/AgentApps.KNOWN). -->
-        <package android:name="com.anthropic.claude" />
-        <package android:name="com.openai.chatgpt" />
-        <package android:name="com.facebook.aura" />
-        <package android:name="ai.x.grok.bot" />
-        <package android:name="ai.x.grok" />
     </queries>
 
     <application

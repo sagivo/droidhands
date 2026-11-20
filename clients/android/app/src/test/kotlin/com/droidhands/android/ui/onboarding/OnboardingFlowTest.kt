@@ -78,20 +78,57 @@ class OnboardingFlowTest {
     }
 
     @Test
-    fun walksSpecialAccessesInOrderAndAdvancesWhenGranted() {
-        assertEquals(SetupLogic.NOTIFICATION_ACCESS, OnboardingFlow.nextSpecialAccess(items, emptySet())?.id)
-        assertEquals(SetupLogic.BATTERY, OnboardingFlow.nextSpecialAccess(items, setOf(SetupLogic.NOTIFICATION_ACCESS))?.id)
-        // The user came back with notification access granted: the walk moves on by itself.
-        val granted = items.map { if (it.id == SetupLogic.NOTIFICATION_ACCESS) it.copy(status = SetupStatus.DONE) else it }
-        assertEquals(SetupLogic.BATTERY, OnboardingFlow.nextSpecialAccess(granted, emptySet())?.id)
-        assertNull(OnboardingFlow.nextSpecialAccess(granted, setOf(SetupLogic.BATTERY, SetupLogic.OVERLAY)))
-        assertEquals(3 to 5, OnboardingFlow.specialProgress(granted))
+    fun runtimeSummaryCountsRequestableRowsExcludingBackgroundLocation() {
+        val summary = OnboardingFlow.runtimeSummary(items)
+        assertEquals(1, summary.granted)
+        assertEquals(4, summary.total)
+        assertFalse(summary.allDone)
+        assertFalse(summary.essentialsDone)
+
+        val essentialsGranted = items.map {
+            if (it.id == SetupLogic.NOTIFICATIONS) it.copy(status = SetupStatus.DONE) else it
+        }
+        val partialSummary = OnboardingFlow.runtimeSummary(essentialsGranted)
+        assertEquals(2, partialSummary.granted)
+        assertFalse(partialSummary.allDone)
+        assertTrue(partialSummary.essentialsDone)
+
+        val allRuntimeGranted = items.map {
+            if (!OnboardingFlow.isSpecialAccess(it) && it.id != SetupLogic.BACKGROUND_LOCATION) it.copy(status = SetupStatus.DONE) else it
+        }
+        assertTrue(OnboardingFlow.runtimeSummary(allRuntimeGranted).allDone)
     }
 
     @Test
-    fun pendingAccessibilityIsNotDone() {
-        val pending = items.map { if (it.id == SetupLogic.ACCESSIBILITY) it.copy(status = SetupStatus.PENDING) else it }
-        assertEquals(SetupLogic.ACCESSIBILITY, OnboardingFlow.nextSpecialAccess(pending, emptySet())?.id)
+    fun nextPermissionStepHighlightsOneEssentialAtATime() {
+        // Essential runtime permission (Notifications) is still missing -> App permissions first.
+        assertEquals(OnboardingFlow.APP_PERMISSIONS_ID, OnboardingFlow.nextPermissionStepId(items))
+
+        // Once essential runtime permissions are granted (even if optional Location/SMS stay missing), move to special access.
+        val runtimeEssentialsDone = items.map {
+            if (it.id == SetupLogic.NOTIFICATIONS) it.copy(status = SetupStatus.DONE) else it
+        }
+        // Accessibility is DONE in `items`, so next is Notification access.
+        assertEquals(SetupLogic.NOTIFICATION_ACCESS, OnboardingFlow.nextPermissionStepId(runtimeEssentialsDone))
+
+        // Pending accessibility isn't done yet, so it comes before Notification access.
+        val pendingAccessibility = runtimeEssentialsDone.map {
+            if (it.id == SetupLogic.ACCESSIBILITY) it.copy(status = SetupStatus.PENDING) else it
+        }
+        assertEquals(SetupLogic.ACCESSIBILITY, OnboardingFlow.nextPermissionStepId(pendingAccessibility))
+
+        // Once Notification access is granted, next is Battery.
+        val notifDone = runtimeEssentialsDone.map {
+            if (it.id == SetupLogic.NOTIFICATION_ACCESS) it.copy(status = SetupStatus.DONE) else it
+        }
+        assertEquals(SetupLogic.BATTERY, OnboardingFlow.nextPermissionStepId(notifDone))
+
+        // Once Battery is also granted, nothing else is highlighted (optional Overlay stays optional).
+        val allEssentialsDone = notifDone.map {
+            if (it.id == SetupLogic.BATTERY) it.copy(status = SetupStatus.DONE) else it
+        }
+        assertNull(OnboardingFlow.nextPermissionStepId(allEssentialsDone))
+        assertEquals(4 to 5, OnboardingFlow.specialProgress(allEssentialsDone))
     }
 
     @Test

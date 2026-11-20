@@ -1,0 +1,233 @@
+---
+import LegalLayout, { type TocItem } from "../layouts/LegalLayout.astro";
+import {
+  CONTACT_EMAIL,
+  ISSUES_URL,
+  LICENSE_URL,
+  PRIVACY_URL,
+  SECURITY_URL,
+} from "../site";
+
+const LAST_UPDATED = "November 20, 2026";
+
+const toc: readonly TocItem[] = [
+  { id: "acceptance", label: "Acceptance & eligibility" },
+  { id: "what-it-is", label: "What DroidHands is (and isn't)" },
+  { id: "ai-risks", label: "AI agent risks & your responsibility" },
+  { id: "third-parties", label: "Third-party apps, agents & plugins" },
+  { id: "acceptable-use", label: "Acceptable use & prohibited conduct" },
+  { id: "relay", label: "Default relay (no SLA)" },
+  { id: "ip", label: "Open-source license & IP" },
+  { id: "warranties", label: "Disclaimer of warranties" },
+  { id: "liability", label: "Limitation of liability" },
+  { id: "indemnification", label: "Indemnification" },
+  { id: "termination", label: "Suspension & termination" },
+  { id: "app-stores", label: "Apple & Google store notices" },
+  { id: "general", label: "Changes, severability & contact" },
+];
+---
+
+<LegalLayout
+  title="Terms of Service — DroidHands"
+  description="Terms of Service governing the DroidHands mobile apps, the default relay at connect.droidhands.com, and the website at droidhands.com."
+  eyebrow="Legal · Terms"
+  heading="Terms of Service"
+  subtitle="The ground rules for using DroidHands, our free default relay, and this website. Giving an AI agent access to your phone carries real risks — please read carefully."
+  lastUpdated={LAST_UPDATED}
+  current="terms"
+  toc={toc}
+>
+  <div class="legal-warn">
+    <p class="!mt-0 font-mono text-xs tracking-widest text-agent-300 uppercase">Important notice before you use DroidHands</p>
+    <p class="!mt-2.5 text-sm">
+      DroidHands connects <strong>your</strong> third-party AI agents to <strong>your</strong> phone. AI agents can make mistakes, hallucinate, misclick, retry actions, or be tricked by prompt injection in incoming messages or web pages. <strong>You alone choose what access to grant, and you are 100% responsible for every action an agent takes on your phone</strong> — including messages sent, calls placed, data disclosed, purchases made, or third-party account bans. DroidHands is free, open-source software provided <strong>“as is” without warranties or liability</strong>.
+    </p>
+  </div>
+
+  <section id="acceptance">
+    <h2>1. Acceptance of Terms &amp; eligibility</h2>
+    <p>
+      These Terms of Service (“<strong>Terms</strong>”) govern your access to and use of the DroidHands mobile applications for Android and iOS (the “<strong>Apps</strong>”), the optional default hosted relay at <code>connect.droidhands.com</code> (the “<strong>Default Relay</strong>”), and the website at <code>droidhands.com</code> (the “<strong>Website</strong>,” and together with the Apps and Default Relay, the “<strong>Service</strong>”), provided by the DroidHands project and its maintainers (“<strong>DroidHands</strong>,” “<strong>we</strong>,” “<strong>us</strong>,” or “<strong>our</strong>”).
+    </p>
+    <p>
+      By downloading, installing, accessing, or using any part of the Service, you agree to be bound by these Terms and acknowledge our <a href={PRIVACY_URL}>Privacy Policy</a>. If you do not agree to these Terms, do not install or use the Service.
+    </p>
+    <p>
+      <strong>Eligibility:</strong> You must be at least 18 years old (or the age of legal majority in your jurisdiction, and never under 13 — or 16 in the EEA) and legally capable of entering into a binding agreement to use the Service. If you use the Service on behalf of an organization, you represent that you have authority to bind that organization to these Terms.
+    </p>
+  </section>
+
+  <section id="what-it-is">
+    <h2>2. What DroidHands is (and isn't)</h2>
+    <p>
+      DroidHands is a user-controlled bridge implementing the Model Context Protocol (MCP) so that AI agents or clients <strong>you</strong> select can invoke tools on <strong>your</strong> mobile device within permissions you configure.
+    </p>
+    <ul>
+      <li><strong>Not an AI provider:</strong> We do not operate, train, host, audit, or control Claude, ChatGPT, Grok, Muse, or any other AI model or MCP client you connect.</li>
+      <li><strong>Not a carrier, bank, or messaging platform:</strong> We are not a telecommunications provider, financial institution, or messaging service, and we are not responsible for carrier SMS/voice/data charges or delivery failures.</li>
+      <li><strong>No affiliation or endorsement:</strong> DroidHands is an independent project and is not affiliated with, sponsored by, or endorsed by Anthropic, OpenAI, xAI, Meta/WhatsApp, Google, Apple, or any third-party app developer.</li>
+    </ul>
+  </section>
+
+  <section id="ai-risks">
+    <h2>3. AI agent risks &amp; your sole responsibility</h2>
+    <p>
+      Giving an autonomous AI agent access to your phone is inherently risky. By using DroidHands, you expressly acknowledge and assume all risks associated with AI-driven device control, including without limitation:
+    </p>
+    <ul>
+      <li><strong>Hallucinations, errors &amp; unintended actions:</strong> AI agents may misunderstand your instructions, invent facts, choose the wrong contact or app, send embarrassing or harmful messages, place unintended calls, delete or alter data, or initiate purchases or financial transactions.</li>
+      <li><strong>Prompt injection &amp; adversarial content:</strong> Text your agent reads from incoming SMS, WhatsApp messages, notifications, emails, calendar invites, websites, or app screens may contain malicious instructions designed to hijack the agent into exfiltrating data or taking unauthorized actions within its grant.</li>
+      <li><strong>UI automation fragility:</strong> Screen-reading and UI-control tools (including Android's Accessibility Service) depend on third-party app interfaces that can change without notice, shift due to popups or notifications, or cause taps and keystrokes to land on unintended controls.</li>
+      <li><strong>Network interruptions &amp; duplicate actions:</strong> If a connection drops mid-request, an action may still complete on your phone while the agent receives an error and retries it, potentially sending duplicate messages or repeating an operation.</li>
+      <li><strong>Best-effort safeguards only:</strong> Features described in our <a href={SECURITY_URL}>Security Model</a> — including app allowlists, the never-allow list, one-time password (OTP) redaction, confirmation prompts, active hours, and rate limits — are <strong>best-effort conveniences, not security guarantees</strong>. For example, OTP redaction cannot catch every code format or codes displayed inside arbitrary app UIs, and the never-allow list relies on heuristics and package lists that may not cover every sensitive app on your phone.</li>
+    </ul>
+    <p>
+      <strong>You are solely and exclusively responsible for:</strong> (a) choosing which AI agents to pair, which OS permissions to grant, and whether to restrict access to “Only what I choose” or enable confirmation prompts; (b) keeping your phone, pairing codes, connection URLs, and self-hosted relays secure; (c) monitoring agent activity and revoking compromised or misbehaving agents; and (d) <strong>every consequence, cost, loss, claim, or liability</strong> resulting from any action performed by an agent connected to your device.
+    </p>
+  </section>
+
+  <section id="third-parties">
+    <h2>4. Third-party apps, agents &amp; plugins</h2>
+    <p>
+      DroidHands interacts with third-party operating systems, AI providers, and mobile apps that we do not control.
+    </p>
+    <ul>
+      <li><strong>Third-party terms &amp; account bans:</strong> Automating or controlling third-party apps (such as messaging, social, delivery, banking, or ride-hailing apps) may violate those apps' terms of service and could result in rate limits, security lockouts, or permanent suspension or termination of your accounts. You assume full responsibility for verifying whether your use complies with every third-party app's terms.</li>
+      <li><strong>Local &amp; community plugins:</strong> If you import, enable, or run custom or unreviewed local app plugins, you do so entirely at your own risk. We do not guarantee the safety, accuracy, or legality of any plugin (built-in or user-imported).</li>
+    </ul>
+  </section>
+
+  <section id="acceptable-use">
+    <h2>5. Acceptable use &amp; prohibited conduct</h2>
+    <p>
+      You agree to use the Service only in compliance with all applicable local, state, national, and international laws and regulations. You represent that you will install and use DroidHands <strong>only on devices you own or have explicit legal authorization to control</strong>.
+    </p>
+    <p>You agree <strong>not</strong> to use the Service (including the Default Relay) to:</p>
+    <ul>
+      <li>Install spyware, stalkerware, or conduct unauthorized surveillance, monitoring, or control of another person's device or communications;</li>
+      <li>Send spam, unsolicited bulk messages, robocalls, phishing, fraud, harassment, or communications that violate anti-spam, telemarketing, wiretapping, or consent laws (such as the TCPA, CAN-SPAM, GDPR, or state call/message consent laws);</li>
+      <li>Access, exfiltrate, or tamper with accounts, financial systems, or data without authorization;</li>
+      <li>Abuse, overload, scrape, DDoS, bypass rate limits on, or intentionally exhaust the free-tier quotas of <code>connect.droidhands.com</code>, or attempt to probe or interfere with other users' connections; or</li>
+      <li>Violate export control, sanctions, or other applicable laws.</li>
+    </ul>
+
+    <h3>No high-risk, financial, or emergency use</h3>
+    <p>
+      DroidHands is <strong>not designed, tested, or intended for high-risk or safety-critical use</strong>. You must not rely on DroidHands or any connected AI agent to contact emergency services (such as 911, 112, or 999), operate medical or life-safety equipment, manage critical infrastructure, or execute unattended financial, trading, or payment transactions where failure or error could cause injury, death, or severe financial or property damage.
+    </p>
+  </section>
+
+  <section id="relay">
+    <h2>6. Default hosted relay (connect.droidhands.com) — No SLA</h2>
+    <p>
+      We offer the Default Relay at <code>connect.droidhands.com</code> free of charge as a convenience for personal use.
+    </p>
+    <ul>
+      <li><strong>No uptime or delivery guarantee:</strong> The Default Relay is provided on a best-effort basis with <strong>no service-level agreement (SLA)</strong>. It runs on shared Cloudflare Workers infrastructure subject to daily quotas, deployments, restarts, rate limits, and third-party outages, any of which may interrupt connections or cause requests to fail without notice.</li>
+      <li><strong>Not end-to-end encrypted:</strong> As explained in our <a href={PRIVACY_URL}>Privacy Policy</a> and <a href={SECURITY_URL}>Security Model</a>, TLS terminates at the relay. Do not route traffic through the Default Relay if you are unwilling to accept that architecture — self-host your own relay or use USB/Tailscale instead.</li>
+      <li><strong>Right to limit or discontinue:</strong> We reserve the right, in our sole discretion and without liability or prior notice, to impose rate or usage limits, block specific devices or IP addresses, modify, suspend, or permanently shut down the Default Relay at any time.</li>
+    </ul>
+  </section>
+
+  <section id="ip">
+    <h2>7. Open-source license &amp; intellectual property</h2>
+    <p>
+      The DroidHands source code is made available under the <a href={LICENSE_URL}>Apache License, Version 2.0</a>. Your rights to copy, modify, and redistribute the source code are governed by that license (including its Sections 7 and 8 warranty disclaimer and limitation of liability). Nothing in these Terms restricts any rights granted to you under the Apache License 2.0 with respect to the open-source code, while these Terms additionally govern your use of our hosted Default Relay, Website, and distributed official builds.
+    </p>
+    <p>
+      All DroidHands names, logos, and branding remain subject to trademark rights reserved under Section 6 of the Apache License 2.0. Third-party product names and marks belong to their respective owners. Any feedback, suggestions, or code contributions you submit are governed by Section 5 of the Apache License 2.0, and you grant us a perpetual, irrevocable, royalty-free right to use any feedback without obligation or compensation to you.
+    </p>
+  </section>
+
+  <section id="warranties">
+    <h2>8. Disclaimer of warranties</h2>
+    <div class="legal-caps mt-4">
+      <p class="!mt-0">
+        THE SERVICE (INCLUDING THE APPS, THE DEFAULT RELAY, ALL PLUGINS, DOCUMENTATION, AND THIS WEBSITE) IS PROVIDED ON AN <strong>“AS IS”</strong> AND <strong>“AS AVAILABLE”</strong> BASIS, WITH ALL FAULTS AND WITHOUT WARRANTY OF ANY KIND. TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE DROIDHANDS PROJECT, ITS MAINTAINERS, AUTHORS, AND CONTRIBUTORS EXPRESSLY DISCLAIM ALL WARRANTIES AND CONDITIONS, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, QUIET ENJOYMENT, ACCURACY, SECURITY, RELIABILITY, AND NON-INFRINGEMENT, AS WELL AS ANY WARRANTIES ARISING OUT OF COURSE OF DEALING OR USAGE OF TRADE.
+      </p>
+      <p class="!mt-3">
+        WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, TIMELY, SECURE, ERROR-FREE, OR COMPATIBLE WITH ANY PARTICULAR DEVICE, OS VERSION, AI AGENT, OR THIRD-PARTY APP; THAT SECURITY CONTROLS (SUCH AS NEVER-ALLOW LISTS, CONFIRMATION PROMPTS, OR OTP REDACTION) WILL PREVENT ALL UNINTENDED OR UNAUTHORIZED ACTIONS; OR THAT ANY DEFECTS WILL BE CORRECTED. YOU DOWNLOAD AND USE THE SERVICE ENTIRELY AT YOUR OWN DISCRETION AND RISK.
+      </p>
+    </div>
+  </section>
+
+  <section id="liability">
+    <h2>9. Limitation of liability</h2>
+    <div class="legal-caps mt-4">
+      <p class="!mt-0">
+        TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL THE DROIDHANDS PROJECT, ITS MAINTAINERS, AUTHORS, OR CONTRIBUTORS BE LIABLE TO YOU OR ANY THIRD PARTY UNDER ANY LEGAL OR EQUITABLE THEORY (WHETHER CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, STATUTE, OR OTHERWISE) FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, MONEY, DATA, MESSAGES, GOODWILL, PRIVACY, DEVICE FUNCTIONALITY, OR THIRD-PARTY ACCOUNTS, ARISING OUT OF OR RELATING TO:
+      </p>
+      <ul class="!mt-3 list-disc pl-5">
+        <li>YOUR ACCESS TO, USE OF, OR INABILITY TO USE THE SERVICE;</li>
+        <li>ANY ACTION, OMISSION, ERROR, HALLUCINATION, OR MISBEHAVIOR OF ANY AI AGENT OR MCP CLIENT CONNECTED TO YOUR DEVICE;</li>
+        <li>PROMPT INJECTION, COMPROMISED TOKENS, UNAUTHORIZED ACCESS, OR FAILURE OF ANY SECURITY FILTER OR PROMPT;</li>
+        <li>SUSPENSION OR BAN OF ANY THIRD-PARTY ACCOUNT, OR CARRIER/DATA CHARGES; OR</li>
+        <li>ANY INTERRUPTION, QUOTA EXHAUSTION, MODIFICATION, OR SHUTDOWN OF THE DEFAULT RELAY OR WEBSITE,</li>
+      </ul>
+      <p class="!mt-3">
+        EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES AND EVEN IF ANY REMEDY FAILS OF ITS ESSENTIAL PURPOSE.
+      </p>
+      <p class="!mt-3">
+        BECAUSE THE SERVICE IS PROVIDED FREE OF CHARGE, TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, OUR TOTAL CUMULATIVE LIABILITY FOR ALL CLAIMS ARISING OUT OF OR RELATING TO THESE TERMS OR THE SERVICE SHALL NOT EXCEED THE GREATER OF (A) THE AMOUNT YOU ACTUALLY PAID US FOR THE SERVICE IN THE TWELVE (12) MONTHS PRECEDING THE CLAIM (WHICH IS ZERO DOLLARS FOR FREE USE), OR (B) TWENTY-FIVE U.S. DOLLARS (USD $25).
+      </p>
+      <p class="!mt-3">
+        SOME JURISDICTIONS DO NOT ALLOW THE EXCLUSION OF CERTAIN WARRANTIES OR THE LIMITATION OR EXCLUSION OF LIABILITY FOR CERTAIN TYPES OF DAMAGES (SUCH AS GROSS NEGLIGENCE, WILLFUL MISCONDUCT, OR CONSUMER STATUTORY RIGHTS). IN SUCH JURISDICTIONS, OUR LIABILITY WILL BE LIMITED TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+      </p>
+    </div>
+  </section>
+
+  <section id="indemnification">
+    <h2>10. Indemnification</h2>
+    <p>
+      To the fullest extent permitted by applicable law, you agree to defend, indemnify, and hold harmless the DroidHands project, its maintainers, authors, and contributors from and against any and all third-party claims, demands, lawsuits, regulatory actions, damages, losses, liabilities, fines, penalties, costs, and expenses (including reasonable attorneys' fees) arising out of or relating to:
+    </p>
+    <ul>
+      <li>Your use or misuse of the Service;</li>
+      <li>Any action taken, message sent, call placed, transaction initiated, or data transmitted by any AI agent or client connected to your device;</li>
+      <li>Your violation of these Terms, any applicable law or regulation, or the terms of service or rights (including privacy, intellectual property, or publicity rights) of any third party; or</li>
+      <li>Any local plugin you import or self-hosted relay you operate.</li>
+    </ul>
+  </section>
+
+  <section id="termination">
+    <h2>11. Suspension &amp; termination</h2>
+    <p>
+      You may stop using DroidHands at any time by revoking connected agents and uninstalling the App. We may suspend, rate-limit, or terminate your access to the Default Relay or Website at any time, with or without cause or notice, including if we reasonably suspect abuse, excessive quota usage, security risks, or violation of these Terms, or if we discontinue the Default Relay.
+    </p>
+    <p>
+      Sections that by their nature should survive termination — including Sections 3 (AI agent risks), 4 (Third-party apps), 7 (Intellectual property), 8 (Disclaimer of warranties), 9 (Limitation of liability), 10 (Indemnification), 12 (Store notices), and 13 (General) — will survive any termination of your use of the Service.
+    </p>
+  </section>
+
+  <section id="app-stores">
+    <h2>12. Apple App Store &amp; Google Play notices</h2>
+    <p>
+      If you download DroidHands from the Apple App Store or Google Play Store, you acknowledge and agree that:
+    </p>
+    <ul>
+      <li>These Terms are concluded solely between you and the DroidHands project, and <strong>not</strong> with Apple Inc. (“Apple”) or Google LLC (“Google”).</li>
+      <li>Neither Apple nor Google is responsible for the App or its content, and neither has any obligation to provide maintenance, support, or warranty services with respect to the App.</li>
+      <li>To the extent any warranty is not effectively disclaimed under applicable law, any refund obligation of Apple (which is $0 for a free app) is Apple's sole warranty obligation; all other claims, losses, liabilities, damages, costs, or expenses attributable to any failure to conform to any warranty are governed solely by these Terms.</li>
+      <li>Apple and its subsidiaries are third-party beneficiaries of these Terms with respect to the iOS App and, upon your acceptance of these Terms, Apple will have the right to enforce these Terms against you as a third-party beneficiary.</li>
+      <li>You represent that you are not located in a country subject to a U.S. Government embargo or designated as a “terrorist supporting” country, and that you are not listed on any U.S. Government list of prohibited or restricted parties.</li>
+    </ul>
+  </section>
+
+  <section id="general">
+    <h2>13. Changes, severability &amp; contact</h2>
+    <ul>
+      <li><strong>Changes to these Terms:</strong> We may modify these Terms at any time by posting updated Terms on this page and updating the “Last updated” date. Your continued use of the Service after changes are posted constitutes your acceptance of the revised Terms.</li>
+      <li><strong>Severability:</strong> If any provision of these Terms is held invalid, illegal, or unenforceable by a court of competent jurisdiction, that provision will be enforced to the maximum extent permissible and the remaining provisions will remain in full force and effect.</li>
+      <li><strong>No waiver:</strong> Our failure to enforce any right or provision of these Terms will not be deemed a waiver of that right or provision.</li>
+      <li><strong>Entire agreement:</strong> Together with the <a href={PRIVACY_URL}>Privacy Policy</a> and the <a href={LICENSE_URL}>Apache License 2.0</a> (for source code), these Terms constitute the entire agreement between you and DroidHands regarding the Service.</li>
+      <li><strong>Informal resolution first:</strong> Before filing any formal legal claim against us, you agree to first contact us and give us at least 30 days to attempt to resolve the issue informally.</li>
+    </ul>
+    <p>
+      Questions about these Terms? Contact us at:
+    </p>
+    <ul>
+      <li>Email: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></li>
+      <li>GitHub Issues: <a href={ISSUES_URL}>{ISSUES_URL}</a></li>
+    </ul>
+  </section>
+</LegalLayout>

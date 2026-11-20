@@ -3,16 +3,14 @@ package com.droidhands.android.ui.onboarding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBox
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LocationOn
@@ -22,8 +20,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.ui.components.Accents
 import com.droidhands.android.ui.components.AppCard
+import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.IconBadge
 import com.droidhands.android.ui.components.IconRowInset
 import com.droidhands.android.ui.components.IconTile
@@ -51,7 +48,6 @@ import com.droidhands.android.ui.components.Notice
 import com.droidhands.android.ui.components.NoticeKind
 import com.droidhands.android.ui.components.PrimaryButton
 import com.droidhands.android.ui.components.SecondaryButton
-import com.droidhands.android.ui.components.StatusPill
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.setup.RestrictedSettings
 import com.droidhands.android.ui.setup.RestrictedSettingsGuide
@@ -65,28 +61,36 @@ import com.droidhands.android.ui.setup.WithSetupActions
 import com.droidhands.android.ui.theme.statusColors
 
 /**
- * Step 2: "Grant all" asks for every runtime permission in one go, then the special accesses are
- * walked one at a time: one tap opens the right system screen, and when the user comes back with
- * it granted, the next one is highlighted automatically. Below, every permission is one row with
- * Grant or a green check. Everything can be skipped.
+ * Step 2: a clean four-row essential checklist (App permissions + Accessibility + Notification access +
+ * Battery) where only the next undone item has a primary button. "Customize permissions" expands the full
+ * per-permission list (including optional items). Everything can be skipped.
  */
 @Composable
 internal fun PermissionsStep(setup: SetupViewModel) {
     val state by setup.state.collectAsStateWithLifecycle()
-    var skipped by rememberSaveable { mutableStateOf(listOf<String>()) }
     var custom by rememberSaveable { mutableStateOf(false) }
-    StepHeader(
-        Icons.Filled.Lock,
-        "Allow what your agents need",
-        "Each permission unlocks specific abilities. You can change everything later in Settings.",
-    )
+    val essentialsDone = state.loaded && OnboardingFlow.essentialsDone(state.items)
+    if (essentialsDone) {
+        StepHeader(
+            Icons.Filled.CheckCircle,
+            "Permissions ready",
+            "You can change any permission later in Settings.",
+            color = statusColors().ok,
+        )
+    } else {
+        StepHeader(
+            Icons.Filled.Lock,
+            "Allow permissions",
+            "Grant access so your agents can help. Change anytime in Settings.",
+        )
+    }
     if (!state.loaded) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.padding(16.dp)) }
         return
     }
     val restricted = state.restrictedSettings
     WithSetupActions(setup) { actions ->
-        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // Installed from the web on Android 13+: SMS (Android 15), notification access and accessibility need
             // "Allow restricted settings" first, so the steps come before anything Android would refuse.
             if (restricted.guideFirst) {
@@ -94,42 +98,179 @@ internal fun PermissionsStep(setup: SetupViewModel) {
                 RestrictedSettingsCard(actions.openAppInfo, restricted.unlocks, accessibility?.let { { actions.onAction(it) } })
             }
             if (!custom) {
-                GrantAllSection(state.items, restricted, actions, onCustom = { custom = true })
+                SimplePermissionsChecklist(state.items, restricted, actions)
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TertiaryButton("Customize permissions", onClick = { custom = true })
+                }
             } else {
-                TertiaryButton("Back to Grant all", onClick = { custom = false })
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    TertiaryButton("Back to simple view", onClick = { custom = false })
+                }
                 RuntimeSection(state.items, restricted, actions)
+                SpecialAccessSection(state.items, actions)
             }
-            val next = OnboardingFlow.nextSpecialAccess(state.items, skipped.toSet())
-            if (next != null) {
-                // Restricted settings not shown above yet: accessibility needs them first.
-                if (next.restrictedSettingsGuide && !restricted.guideFirst) RestrictedSettingsCard(actions.openAppInfo)
-                NextAccessCard(next, actions, restricted.guideFirst, onSkip = { skipped = skipped + next.id })
-            }
-            if (OnboardingFlow.essentialsDone(state.items)) {
-                Notice("The essentials are done. Continue whenever you're ready.")
-            }
-            if (custom) SpecialAccessSection(state.items, actions)
         }
     }
 }
 
-/** The default view: one big "Grant all" and a small "Custom" that opens the per-permission list. */
+/**
+ * The default onboarding view: four essential rows in one list — bundled App permissions, then the three
+ * essential special accesses. Exactly one undone row gets the primary button at a time.
+ */
 @Composable
-private fun GrantAllSection(items: List<SetupItem>, restricted: RestrictedSettings.Advice, actions: SetupActions, onCustom: () -> Unit) {
-    val toRequest = OnboardingFlow.runtimeToRequest(items)
-    val blocked = OnboardingFlow.blockedRuntime(items)
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (toRequest.isNotEmpty()) {
-            PrimaryButton("Grant all", onClick = { actions.requestPermissions(toRequest) }, fullWidth = true)
-        }
-        if (toRequest.isEmpty() && blocked.isNotEmpty()) {
-            Notice(
-                RestrictedSettings.blockedNotice(blocked, restricted),
-                kind = NoticeKind.WARNING,
-                action = { SecondaryButton("Open App info", onClick = actions.openAppInfo) },
+private fun SimplePermissionsChecklist(
+    items: List<SetupItem>,
+    restricted: RestrictedSettings.Advice,
+    actions: SetupActions,
+) {
+    val runtime = OnboardingFlow.runtimeSummary(items)
+    val byId = items.associateBy { it.id }
+    val special = OnboardingFlow.ESSENTIAL_SPECIAL_ORDER.mapNotNull { byId[it] }
+    val nextId = OnboardingFlow.nextPermissionStepId(items)
+
+    ListSection {
+        AppPermissionsRow(
+            summary = runtime,
+            isNext = nextId == OnboardingFlow.APP_PERMISSIONS_ID,
+            actions = actions,
+        )
+        special.forEach { item ->
+            ListDivider(IconRowInset)
+            SimpleSpecialRow(
+                item = item,
+                isNext = nextId == item.id,
+                restrictedGuideShown = restricted.guideFirst,
+                actions = actions,
             )
         }
-        TertiaryButton("Custom", onClick = onCustom)
+    }
+    if (runtime.toRequest.isEmpty() && runtime.blocked.isNotEmpty()) {
+        Notice(
+            RestrictedSettings.blockedNotice(runtime.blocked, restricted),
+            kind = NoticeKind.WARNING,
+            action = { SecondaryButton("Open App info", onClick = actions.openAppInfo) },
+        )
+    }
+}
+
+/** Row 1 of the simple checklist: requests every missing runtime permission in one tap. */
+@Composable
+private fun AppPermissionsRow(summary: RuntimeSummary, isNext: Boolean, actions: SetupActions) {
+    val subtitle = when {
+        summary.allDone -> "Granted"
+        summary.granted > 0 -> "${summary.granted} of ${summary.total} granted"
+        summary.toRequest.isEmpty() && summary.blocked.isNotEmpty() -> "Blocked — allow in App info"
+        else -> "Notifications, contacts, messages, calls & location"
+    }
+    val actionLabel = when {
+        summary.allDone -> null
+        summary.toRequest.isNotEmpty() -> "Allow"
+        summary.blocked.isNotEmpty() -> "App info"
+        else -> null
+    }
+    val onAction: () -> Unit = {
+        if (summary.toRequest.isNotEmpty()) actions.requestPermissions(summary.toRequest) else actions.openAppInfo()
+    }
+    ListRow(
+        title = "App permissions",
+        subtitle = subtitle,
+        subtitleMaxLines = 2,
+        leading = { IconTile(Icons.Filled.Notifications, Accents.Indigo) },
+        trailing = {
+            PermissionTrailing(
+                done = summary.allDone,
+                label = actionLabel,
+                primary = isNext,
+                description = "Allow app permissions",
+                onClick = onAction,
+            )
+        },
+    )
+}
+
+/** One essential special-access row with a concise inline hint only when it is the active step or pending. */
+@Composable
+private fun SimpleSpecialRow(
+    item: SetupItem,
+    isNext: Boolean,
+    restrictedGuideShown: Boolean,
+    actions: SetupActions,
+) {
+    val done = item.status == SetupStatus.DONE
+    val (icon, color) = permissionIcon(item.id)
+    val subtitle = when {
+        done -> "Granted"
+        item.id == SetupLogic.ACCESSIBILITY && item.status == SetupStatus.PENDING -> "Enabled, connecting…"
+        else -> shortDescription(item.id) ?: item.description
+    }
+    val buttonLabel = if (done) null else "Allow"
+    Column(Modifier.fillMaxWidth()) {
+        ListRow(
+            title = shortTitle(item.id) ?: item.title,
+            subtitle = subtitle,
+            subtitleMaxLines = 2,
+            leading = { IconTile(icon, color) },
+            trailing = {
+                PermissionTrailing(
+                    done = done,
+                    label = buttonLabel,
+                    primary = isNext,
+                    description = "${SetupLogic.actionLabel(item) ?: "Allow"}: ${item.title}",
+                    onClick = { actions.onAction(item) },
+                )
+            },
+        )
+        val pendingAccessibility = item.id == SetupLogic.ACCESSIBILITY && item.status == SetupStatus.PENDING
+        val showAccessibilityHint = item.id == SetupLogic.ACCESSIBILITY && isNext && !done
+        val showRestrictedHelp = item.restrictedSettingsHelp && !restrictedGuideShown && (isNext || pendingAccessibility)
+        if (pendingAccessibility || showAccessibilityHint || showRestrictedHelp) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = IconRowInset, end = CardPadding, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (pendingAccessibility) {
+                    Notice(
+                        "Turned on, but Android hasn't connected yet. Toggle DroidHands off and on again in Accessibility settings.",
+                        kind = NoticeKind.WARNING,
+                    )
+                } else if (showAccessibilityHint) {
+                    Notice("On the next screen tap \"Installed apps\" (or \"Downloaded apps\") > DroidHands, then turn it on.")
+                }
+                if (showRestrictedHelp) {
+                    RestrictedSettingsHelp(actions.openAppInfo)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionTrailing(
+    done: Boolean,
+    label: String?,
+    primary: Boolean,
+    description: String,
+    onClick: () -> Unit,
+) {
+    when {
+        done -> IconBadge(
+            Icons.Filled.Check,
+            statusColors().ok,
+            size = 28.dp,
+            modifier = Modifier.semantics { contentDescription = "Granted" },
+        )
+        label != null && primary -> PrimaryButton(
+            label,
+            onClick = onClick,
+            modifier = Modifier.semantics { contentDescription = description },
+        )
+        label != null -> SecondaryButton(
+            label,
+            onClick = onClick,
+            modifier = Modifier.semantics { contentDescription = description },
+        )
     }
 }
 
@@ -143,7 +284,7 @@ private fun RuntimeSection(items: List<SetupItem>, restricted: RestrictedSetting
         ListSection(
             title = "App permissions",
             footer = when {
-                toRequest.isNotEmpty() -> "Notifications are for the Allow/Deny prompts. Android asks about each one."
+                toRequest.isNotEmpty() -> "Notifications are for Allow/Deny prompts. Android asks about each one."
                 blocked.isEmpty() -> "App permissions granted."
                 else -> null
             },
@@ -168,7 +309,7 @@ private fun RuntimeSection(items: List<SetupItem>, restricted: RestrictedSetting
     }
 }
 
-/** Special accesses (system settings screens), in the order the wizard walks them, with progress below. */
+/** Special accesses (system settings screens), in the order the wizard lists them, with progress below. */
 @Composable
 private fun SpecialAccessSection(items: List<SetupItem>, actions: SetupActions) {
     val byId = items.associateBy { it.id }
@@ -190,7 +331,7 @@ private fun SpecialAccessSection(items: List<SetupItem>, actions: SetupActions) 
     }
 }
 
-/** One permission: its tile, title and state, and Grant (or a green check once granted). */
+/** One permission in the custom view: its tile, title and state, and Grant (or a green check once granted). */
 @Composable
 private fun PermissionRow(item: SetupItem, actions: SetupActions) {
     val done = item.status == SetupStatus.DONE
@@ -220,59 +361,28 @@ private fun PermissionRow(item: SetupItem, actions: SetupActions) {
     )
 }
 
-/** The special access to do next, highlighted; it moves on by itself once granted. */
-@Composable
-private fun NextAccessCard(item: SetupItem, actions: SetupActions, restrictedGuideShown: Boolean, onSkip: () -> Unit) {
-    val (icon, color) = permissionIcon(item.id)
-    AppCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconTile(icon, color, size = 40.dp)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Next", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(item.title, style = MaterialTheme.typography.titleMedium)
-            }
-            if (!item.essential) {
-                Spacer(Modifier.width(8.dp))
-                StatusPill("Optional", statusColors().off)
-            }
-        }
-        Text(item.description, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            "Unlocks: ${item.unlocks}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (item.id == SetupLogic.ACCESSIBILITY && item.status == SetupStatus.PENDING) {
-            Notice(
-                "Turned on, but Android hasn't connected the service yet. If this doesn't change in a few seconds, " +
-                    "turn DroidHands off and on again in Accessibility settings.",
-                kind = NoticeKind.WARNING,
-            )
-        }
-        if (item.id == SetupLogic.ACCESSIBILITY) {
-            Notice("On the next screen tap \"Installed apps\" (on some phones \"Downloaded apps\") > DroidHands, then turn it on.")
-        }
-        // The guided card above already covers it.
-        if (item.restrictedSettingsHelp && !item.restrictedSettingsGuide && !restrictedGuideShown) {
-            RestrictedSettingsHelp(actions.openAppInfo)
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
-            TertiaryButton("Skip", onClick = onSkip)
-            PrimaryButton(SetupLogic.actionLabel(item) ?: "Open settings", onClick = { actions.onAction(item) })
-        }
-    }
-}
-
 /**
- * The "Allow restricted settings" steps as their own card: first on the step ([onOpenAccessibility] set, for step 1),
- * or right above the accessibility card.
+ * The "Allow restricted settings" steps as their own card: shown first for sideloaded Android 13+ installs.
  */
 @Composable
 private fun RestrictedSettingsCard(onOpenAppInfo: () -> Unit, unlocks: String = "accessibility", onOpenAccessibility: (() -> Unit)? = null) {
     AppCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         RestrictedSettingsGuide(onOpenAppInfo, Modifier.fillMaxWidth(), unlocks, onOpenAccessibility)
     }
+}
+
+private fun shortTitle(id: String): String? = when (id) {
+    SetupLogic.ACCESSIBILITY -> "Accessibility"
+    SetupLogic.NOTIFICATION_ACCESS -> "Notification access"
+    SetupLogic.BATTERY -> "Unrestricted battery"
+    else -> null
+}
+
+private fun shortDescription(id: String): String? = when (id) {
+    SetupLogic.ACCESSIBILITY -> "Tap, type and use apps for you"
+    SetupLogic.NOTIFICATION_ACCESS -> "Read and reply to notifications"
+    SetupLogic.BATTERY -> "Stay reachable with the screen off"
+    else -> null
 }
 
 /** Icon and tile color of a checklist row, so the same permission looks the same everywhere in the wizard. */

@@ -1,0 +1,262 @@
+---
+import LegalLayout, { type TocItem } from "../layouts/LegalLayout.astro";
+import {
+  CONTACT_EMAIL,
+  ISSUES_URL,
+  SECURITY_ADVISORY_URL,
+  SECURITY_URL,
+  TERMS_URL,
+} from "../site";
+
+const LAST_UPDATED = "November 20, 2026";
+
+const toc: readonly TocItem[] = [
+  { id: "scope", label: "Scope" },
+  { id: "apps", label: "Mobile apps (Android & iOS)" },
+  { id: "accessibility", label: "Android Accessibility disclosure" },
+  { id: "agents", label: "Your chosen AI agents" },
+  { id: "relay", label: "Default relay & self-hosting" },
+  { id: "website", label: "Website (droidhands.com)" },
+  { id: "summary-table", label: "Data & processors overview" },
+  { id: "sharing", label: "Sharing, sale & legal requests" },
+  { id: "retention-transfers", label: "Retention & international transfers" },
+  { id: "rights", label: "Your privacy rights" },
+  { id: "children", label: "Children's privacy" },
+  { id: "security", label: "Security" },
+  { id: "changes-contact", label: "Changes & contact" },
+];
+---
+
+<LegalLayout
+  title="Privacy Policy — DroidHands"
+  description="How DroidHands handles data across the Android and iOS apps, the default relay at connect.droidhands.com, and the website at droidhands.com."
+  eyebrow="Legal · Privacy"
+  heading="Privacy Policy"
+  subtitle="How data moves through the DroidHands apps, the default relay, and this website — written plainly, without hiding technical realities."
+  lastUpdated={LAST_UPDATED}
+  current="privacy"
+  toc={toc}
+>
+  <div class="legal-callout">
+    <p class="!mt-0 font-mono text-xs tracking-widest text-brand-300 uppercase">Plain-English summary</p>
+    <ul class="!mt-3 space-y-1.5 text-sm">
+      <li><strong>No accounts, no ads, no data sales.</strong> We never ask for your name, email, or phone number, and we never sell or broker user data.</li>
+      <li><strong>Zero trackers in the apps.</strong> The Android and iOS apps include no analytics, crash-reporting, or advertising SDKs.</li>
+      <li><strong>Your data goes to the AI agent you choose.</strong> Whatever you allow an agent to read (messages, contacts, calendar, screen) goes directly to that third-party AI service under its own privacy policy.</li>
+      <li><strong>The default relay stores no content.</strong> <code>connect.droidhands.com</code> runs on Cloudflare Workers and passes traffic through without logging or storing request/response bodies. For maximum privacy, self-host your own relay or use USB/Tailscale.</li>
+      <li><strong>This website uses PostHog analytics.</strong> Unlike the mobile apps, <code>droidhands.com</code> uses PostHog to measure aggregate site traffic.</li>
+    </ul>
+    <p class="!mt-3 text-xs text-slate-400">
+      This summary is for convenience only. The full sections below govern how information is handled. See also our <a href={TERMS_URL}>Terms of Service</a>.
+    </p>
+  </div>
+
+  <section id="scope">
+    <h2>1. Scope</h2>
+    <p>
+      This Privacy Policy explains how the DroidHands project (“<strong>DroidHands</strong>,” “<strong>we</strong>,” “<strong>us</strong>,” or “<strong>our</strong>”) handles information across:
+    </p>
+    <ul>
+      <li>The <strong>DroidHands mobile applications</strong> for Android and iOS (the “<strong>Apps</strong>”);</li>
+      <li>The optional <strong>default hosted relay</strong> operated at <code>connect.droidhands.com</code> (the “<strong>Default Relay</strong>”); and</li>
+      <li>The <strong>website</strong> at <code>droidhands.com</code> (the “<strong>Website</strong>”).</li>
+    </ul>
+    <p>
+      DroidHands is open-source software. If you run your own self-hosted relay (for example on Node.js, Docker, Fly.io, Render, or your own Cloudflare account) or connect locally over USB, Wi-Fi, or Tailscale, that infrastructure is operated solely by you and is outside our control and this policy.
+    </p>
+  </section>
+
+  <section id="apps">
+    <h2>2. Mobile apps (Android &amp; iOS)</h2>
+    <p>
+      The Apps require <strong>no account, sign-up, email address, name, or phone number</strong>. We do not include third-party advertising networks, behavioral tracking SDKs, crash-reporting SDKs, or product analytics inside the Apps.
+    </p>
+
+    <h3>Data accessed on your device</h3>
+    <p>
+      The Apps access device data and capabilities <strong>only on your device</strong>, <strong>only if you grant the corresponding operating system permission</strong>, and <strong>only when an AI agent that you explicitly paired and authorized</strong> requests a permitted tool. Depending on your platform and the permissions you grant, this may include:
+    </p>
+    <ul>
+      <li><strong>Android:</strong> Contacts, SMS/MMS messages, call log and telephony state/calling, calendar events, approximate/precise (and optional background) location, active notifications (via Notification Listener), list of installed launchable apps, clipboard, device controls/status, and on-screen UI content/interaction (via Android's Accessibility Service API).</li>
+      <li><strong>iOS:</strong> Contacts, calendar events, reminders, location, clipboard, Shortcuts (via <code>x-callback-url</code>), device controls/status, and system message/call sheets (which require your manual tap to send or dial).</li>
+    </ul>
+    <p>
+      We do not collect, copy, retain, or sell any of this device data. Under Apple's App Privacy definitions, the iOS app declares no collected data and no tracking; under Google Play's Data Safety framework, data accessed by your agent is processed ephemerally in real time solely to fulfill your user-directed request and is not retained by us.
+    </p>
+
+    <h3>Local on-device storage</h3>
+    <p>
+      The Apps store your paired agents, their access grants and per-tool rules, your never-allow app list, your device secret, and your local activity/audit log exclusively in app-private storage on your device. Agent bearer tokens are stored only as cryptographic <code>SHA-256</code> hashes. You can clear the activity log, revoke any agent, or uninstall the App at any time to permanently remove all locally stored data.
+    </p>
+
+    <h3>Optional third-party interactions on Android</h3>
+    <ul>
+      <li><strong>GitHub release update check (GitHub APK builds only):</strong> Copies of the Android app installed directly from GitHub check GitHub Releases roughly once per day to see whether a newer version is available. GitHub receives standard HTTP connection metadata (such as your IP address and user agent) under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener noreferrer">GitHub's Privacy Statement</a>. Builds installed from Google Play or the Apple App Store update through those stores instead and do not make this check.</li>
+      <li><strong>QR code scanner (optional relay setup):</strong> If you tap “Scan QR code” on Android to configure a relay, DroidHands delegates scanning to Google Play services' ML Kit code scanner so DroidHands itself never requests camera permission. Google's ML Kit client library may transmit anonymous usage and diagnostic telemetry to Google under <a href="https://policies.google.com/privacy" rel="noopener noreferrer">Google's Privacy Policy</a>.</li>
+    </ul>
+  </section>
+
+  <section id="accessibility">
+    <h2>3. Android Accessibility Service disclosure</h2>
+    <div class="legal-warn mt-4">
+      <p class="!mt-0">
+        On Android, DroidHands optionally uses Android's <strong>Accessibility Service API</strong> (<code>BridgeAccessibilityService</code>) to enable agents you authorize to read on-screen content and perform user-requested UI actions (tapping, typing, scrolling, swiping, and navigation) inside other apps on your behalf.
+      </p>
+      <ul class="!mt-3 text-sm">
+        <li>It is <strong>off by default</strong> and operates only if you explicitly enable it in Android Settings and authorize an agent.</li>
+        <li>It is <strong>never</strong> used to collect data for DroidHands, track your behavior, serve ads, or build profiles.</li>
+        <li>Screen data read by the service is not stored on our servers and is transmitted <strong>only</strong> back to the specific AI agent you connected and permitted, strictly to answer that agent's request.</li>
+        <li>Apps on your <strong>never-allow list</strong> (which pre-selects banking, payment, password manager, and authenticator apps) and apps outside an agent's allowed list are excluded from screen reading and control, and DroidHands' own approval prompts cannot be read or tapped by agents.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="agents">
+    <h2>4. Data sent to your chosen AI agents</h2>
+    <p>
+      When an agent you paired calls a tool on your phone, the tool's response — which may contain personal or sensitive information such as message text, contact details, calendar events, notifications, location, or screen contents — is sent directly to the third-party AI service or MCP client <strong>you</strong> chose to connect (for example, Anthropic's Claude, OpenAI's ChatGPT, xAI's Grok, Muse, or a self-hosted MCP client).
+    </p>
+    <p>
+      <strong>DroidHands does not control those third-party AI services.</strong> Once data leaves your phone for your connected agent, that provider's own privacy policy, data retention practices, security controls, and model-training terms apply. You are solely responsible for reviewing your AI provider's privacy practices and deciding which agents to connect and what permissions to grant them.
+    </p>
+  </section>
+
+  <section id="relay">
+    <h2>5. Default hosted relay &amp; self-hosting</h2>
+    <p>
+      To let cloud-hosted AI agents reach your phone over cellular or NAT networks without requiring you to deploy a server first, release builds come preconfigured with our optional Default Relay at <code>connect.droidhands.com</code>, hosted on <strong>Cloudflare Workers</strong> and <strong>Cloudflare Durable Objects</strong>.
+    </p>
+
+    <h3>How traffic moves through the Default Relay</h3>
+    <ul>
+      <li><strong>Encrypted in transit, not end-to-end encrypted:</strong> Connections use TLS (HTTPS between your AI agent and the relay; WSS between your phone and the relay). However, because standard MCP clients terminate TLS at the relay, the relay operates as a pass-through TLS tunnel and <strong>does not provide end-to-end encryption</strong> between your agent and your phone. Technically, the relay runtime (and Cloudflare as hosting provider) processes unencrypted request and response payloads in memory while forwarding them.</li>
+      <li><strong>No content storage or body logging:</strong> The Default Relay forwards MCP traffic in real time and does not store or log request bodies, tool responses, message text, screen contents, bearer tokens, or secrets.</li>
+      <li><strong>Ephemeral operational metadata:</strong> To route requests, complete OAuth pairing, and enforce abuse/rate limits, the Default Relay temporarily holds:
+        <ul>
+          <li>Your phone's random, self-certifying <strong>device ID</strong> while connected;</li>
+          <li><strong>Pairing state</strong> — including the connecting client's IP address for hourly rate limiting — in the phone's Durable Object storage for <strong>at most ~1 hour</strong> after a pairing, after which it is automatically deleted;</li>
+          <li>A <strong>newly minted access token</strong> during pairing, stored encrypted in Durable Object storage for <strong>at most 120 seconds</strong> until the agent redeems its code, then deleted; and</li>
+          <li><strong>Standard Cloudflare Workers operational logs</strong> (with query strings redacted) and Cloudflare network/DDoS metadata (such as IP addresses, request paths, timestamps, and status codes), processed by Cloudflare under <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener noreferrer">Cloudflare's Privacy Policy</a>.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>Self-hosting &amp; direct connections</h3>
+    <p>
+      If you do not want your traffic to pass through <code>connect.droidhands.com</code> or Cloudflare's infrastructure, you can switch to your own self-hosted relay (Node.js, Docker, Fly.io, Render, or your own Cloudflare account) or connect directly via USB, local Wi-Fi, or Tailscale in the App's connection settings. When using your own relay or local connection, zero phone or agent traffic touches our servers.
+    </p>
+  </section>
+
+  <section id="website">
+    <h2>6. Website (droidhands.com)</h2>
+    <p>
+      This Website is a static site hosted on <strong>Cloudflare Pages</strong>. Fonts and icons are self-hosted, and we do not run advertising networks or ad retargeting pixels.
+    </p>
+    <ul>
+      <li><strong>Hosting &amp; network logs:</strong> Cloudflare processes standard web request metadata (such as IP address, browser user agent, requested URL, and security/DDoS telemetry) to deliver and protect the Website under <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener noreferrer">Cloudflare's Privacy Policy</a>.</li>
+      <li><strong>Website analytics (PostHog):</strong> The Website uses <strong>PostHog</strong> (hosted in PostHog's US Cloud at <code>us.i.posthog.com</code>, configured with <code>person_profiles: "identified_only"</code>) to collect aggregate and pseudonymous usage analytics — such as page views, referring URLs, approximate device/browser type, and basic page interactions — so we can understand how visitors find and read the site. Depending on your browser settings, PostHog may set cookies or use browser local storage. PostHog processes this data under <a href="https://posthog.com/privacy" rel="noopener noreferrer">PostHog's Privacy Policy</a>. You can block Website analytics at any time using browser tracking protection, cookie blockers, or content-blocking extensions.</li>
+    </ul>
+  </section>
+
+  <section id="summary-table">
+    <h2>7. Data &amp; processors overview</h2>
+    <div class="mt-4 overflow-x-auto rounded-2xl ring-1 ring-white/[0.08]">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-white/[0.08] bg-white/[0.04] text-xs uppercase tracking-wider text-slate-300">
+          <tr>
+            <th class="px-4 py-3 font-mono font-medium">Component</th>
+            <th class="px-4 py-3 font-mono font-medium">Data processed</th>
+            <th class="px-4 py-3 font-mono font-medium">Retention</th>
+            <th class="px-4 py-3 font-mono font-medium">Third party</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/[0.06] bg-ink-900/40 text-slate-300">
+          <tr>
+            <td class="px-4 py-3.5 font-medium text-white">Mobile Apps</td>
+            <td class="px-4 py-3.5">Grants, SHA-256 token hashes, activity log, user-permitted tool data on request</td>
+            <td class="px-4 py-3.5">On device only, until cleared or uninstalled</td>
+            <td class="px-4 py-3.5">User's chosen AI agent (optional: GitHub updates &amp; Google ML Kit QR on Android)</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-3.5 font-medium text-white">Default Relay</td>
+            <td class="px-4 py-3.5">Transient TLS traffic (not stored); device ID; pairing IP &amp; encrypted pairing token; Worker logs (no query strings/bodies)</td>
+            <td class="px-4 py-3.5">Tokens ≤ 120 s; pairing state ≤ ~1 hr; Cloudflare standard log retention</td>
+            <td class="px-4 py-3.5">Cloudflare (Workers &amp; Durable Objects)</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-3.5 font-medium text-white">Website</td>
+            <td class="px-4 py-3.5">HTTP request metadata; pseudonymous page views &amp; events</td>
+            <td class="px-4 py-3.5">Per Cloudflare / PostHog retention settings</td>
+            <td class="px-4 py-3.5">Cloudflare Pages; PostHog (US)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sharing">
+    <h2>8. Sharing, sale &amp; legal disclosures</h2>
+    <ul>
+      <li><strong>No sale or ad sharing:</strong> We do not sell your personal information and do not “share” it for cross-context behavioral advertising (as those terms are defined under the CCPA/CPRA and similar laws).</li>
+      <li><strong>Infrastructure providers:</strong> We use only the limited infrastructure providers listed above (Cloudflare for hosting and the Default Relay; PostHog for Website analytics).</li>
+      <li><strong>Legal compliance &amp; safety:</strong> We may disclose information if we believe in good faith that disclosure is required by applicable law, subpoena, court order, or governmental request, or to protect against abuse, fraud, or security threats to our infrastructure. Because we maintain no user accounts and store no message or device content from the Apps or Default Relay, we generally have no substantive user content to disclose.</li>
+    </ul>
+  </section>
+
+  <section id="retention-transfers">
+    <h2>9. Retention &amp; international transfers</h2>
+    <p>
+      We retain information only as long as necessary for the operational purposes described above: local App data remains solely on your device under your control; Default Relay pairing records expire automatically within minutes to about an hour; and Cloudflare and PostHog retain operational logs and Website analytics according to their platform retention policies.
+    </p>
+    <p>
+      Cloudflare operates a global edge network, and PostHog's analytics endpoint used by the Website is hosted in the United States. By using the Default Relay or Website from outside the United States, you understand that limited network metadata (or Website analytics) may be transferred to and processed in the United States and other countries where our infrastructure providers operate, whose data protection laws may differ from those of your jurisdiction.
+    </p>
+  </section>
+
+  <section id="rights">
+    <h2>10. Your privacy rights (GDPR, UK GDPR, CCPA/CPRA &amp; others)</h2>
+    <p>
+      Depending on where you live (including the European Economic Area, the United Kingdom, Switzerland, California, and other US states), you may have rights under applicable privacy laws to request access to, correction of, deletion of, portability of, or restriction/objection to the processing of personal data we hold about you, as well as the right to withdraw consent or lodge a complaint with your local supervisory authority.
+    </p>
+    <p>
+      Where GDPR or UK GDPR applies, our legal bases for processing limited operational data are: (a) performance of the service you request (routing your phone's connection through the Default Relay when you choose to use it), (b) our legitimate interests in preventing abuse, securing the Default Relay, and understanding aggregate Website traffic, and (c) compliance with legal obligations.
+    </p>
+    <p>
+      <strong>How to exercise your rights:</strong>
+    </p>
+    <ul>
+      <li><strong>App data:</strong> Clear your activity log, revoke connected agents, or uninstall the App directly on your phone.</li>
+      <li><strong>Default Relay:</strong> Disconnect or switch to a self-hosted relay in Settings; ephemeral pairing metadata expires automatically.</li>
+      <li><strong>Website analytics:</strong> Block analytics via browser settings or content blockers, or contact us using the details below. Because we do not maintain accounts or identify Website visitors, please note that we may not be able to locate or verify anonymous analytics records without additional technical identifiers.</li>
+    </ul>
+  </section>
+
+  <section id="children">
+    <h2>11. Children's privacy</h2>
+    <p>
+      DroidHands is not directed to children under 13 (or under 16 in jurisdictions such as the EEA where a higher minimum age of digital consent applies, and the Android Play listing targets users 18 and older). We do not knowingly collect personal information from children. If you believe a child has provided personal information to us, please contact us and we will promptly delete any such information within our control.
+    </p>
+  </section>
+
+  <section id="security">
+    <h2>12. Security</h2>
+    <p>
+      We design DroidHands with strict on-device controls, hashed tokens, scoped grants, rate limits, and audited safeguards — documented in detail in our <a href={SECURITY_URL}>Security Model</a>. However, no software, mobile operating system, AI agent, or internet transmission is completely secure, and we cannot guarantee absolute security. Please report security vulnerabilities privately via <a href={SECURITY_ADVISORY_URL}>GitHub Security Advisories</a> rather than in a public issue.
+    </p>
+  </section>
+
+  <section id="changes-contact">
+    <h2>13. Changes &amp; contact</h2>
+    <p>
+      We may update this Privacy Policy from time to time to reflect changes in our software, infrastructure, or legal requirements. When we do, we will update the “Last updated” date at the top of this page. Your continued use of DroidHands after any change takes effect means you acknowledge the updated policy.
+    </p>
+    <p>
+      Questions, privacy requests, or concerns? Reach us at:
+    </p>
+    <ul>
+      <li>Email: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></li>
+      <li>GitHub Issues: <a href={ISSUES_URL}>{ISSUES_URL}</a></li>
+      <li>Security disclosures: <a href={SECURITY_ADVISORY_URL}>GitHub Private Vulnerability Reporting</a></li>
+    </ul>
+  </section>
+</LegalLayout>

@@ -5,6 +5,7 @@ import GitHubMark from "../components/GitHubMark.astro";
 import PhoneMockup from "../components/PhoneMockup.astro";
 import AppAccess from "../components/AppAccess.astro";
 import Demos from "../components/Demos.astro";
+import SiteFooter from "../components/SiteFooter.astro";
 import { GITHUB_URL, DOWNLOAD_URL, DOCS_URL, SECURITY_URL, TOOLS_URL } from "../site";
 
 const pillars = [
@@ -54,8 +55,8 @@ const steps = [
     body: "Download DroidHands for Android. It walks you through each permission, one tap per step.",
   },
   {
-    title: "Paste one URL into your agent",
-    body: "Copy your connection URL from the app and add it as a connector in Claude, ChatGPT or any MCP client.",
+    title: "Send one message to your agent",
+    body: "Copy the message from the app and send it to Claude, ChatGPT or any other agent. It tells the agent how to add DroidHands.",
   },
   {
     title: "Tap Allow on your phone",
@@ -427,20 +428,7 @@ const faqs = [
     </section>
   </main>
 
-  <footer class="border-t border-white/[0.06]">
-    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-10 text-sm text-slate-500 sm:flex-row">
-      <div class="flex items-center gap-2.5">
-        <img src="/favicon.png" alt="" class="size-6" />
-        <span>DroidHands · open source</span>
-      </div>
-      <p class="font-mono text-xs tracking-wide">no cookies, no trackers — not on this site either</p>
-      <div class="flex gap-6">
-        <a href={DOCS_URL} class="transition-colors hover:text-white">Docs</a>
-        <a href={SECURITY_URL} class="transition-colors hover:text-white">Security</a>
-        <a href={GITHUB_URL} class="transition-colors hover:text-white">GitHub</a>
-      </div>
-    </div>
-  </footer>
+  <SiteFooter />
 </Layout>
 
 <style is:global>

@@ -290,8 +290,7 @@ test('tunnel: a browser visit of the connection URL gets its setup page; MCP GET
   const page = await http(url, { headers: { accept: browser } });
   assert.equal(page.status, 200);
   assert.match(String(page.headers['content-type']), /^text\/html/);
-  assert.ok(page.body.includes(`connectorUrl=${encodeURIComponent(url)}`), 'Add to Claude link');
-  assert.ok(page.body.includes(`claude mcp add --transport http phone ${url}`), 'Claude Code command');
+  assert.ok(page.body.includes(`Add a new connector named DroidHands with the URL ${url} and`), 'message for the agent');
   const sse = await http(url, { headers: { accept: 'text/event-stream' } });
   assert.equal(sse.status, 405);
 });

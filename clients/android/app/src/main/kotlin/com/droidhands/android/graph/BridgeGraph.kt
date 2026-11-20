@@ -12,7 +12,6 @@ import com.droidhands.android.confirm.NotificationConfirmationProvider
 import com.droidhands.android.live.AgentActivityTracker
 import com.droidhands.android.notify.AppLabels
 import com.droidhands.android.notify.BridgeNotificationListener
-import com.droidhands.android.pairing.ExpectedAgent
 import com.droidhands.android.pairing.PairingCoordinator
 import com.droidhands.android.pairing.PairingNotifications
 import com.droidhands.android.plugins.BundledPlugins
@@ -158,9 +157,6 @@ class BridgeGraph private constructor(val app: Application) {
      * One-tap agent pairing (docs/PROTOCOL.md §5): answers the relay's pair requests, shows the
      * prompt, mints the agent's token. Its [PairingCoordinator.pendingPairings] feed the Home card.
      */
-    /** The agent being added on the Connect page; names the pairing request that follows. */
-    val expectedAgent = ExpectedAgent()
-
     val pairing: PairingCoordinator by lazy {
         PairingCoordinator(
             tokens = { tokenManager },
@@ -168,7 +164,6 @@ class BridgeGraph private constructor(val app: Application) {
             isLocked = { DeviceState.isLocked(app) },
             scope = appScope,
             log = { message, error -> Log.w(TAG, message, error) },
-            expectedAgent = expectedAgent::label,
             // Screen control stays off while a pairing could be approved (its screen may be showing).
             onPendingChanged = { ApprovalGuard.set(PairingCoordinator.GUARD_SOURCE, it) },
         )

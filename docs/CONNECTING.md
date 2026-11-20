@@ -21,13 +21,11 @@ on, with **Copy** and **Share**. Home shows them too.
 ## DroidHands relay (default)
 
 Nothing to do. On first run the app connects to the relay it comes with, so the wizard goes straight
-from permissions to adding an agent. Tap **Connect an AI agent**, tap **Add** next to an agent app on
-the phone (Claude, ChatGPT, Muse, Grok Bot, Grok) or pick your agent, and tap **Allow** on the phone
-([GETTING_STARTED.md](GETTING_STARTED.md#3-connect-your-ai-agent)).
+from permissions to adding an agent. Tap **Connect an AI agent**, copy the message and send it to your
+agent, and tap **Allow** on the phone ([GETTING_STARTED.md](GETTING_STARTED.md#3-connect-your-ai-agent)).
 
 It works with every agent, including cloud ones (claude.ai, ChatGPT, Grok) and agents you chat or text
-with: Muse and Grok Bot add it from the chat, and Instinct, which has no connector settings, signs in by
-itself ([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)). It works on Wi-Fi or mobile data, and
+with: an agent with no connector settings, such as Instinct, signs in by itself ([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)). It works on Wi-Fi or mobile data, and
 behind any router: the phone connects out to the relay. The relay is a tunnel and can't do anything
 by itself, but it does see the requests and answers passing through. If that matters to you, use
 Tailscale or your own relay.

@@ -53,23 +53,14 @@ object PairingPresentation {
         } else {
             request.redirectHost.takeIf { it.isNotBlank() && !it.equals(request.clientName, ignoreCase = true) }
         }
-        return "wants access to this phone" + (origin?.let { " · $it" } ?: "") + (callsItself(request)?.let { " · $it" } ?: "")
+        return "wants access to this phone" + (origin?.let { " · $it" } ?: "")
     }
-
-    /**
-     * "calls itself Cursor" when the request is shown under the agent the user is adding
-     * ([PairingRequest.declaredName]) and its own name says something the host doesn't. Null otherwise.
-     */
-    fun callsItself(request: PairingRequest): String? = request.declaredName
-        ?.takeIf { it.isNotBlank() && !it.equals(request.redirectHost, ignoreCase = true) }
-        ?.let { "calls itself $it" }
 
     fun notificationBigText(request: PairingRequest): String = buildString {
         if (request.viaAgent) {
             append("Signed in from its chat. If your agent showed you ").append(request.displayCode)
         } else {
             append("From ").append(request.redirectHost)
-            callsItself(request)?.let { append(" (it ").append(it).append(')') }
             append(". If your browser shows ").append(request.displayCode)
         }
         append(", tap to choose what ").append(request.clientName).append(" can do.")

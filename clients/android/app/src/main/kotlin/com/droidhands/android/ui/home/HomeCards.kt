@@ -153,7 +153,7 @@ internal fun ConnectAgentCard(hasActiveAgents: Boolean, onConnect: () -> Unit, m
         PrimaryButton("Connect an AI agent", onClick = onConnect, icon = Icons.Filled.Add, size = ButtonSize.LARGE, fullWidth = true)
         if (!hasActiveAgents) {
             Text(
-                "Paste one URL into Claude, ChatGPT, Grok or any MCP client, or send it to Muse or Instinct in chat. " +
+                "Copy one message to Claude, ChatGPT or any other AI agent. " +
                     "Then tap Allow on this phone.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

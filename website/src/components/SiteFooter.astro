@@ -1,0 +1,20 @@
+---
+import { DOCS_URL, GITHUB_URL, PRIVACY_URL, SECURITY_URL, TERMS_URL } from "../site";
+---
+
+<footer class="border-t border-white/[0.06]">
+  <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-10 text-sm text-slate-500 sm:flex-row">
+    <a href="/" class="flex items-center gap-2.5 transition-colors hover:text-slate-300">
+      <img src="/favicon.png" alt="" class="size-6" />
+      <span>DroidHands · open source</span>
+    </a>
+    <p class="font-mono text-xs tracking-wide">free &amp; open source · apache 2.0</p>
+    <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+      <a href={DOCS_URL} class="transition-colors hover:text-white">Docs</a>
+      <a href={SECURITY_URL} class="transition-colors hover:text-white">Security</a>
+      <a href={PRIVACY_URL} class="transition-colors hover:text-white">Privacy</a>
+      <a href={TERMS_URL} class="transition-colors hover:text-white">Terms</a>
+      <a href={GITHUB_URL} class="transition-colors hover:text-white">GitHub</a>
+    </div>
+  </div>
+</footer>

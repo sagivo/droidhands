@@ -76,7 +76,7 @@ test('connector: SSE GET and DELETE -> 405; malformed ids -> 404; offline -> 503
   assert.equal(offline.headers['retry-after'], '30');
 });
 
-test('connector opened in a browser: the setup page with one-click links; MCP clients are unaffected', async (t) => {
+test('connector opened in a browser: the setup page with the message for any agent; MCP clients are unaffected', async (t) => {
   const relay = await startRelay(t, { publicUrl: 'https://relay.example.com' });
   const deviceId = newIdentity().deviceId;
   const url = `https://relay.example.com/d/${deviceId}/mcp`;
@@ -85,10 +85,7 @@ test('connector opened in a browser: the setup page with one-click links; MCP cl
   assert.equal(res.status, 200);
   assert.match(String(res.headers['content-type']), /^text\/html/);
   assert.match(String(res.headers['content-security-policy']), /default-src 'none'/);
-  assert.ok(res.body.includes(`connectorUrl=${encodeURIComponent(url)}`), 'Add to Claude link');
-  assert.ok(res.body.includes(`claude mcp add --transport http phone ${url}`), 'Claude Code command');
-  assert.ok(res.body.includes(`codex mcp add phone --url ${url}`), 'Codex command');
-  assert.ok(res.body.includes('cursor://anysphere.cursor-deeplink/mcp/install?name=phone&amp;config='), 'Cursor link');
+  assert.ok(res.body.includes(`Add a new connector named DroidHands with the URL ${url} and follow the instructions at https://droidhands.com/connect.md.`), 'message');
 
   // MCP clients and other methods keep the usual answers; a GET with credentials gets the agent guide as text.
   const withToken = await httpRequest(`${relay.url}/d/${deviceId}/mcp`, { headers: { accept: browser, authorization: 'Bearer x' } });
