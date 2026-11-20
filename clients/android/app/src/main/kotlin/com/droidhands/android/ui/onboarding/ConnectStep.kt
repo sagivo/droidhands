@@ -80,7 +80,7 @@ internal fun ConnectStep(main: MainViewModel, onOpenMoreOptions: () -> Unit) {
         AccountRequiredNotice(main, relay)
         val host = ConfigureLinks.hostOf(defaultUrl) ?: defaultUrl
         OptionCard(
-            title = "Continue with DroidHands",
+            title = "Connect using DroidHands",
             text = if (rememberSignInNeeded(main)) {
                 "Sign in with Google for a free DroidHands account on $host. Works with every agent — switch to your own " +
                     "relay anytime."

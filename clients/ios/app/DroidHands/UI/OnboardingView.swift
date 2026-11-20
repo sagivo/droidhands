@@ -1,15 +1,56 @@
 import SwiftUI
 import UserNotifications
 
-/// First launch: a concise intro, then one-tap permissions. Both steps can be skipped.
+/// Pages of the first-run wizard, in order (mirrors Android's `OnboardingStep`).
+enum OnboardingStep: String, CaseIterable, Identifiable {
+    case welcome
+    case permissions
+    case connect
+    case agent
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .welcome: return "Welcome"
+        case .permissions: return "Permissions"
+        case .connect: return "Connect"
+        case .agent: return "Add an agent"
+        }
+    }
+
+    static func steps(defaultRelayInUse: Bool) -> [OnboardingStep] {
+        defaultRelayInUse ? [.welcome, .permissions, .agent] : OnboardingStep.allCases
+    }
+
+    static func next(after step: OnboardingStep, in steps: [OnboardingStep]) -> OnboardingStep? {
+        guard let i = steps.firstIndex(of: step) else { return .agent }
+        return i + 1 < steps.count ? steps[i + 1] : nil
+    }
+
+    static func previous(before step: OnboardingStep, in steps: [OnboardingStep]) -> OnboardingStep? {
+        guard let i = steps.firstIndex(of: step) else { return .agent }
+        return i > 0 ? steps[i - 1] : nil
+    }
+}
+
+/// First launch: Welcome → Permissions → (Connect) → Add your first agent. Every step can be skipped,
+/// and the wizard can be reopened from Settings › About.
 struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var phase
-    @State private var page = 0
+    @State private var step: OnboardingStep = .welcome
+    @State private var visitedConnect = false
+    @State private var showMoreConnect = false
+    @State private var showManualToken = false
     @State private var refresh = 0
     @State private var notifications: UNAuthorizationStatus = .notDetermined
     @State private var requestingAll = false
+
+    private var steps: [OnboardingStep] {
+        OnboardingStep.steps(defaultRelayInUse: model.defaultRelayInUse && !visitedConnect)
+    }
 
     private var notificationsGranted: Bool {
         notifications == .authorized || notifications == .provisional || notifications == .ephemeral
@@ -23,19 +64,38 @@ struct OnboardingView: View {
         Permission.allCases.allSatisfy { $0.status == .granted } && notificationsGranted
     }
 
+    private var connected: Bool { model.relayState.isConnected }
+    private var agentAdded: Bool { !model.activeAgents.isEmpty }
+
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            TabView(selection: $page) {
-                welcome.tag(0)
-                permissions.tag(1)
+        NavigationStack {
+            VStack(spacing: 0) {
+                topBar
+                Group {
+                    switch step {
+                    case .welcome: welcome
+                    case .permissions: permissions
+                    case .connect: connectStep
+                    case .agent: agentStep
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                bottomBar
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .animation(.default, value: page)
-            bottomBar
+            .background(Color(.systemGroupedBackground))
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showMoreConnect) {
+                MoreConnectOptionsView(onContinue: {
+                    showMoreConnect = false
+                    if step == .connect { go(.agent) }
+                })
+            }
+            .sheet(isPresented: $showManualToken) { ManualTokenView() }
         }
-        .background(Color(.systemGroupedBackground))
         .task { await readNotifications() }
+        .onChange(of: step) { _, newStep in
+            if newStep == .connect { visitedConnect = true }
+        }
         .onChange(of: phase) { _, newPhase in
             if newPhase == .active {
                 refresh += 1
@@ -44,17 +104,23 @@ struct OnboardingView: View {
         }
     }
 
+    private func go(_ target: OnboardingStep) {
+        withAnimation(.easeInOut(duration: 0.2)) { step = target }
+    }
+
     private var topBar: some View {
-        HStack(spacing: 12) {
+        let total = steps.count
+        let number = (steps.firstIndex(of: step) ?? (steps.firstIndex(of: .agent) ?? 0)) + 1
+        return HStack(spacing: 12) {
             HStack(spacing: 6) {
-                ForEach(0..<2, id: \.self) { index in
+                ForEach(0..<total, id: \.self) { index in
                     Capsule()
-                        .fill(index <= page ? Palette.brand : Palette.brand.opacity(0.16))
+                        .fill(index + 1 <= number ? Palette.brand : Palette.brand.opacity(0.16))
                         .frame(height: 4)
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Step \(page + 1) of 2")
+            .accessibilityLabel("Step \(number) of \(total) · \(step.title)")
             Button("Skip") { model.settings.onboarded = true }
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Palette.brand)
@@ -65,45 +131,128 @@ struct OnboardingView: View {
     }
 
     private var bottomBar: some View {
-        VStack(spacing: 8) {
-            if page == 0 {
+        let prev = OnboardingStep.previous(before: step, in: steps)
+        let next = OnboardingStep.next(after: step, in: steps)
+        return VStack(spacing: 8) {
+            switch step {
+            case .welcome:
                 Button {
-                    page = 1
+                    go(.permissions)
                 } label: {
-                    Text("Continue").frame(maxWidth: .infinity).padding(.vertical, 6)
+                    Text("Get started").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
-            } else if hasUnasked {
-                Button {
-                    Task { await requestAll() }
-                } label: {
-                    Text(requestingAll ? "Requesting…" : "Allow all").frame(maxWidth: .infinity).padding(.vertical, 6)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .disabled(requestingAll)
 
-                Button("Get started") { model.settings.onboarded = true }
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
+            case .permissions:
+                if hasUnasked {
+                    Button {
+                        Task { await requestAll() }
+                    } label: {
+                        Text(requestingAll ? "Requesting…" : "Allow all")
+                            .fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .disabled(requestingAll)
+
+                    HStack(spacing: 12) {
+                        if let prev {
+                            Button("Back") { go(prev) }
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Continue") { if let next { go(next) } }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
                     .padding(.top, 2)
-            } else {
-                Button {
-                    model.settings.onboarded = true
-                } label: {
-                    Text("Get started").frame(maxWidth: .infinity).padding(.vertical, 6)
+                } else {
+                    HStack(spacing: 10) {
+                        if let prev {
+                            Button("Back") { go(prev) }
+                                .buttonStyle(.bordered)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.large)
+                        }
+                        Button {
+                            if let next { go(next) }
+                        } label: {
+                            Text("Continue").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
+
+            case .connect:
+                HStack(spacing: 10) {
+                    if let prev {
+                        Button("Back") { go(prev) }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.large)
+                    }
+                    if connected {
+                        Button {
+                            if let next { go(next) }
+                        } label: {
+                            Text("Continue").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                    } else {
+                        Button {
+                            if let next { go(next) }
+                        } label: {
+                            Text("Skip for now").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                    }
+                }
+
+            case .agent:
+                HStack(spacing: 10) {
+                    if let prev {
+                        Button("Back") { go(prev) }
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.large)
+                    }
+                    if agentAdded {
+                        Button {
+                            model.settings.onboarded = true
+                        } label: {
+                            Text("Done").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                    } else {
+                        Button {
+                            model.settings.onboarded = true
+                        } label: {
+                            Text("Finish later").fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 6)
+                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                    }
+                }
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
+
+    // MARK: Step 1 — Welcome
 
     private var welcome: some View {
         ScrollView {
@@ -125,11 +274,14 @@ struct OnboardingView: View {
                 .padding(.horizontal, 8)
 
                 VStack(spacing: 0) {
-                    Point(symbol: "checkmark.shield.fill", color: .green, title: "You approve every agent", text: "Choose what it can access, or revoke it anytime.")
+                    Point(symbol: "checkmark.shield.fill", color: .green, title: "You approve every agent",
+                          text: "Choose what it can access, or revoke it in one tap.")
                     Divider().padding(.leading, 56)
-                    Point(symbol: "lock.fill", color: Palette.brand, title: "Private by design", text: "No account. Requests go straight to this iPhone.")
+                    Point(symbol: "bell.badge.fill", color: .orange, title: "Ask first when it matters",
+                          text: "Confirm messages, calls and sensitive actions before they run.")
                     Divider().padding(.leading, 56)
-                    Point(symbol: "iphone", color: .blue, title: "Keep DroidHands open", text: "iPhone lets DroidHands act while the app is on screen.")
+                    Point(symbol: "iphone", color: .blue, title: "Keep DroidHands open",
+                          text: "iPhone lets DroidHands act while the app is on screen.")
                 }
                 .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
@@ -138,21 +290,20 @@ struct OnboardingView: View {
         }
     }
 
+    // MARK: Step 2 — Permissions
+
     private var permissions: some View {
         List {
             Section {
-                VStack(spacing: 6) {
-                    Text(allGranted ? "Permissions ready" : "Allow permissions")
-                        .font(.title2.weight(.bold))
-                    Text("Choose what agents may use. Change anytime in Settings.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
-                .listRowBackground(Color.clear)
+                OnboardingHeader(
+                    symbol: allGranted ? "checkmark.circle.fill" : "lock.fill",
+                    color: allGranted ? Palette.ok : Palette.brand,
+                    title: allGranted ? "Permissions ready" : "Allow permissions",
+                    subtitle: "Choose what agents may use. Change anytime in Settings."
+                )
             }
+            .listRowBackground(Color.clear)
+
             Section {
                 ForEach(Permission.allCases) { p in
                     HStack {
@@ -191,6 +342,179 @@ struct OnboardingView: View {
         .listStyle(.insetGrouped)
     }
 
+    // MARK: Step 3 — Connect
+
+    private var connectStep: some View {
+        List {
+            if model.defaultRelayInUse {
+                let host = RelayURLs.host(of: model.settings.relayURL) ?? model.settings.relayURL
+                Section {
+                    OnboardingHeader(
+                        symbol: connected ? "checkmark.circle.fill" : "antenna.radiowaves.left.and.right",
+                        color: connected ? Palette.ok : Palette.brand,
+                        title: connected ? "You're online" : "Connect this iPhone",
+                        subtitle: connected
+                            ? "Agents reach this iPhone through \(host)."
+                            : "Connecting through \(host) so your AI agents can reach this iPhone."
+                    )
+                }
+                .listRowBackground(Color.clear)
+
+                if !connected {
+                    Section {
+                        TileRow(
+                            symbol: "antenna.radiowaves.left.and.right",
+                            color: model.relayState.color,
+                            title: model.relayState.title,
+                            subtitle: model.relayState.detail ?? host
+                        )
+                    }
+                    if model.relayState.isAccountRequired {
+                        Section { AccountRequiredNotice() }
+                            .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                    }
+                }
+
+                Section {
+                    Notice(kind: .info, title: "About the relay", message: AccountCopy.defaultRelayNote)
+                }
+                .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+
+                Section {
+                    Button("More ways to connect") { showMoreConnect = true }
+                        .frame(maxWidth: .infinity)
+                }
+                .listRowBackground(Color.clear)
+            } else if connected {
+                let host = RelayURLs.host(of: model.settings.relayURL) ?? "your relay"
+                Section {
+                    OnboardingHeader(
+                        symbol: "checkmark.circle.fill",
+                        color: Palette.ok,
+                        title: "Connect this iPhone",
+                        subtitle: "AI agents can reach this iPhone from anywhere, on Wi-Fi or mobile data."
+                    )
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
+                    TileRow(symbol: "checkmark.circle.fill", color: Palette.ok, title: "Connected to \(host)") {
+                        StatusPill(text: "Live", color: Palette.ok, dot: true)
+                    }
+                }
+            } else if model.canOfferDefaultRelay, let offerURL = model.defaultRelayURL {
+                let host = RelayURLs.host(of: offerURL) ?? offerURL
+                Section {
+                    OnboardingHeader(
+                        symbol: "antenna.radiowaves.left.and.right",
+                        color: Palette.brand,
+                        title: "Connect this iPhone",
+                        subtitle: "Let your AI agents reach this iPhone from anywhere, on Wi-Fi or mobile data."
+                    )
+                }
+                .listRowBackground(Color.clear)
+
+                if model.settings.relayEnabled || model.relayState != .stopped {
+                    Section {
+                        TileRow(
+                            symbol: "antenna.radiowaves.left.and.right",
+                            color: model.relayState.color,
+                            title: model.relayState.title,
+                            subtitle: model.relayState.detail ?? host
+                        )
+                    }
+                }
+                if model.relayState.isAccountRequired {
+                    Section { AccountRequiredNotice() }
+                        .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
+
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .top, spacing: 12) {
+                            IconTile(symbol: "checkmark.circle.fill", color: .indigo)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Connect using DroidHands").font(.headline)
+                                Text(model.signInNeeded
+                                     ? "Sign in with Google for a free DroidHands account on \(host). Works with every agent — switch to your own relay anytime."
+                                     : "Connect through \(host), the relay this app comes with. Works with every agent — switch to your own relay anytime.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        DefaultRelayButton()
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section {
+                    Button("Do it yourself") { showMoreConnect = true }
+                        .frame(maxWidth: .infinity)
+                }
+                .listRowBackground(Color.clear)
+            } else {
+                Section {
+                    OnboardingHeader(
+                        symbol: "antenna.radiowaves.left.and.right",
+                        color: Palette.brand,
+                        title: "Connect this iPhone",
+                        subtitle: "Your AI agents reach this iPhone through a small relay you host yourself, on Wi-Fi or mobile data."
+                    )
+                }
+                .listRowBackground(Color.clear)
+
+                if model.settings.relayEnabled || model.relayState != .stopped {
+                    Section {
+                        TileRow(
+                            symbol: "antenna.radiowaves.left.and.right",
+                            color: model.relayState.color,
+                            title: model.relayState.title,
+                            subtitle: model.relayState.detail ?? RelayURLs.host(of: model.settings.relayURL)
+                        )
+                    }
+                }
+
+                RelaySetupFormSection(initialURL: model.settings.relayURL, initialKey: model.settings.accessKey ?? "")
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // MARK: Step 4 — Add your first agent
+
+    private var agentStep: some View {
+        List {
+            Section {
+                OnboardingHeader(
+                    symbol: agentAdded ? "checkmark.circle.fill" : "paperplane.fill",
+                    color: agentAdded ? Palette.ok : Palette.brand,
+                    title: agentAdded ? "You're all set" : "Connect your first agent",
+                    subtitle: agentAdded
+                        ? "Ask your agent to do something on this iPhone."
+                        : "Copy or share the message below with any AI agent, then tap Allow here."
+                )
+            }
+            .listRowBackground(Color.clear)
+
+            ConnectAgentSections(
+                onUseToken: { showManualToken = true },
+                onOpenMoreOptions: { showMoreConnect = true },
+                onOpenConnectionSettings: { go(.connect) }
+            )
+
+            if !steps.contains(.connect) && !agentAdded {
+                Section {
+                    Button("More ways to connect") { showMoreConnect = true }
+                        .frame(maxWidth: .infinity)
+                }
+                .listRowBackground(Color.clear)
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // MARK: Helpers
+
     private func color(_ p: Permission) -> Color {
         switch p {
         case .contacts: return .gray
@@ -219,6 +543,31 @@ struct OnboardingView: View {
 
     private func readNotifications() async {
         notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+    }
+}
+
+private struct OnboardingHeader: View {
+    let symbol: String
+    let color: Color
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle().fill(color.opacity(0.14)).frame(width: 56, height: 56)
+                Image(systemName: symbol).font(.title2.weight(.semibold)).foregroundStyle(color)
+            }
+            Text(title)
+                .font(.title2.weight(.bold))
+                .multilineTextAlignment(.center)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 4)
     }
 }
 

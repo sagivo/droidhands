@@ -167,7 +167,7 @@ internal fun ConnectAgentContent(
             }
             offerDefault != null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 val host = ConfigureLinks.hostOf(offerDefault) ?: offerDefault
-                FormSection(title = "Continue with DroidHands", footer = DEFAULT_RELAY_NOTE) {
+                FormSection(title = "Connect using DroidHands", footer = DEFAULT_RELAY_NOTE) {
                     Text(
                         if (rememberSignInNeeded(main)) {
                             "Sign in with Google for a free DroidHands account on $host. Works with every agent on Wi-Fi or mobile data."

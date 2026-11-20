@@ -4,6 +4,7 @@ struct HomeView: View {
     @Environment(AppModel.self) private var model
     let openAgents: () -> Void
     @State private var showConnect = false
+    @State private var showMoreConnect = false
 
     var body: some View {
         @Bindable var model = model
@@ -11,6 +12,10 @@ struct HomeView: View {
             List {
                 if let error = model.startupError {
                     Section { Notice(kind: .danger, title: "Something needs attention", message: error) }
+                        .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+                }
+                if model.relayState.isAccountRequired {
+                    Section { AccountRequiredNotice() }
                         .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
                 }
                 Section {
@@ -23,6 +28,26 @@ struct HomeView: View {
                     }
                 } footer: {
                     Text("iPhone lets DroidHands work only while the app is open. Keep it on screen while your agent works; it stays connected for a few seconds after you leave it.")
+                }
+
+                if !model.settings.relayEnabled && model.canOfferDefaultRelay, let offerURL = model.defaultRelayURL {
+                    let host = RelayURLs.host(of: offerURL) ?? offerURL
+                    Section {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(model.signInNeeded
+                                 ? "Sign in with Google for a free DroidHands account on \(host) so your AI agents can reach this iPhone."
+                                 : "Connect through \(host) so your AI agents can reach this iPhone.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            DefaultRelayButton()
+                            Button("Do it yourself") { showMoreConnect = true }
+                                .font(.subheadline.weight(.medium))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .padding(.vertical, 4)
+                    } header: {
+                        Text("Connect using DroidHands")
+                    }
                 }
 
                 Section {
@@ -59,7 +84,10 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("DroidHands")
-            .sheet(isPresented: $showConnect) { ConnectView() }
+            .navigationDestination(isPresented: $showMoreConnect) {
+                MoreConnectOptionsView(onContinue: { showMoreConnect = false })
+            }
+            .sheet(isPresented: $showConnect) { ConnectView(onOpenAgent: { _ in openAgents() }) }
         }
     }
 }
@@ -93,6 +121,7 @@ struct StatusHero: View {
         case .connected: return "checkmark.circle.fill"
         case .connecting: return "arrow.triangle.2.circlepath"
         case .waiting: return "wifi.exclamationmark"
+        case .failed(_, let code) where code == RelayClient.accountRequiredCode: return "person.crop.circle.badge.exclamationmark"
         case .failed: return "xmark.octagon.fill"
         case .stopped: return "power"
         }
@@ -101,6 +130,7 @@ struct StatusHero: View {
     private var subtitle: String {
         if !accessEnabled { return "Agents are refused until you resume." }
         if running > 0 { return "An agent is working now." }
+        if case .stopped = state { return "Connect to DroidHands or your own relay to go online." }
         return state.detail ?? (state.isConnected ? "Agents you allowed can reach this iPhone." : "Waiting for the relay.")
     }
 }

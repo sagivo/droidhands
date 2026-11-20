@@ -5,6 +5,8 @@
 	<!-- Keys Xcode can't generate from INFOPLIST_KEY_* build settings (project.yml has the rest). -->
 	<key>DroidHandsDefaultRelayURL</key>
 	<string>$(DROIDHANDS_DEFAULT_RELAY_URL)</string>
+	<key>DroidHandsAPIURL</key>
+	<string>$(DROIDHANDS_API_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

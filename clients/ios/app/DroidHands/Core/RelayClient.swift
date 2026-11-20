@@ -9,8 +9,13 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
         case connected(connectURL: String?)
         /// Will retry; [reason] is for the status line.
         case waiting(reason: String, retryAt: Date)
-        /// Won't retry until settings change.
-        case failed(String)
+        /// Won't retry until settings change. [code] is the relay's error code (e.g. `account_required`), if any.
+        case failed(String, code: String? = nil)
+
+        var isAccountRequired: Bool {
+            if case .failed(_, let code) = self { return code == RelayClient.accountRequiredCode }
+            return false
+        }
     }
 
     struct Config: Equatable {
@@ -23,16 +28,21 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
     static let protocolVersion = 1
     static let heartbeatFrame = #"{"type":"hb"}"#
     static let maxFrameBytes = 16 * 1024 * 1024 - 1024
+    /// The relay needs a signed-in DroidHands account (or this one is signed out).
+    static let accountRequiredCode = "account_required"
+    static let signInMessage = "Sign in to your DroidHands account to use this relay."
     private static let queueKey = DispatchSpecificKey<Void>()
 
     private let identity: DeviceIdentity
     private let config: Config
     private let server: McpServer
     private let pairings: RelayPairings
+    private let accountToken: (() async -> RelayAccountToken)?
     private let queue = DispatchQueue(label: "droidhands.relay")
 
     private var session: URLSession?
     private var socket: URLSessionWebSocketTask?
+    private var tokenTask: Task<Void, Never>?
     private var generation = 0
     private var attempt = 0
     private var welcomed = false
@@ -50,10 +60,12 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
         didSet { if state != oldValue { let s = state; onState?(s) } }
     }
 
-    init(identity: DeviceIdentity, config: Config, server: McpServer, pairing: PairingHandler) {
+    init(identity: DeviceIdentity, config: Config, server: McpServer, pairing: PairingHandler,
+         accountToken: (() async -> RelayAccountToken)? = nil) {
         self.identity = identity
         self.config = config
         self.server = server
+        self.accountToken = accountToken
         pairings = RelayPairings(handler: pairing)
         super.init()
         queue.setSpecific(key: RelayClient.queueKey, value: ())
@@ -122,6 +134,7 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
     private func connect() {
         teardown(code: .goingAway)
         guard let url = RelayClient.deviceURL(base: config.relayURL, deviceId: identity.deviceId) else {
+            running = false
             state = .failed("The relay address isn't a valid http(s) URL. Fix it in Settings › Connection.")
             return
         }
@@ -134,6 +147,29 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
         lastErrorCode = nil
         state = .connecting
 
+        guard let accountToken else {
+            openSocket(url: url, gen: gen, accountToken: nil)
+            return
+        }
+        tokenTask = Task { [weak self] in
+            let result = await accountToken()
+            guard let self else { return }
+            self.queue.async {
+                guard gen == self.generation, self.running else { return }
+                self.tokenTask = nil
+                switch result {
+                case .token(let jwt):
+                    self.openSocket(url: url, gen: gen, accountToken: jwt)
+                case .signedOut:
+                    self.failFatal(RelayClient.signInMessage, code: RelayClient.accountRequiredCode)
+                case .unavailable(let reason):
+                    self.retryLater(reason)
+                }
+            }
+        }
+    }
+
+    private func openSocket(url: URL, gen: Int, accountToken: String?) {
         let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
@@ -141,25 +177,36 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
         delegateQueue.underlyingQueue = queue
         delegateQueue.maxConcurrentOperationCount = 1
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: delegateQueue)
-        let socket = session.webSocketTask(with: url)
+        var request = URLRequest(url: url)
+        request.setValue("DroidHands/\(config.appVersion) (ios)", forHTTPHeaderField: "User-Agent")
+        let socket = session.webSocketTask(with: request)
         socket.maximumMessageSize = 16 * 1024 * 1024
         self.session = session
         self.socket = socket
         socket.resume()
 
-        var hello = JSONObject([
-            ("type", "hello"), ("protocolVersion", .int(RelayClient.protocolVersion)),
-            ("deviceId", .string(identity.deviceId)), ("deviceSecret", .string(identity.secretEncoded)),
-            ("platform", "ios"), ("appVersion", .string(config.appVersion)), ("deviceName", .string(config.deviceName)),
-        ])
-        if let key = config.accessKey?.trimmingCharacters(in: .whitespaces), !key.isEmpty { hello["accessKey"] = .string(key) }
-        send(JSON.object(hello).encoded)
+        send(RelayClient.helloFrame(identity: identity, config: config, accountToken: accountToken))
         receive(gen)
 
         // The relay closes a socket that hasn't said hello within 10 s; give the welcome 15 s.
         schedule(after: 15, gen: gen) { [self] in
             if !welcomed { failed(gen, "The relay didn't answer.") }
         }
+    }
+
+    static func helloFrame(identity: DeviceIdentity, config: Config, accountToken: String? = nil) -> String {
+        var hello = JSONObject([
+            ("type", "hello"), ("protocolVersion", .int(RelayClient.protocolVersion)),
+            ("deviceId", .string(identity.deviceId)), ("deviceSecret", .string(identity.secretEncoded)),
+            ("platform", "ios"), ("appVersion", .string(config.appVersion)), ("deviceName", .string(config.deviceName)),
+        ])
+        if let key = config.accessKey?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty {
+            hello["accessKey"] = .string(key)
+        }
+        if let accountToken = accountToken?.trimmingCharacters(in: .whitespacesAndNewlines), !accountToken.isEmpty {
+            hello["accountToken"] = .string(accountToken)
+        }
+        return JSON.object(hello).encoded
     }
 
     private func receive(_ gen: Int) {
@@ -265,30 +312,47 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
         var code = closeCode ?? socket.map { $0.closeCode.rawValue }.flatMap { $0 == 0 ? nil : $0 }
         // The error frame before the close says the same, in case the close code itself was lost.
         switch lastErrorCode {
-        case "unauthorized", "access_key": code = code ?? 4001
+        case "unauthorized", "access_key", RelayClient.accountRequiredCode: code = code ?? 4001
         case "protocol_version": code = code ?? 4002
         default: break
         }
+        let errorCode = lastErrorCode
         let relayMessage = lastErrorMessage ?? closeReason
         teardown(code: .goingAway)
         pairings.cancelAll()
+        if errorCode == RelayClient.accountRequiredCode && code == 4001 {
+            failFatal(RelayClient.signInMessage, code: errorCode)
+            return
+        }
         switch code {
         case 4001:
-            state = .failed(relayMessage ?? "The relay refused this phone (wrong access key?). Check Settings › Connection.")
+            failFatal(relayMessage ?? "The relay refused this phone (wrong access key?). Check Settings › Connection.", code: errorCode)
             return
         case 4002:
-            state = .failed(relayMessage ?? "The relay needs a newer DroidHands. Update the app.")
+            failFatal(relayMessage ?? "The relay needs a newer DroidHands. Update the app.", code: errorCode)
             return
         default: break
         }
-        let delay = RelayClient.backoff(attempt: attempt)
-        attempt += 1
         let reason: String
         switch code {
         case 4009: reason = "Another connection of this phone replaced this one."
         case 4013: reason = relayMessage ?? "The relay is full."
         default: reason = welcomed ? "Connection lost." : (relayMessage ?? RelayClient.friendly(message))
         }
+        retryLater(reason)
+    }
+
+    private func failFatal(_ message: String, code: String? = nil) {
+        running = false
+        generation += 1
+        teardown(code: .goingAway)
+        pairings.cancelAll()
+        state = .failed(message, code: code)
+    }
+
+    private func retryLater(_ reason: String) {
+        let delay = RelayClient.backoff(attempt: attempt)
+        attempt += 1
         state = .waiting(reason: reason, retryAt: Date().addingTimeInterval(delay))
         generation += 1
         let next = generation
@@ -304,6 +368,8 @@ final class RelayClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func teardown(code: URLSessionWebSocketTask.CloseCode) {
+        tokenTask?.cancel()
+        tokenTask = nil
         timers.forEach { $0.cancel() }
         timers = []
         socket?.cancel(with: code, reason: nil)

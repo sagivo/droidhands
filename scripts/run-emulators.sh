@@ -99,7 +99,7 @@ xcrun simctl uninstall "$IOS_SIM" com.droidhands.ios >/dev/null 2>&1 || true
 rm -rf clients/ios/app/build/DerivedData
 IOS_ARGS=(run --simulator "$IOS_SIM")
 [ -z "$RELAY" ] || IOS_ARGS+=(--relay "$RELAY")
-./scripts/ios-app.sh "${IOS_ARGS[@]}"
+DROIDHANDS_DEFAULT_RELAY_URL="$DEFAULT_RELAY" DROIDHANDS_API_URL="$API_URL" ./scripts/ios-app.sh "${IOS_ARGS[@]}"
 
 echo ""
 echo "✓ Fresh builds from $(git rev-parse --short HEAD) are running on both iOS ($IOS_SIM) and Android ($ANDROID_SERIAL)."

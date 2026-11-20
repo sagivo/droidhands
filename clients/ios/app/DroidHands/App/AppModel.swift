@@ -16,7 +16,7 @@ struct ApprovalPrompt: Identifiable {
     var id: UUID { request.id }
 }
 
-/// The app's state and wiring: identity, tokens, audit log, MCP server, relay connection, and the prompts the
+/// The app's state and wiring: identity, accounts, tokens, audit log, MCP server, relay connection, and the prompts the
 /// user answers. Lives on the main actor; the server and the relay run off it and report back here.
 @MainActor
 @Observable
@@ -25,8 +25,10 @@ final class AppModel {
     private(set) var identity: DeviceIdentity
     private(set) var tokens: TokenManager
     let audit: AuditLog
+    let accounts: AccountManager
     private(set) var server: McpServer!
     private var relay: RelayClient?
+    @ObservationIgnored private let accountBrowser = AccountBrowser()
 
     private(set) var relayState: RelayClient.State = .stopped
     private(set) var agents: [TokenRecord] = []
@@ -37,8 +39,16 @@ final class AppModel {
     private(set) var isInForeground = true
     /// Set when the app went to the background and iOS was about to suspend it, so the relay was told it left.
     private(set) var isAsleep = false
-    /// A `droidhands://configure` link waiting for "Connect to relay …?".
-    var pendingRelayChange: (relay: String, key: String?)?
+    /// The signed-in DroidHands account, or nil.
+    private(set) var accountSession: AccountSession?
+    /// Progress / error of the last Google sign-in attempt.
+    private(set) var signInState: SignInState = .idle
+    /// Signing out or deleting the account is in progress.
+    private(set) var accountBusy = false
+    /// Transient user-facing message (toast banner).
+    var bannerMessage: String?
+    /// A `droidhands://configure` or pasted setup link waiting for "Connect to relay …?".
+    var pendingConfigure: ConfigureRequest?
     var startupError: String?
     /// Screens that can show the prompt sheet, outermost first. Only the topmost may present: SwiftUI can't
     /// show a sheet from a view that already has one on top (the Connect screen is open when agents connect).
@@ -55,10 +65,51 @@ final class AppModel {
     @ObservationIgnored private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     @ObservationIgnored private var accessEnabledFlag = Locked(true)
     @ObservationIgnored private var expiryTimer: Timer?
+    @ObservationIgnored private var approveWaitTask: Task<Void, Never>?
+    @ObservationIgnored private var bannerTask: Task<Void, Never>?
+    @ObservationIgnored private var lastAccountSessionTag: String?
 
+    /// The build's normalized default relay URL, or nil when this build has none.
+    var defaultRelayURL: String? { Settings.defaultRelay }
+
+    /// The relay that requires a DroidHands account: the build's default relay when an API server is configured.
+    var accountRelayURL: String? { accounts.enabled ? defaultRelayURL : nil }
+
+    /// The default relay needs a DroidHands account (Settings shows the Account section).
+    var relayNeedsAccount: Bool { accountRelayURL != nil }
+
+    /// Using the default relay needs a Google sign-in first.
+    var signInNeeded: Bool { relayNeedsAccount && accountSession == nil }
+
+    /// The build's default relay is currently turned on and in use.
+    var defaultRelayInUse: Bool {
+        DefaultRelay.inUse(relayEnabled: settings.relayEnabled, relayFromDefault: settings.relayFromDefault)
+    }
+
+    /// Offer "Connect using DroidHands": default relay exists and no custom relay is configured.
+    var canOfferDefaultRelay: Bool {
+        DefaultRelay.canOffer(relayEnabled: settings.relayEnabled, relayURL: settings.relayURL,
+                              relayFromDefault: settings.relayFromDefault, rawDefaultURL: defaultRelayURL)
+    }
+
+    /// True if the currently configured relay is the account-backed hosted relay.
+    var relayUsesAccount: Bool {
+        guard let accountRelay = accountRelayURL else { return false }
+        return RelayURLs.normalize(settings.relayURL).caseInsensitiveCompare(accountRelay) == .orderedSame
+    }
+
+    /// Live one-tap connector URL from the current relay connection (nil while offline).
+    var liveConnectURL: String? {
+        guard settings.relayEnabled else { return nil }
+        if case .connected(let url) = relayState, let url, !url.isEmpty { return url }
+        return nil
+    }
+
+    /// Connector URL to show on Home (live URL, or cached URL for the active relay while reconnecting).
     var connectURL: String? {
-        if case .connected(let url) = relayState, let url { return url }
-        return settings.lastConnectURL(for: identity.deviceId)
+        guard settings.relayEnabled, !settings.relayURL.isEmpty else { return nil }
+        if let live = liveConnectURL { return live }
+        return settings.lastConnectURL(for: identity.deviceId, relay: settings.relayURL)
     }
 
     var accessEnabled: Bool {
@@ -90,9 +141,30 @@ final class AppModel {
             error = "DroidHands couldn't read its list of agents (\(e.localizedDescription))."
             tokens = try! TokenManager(store: JSONFile(name: "agents-recovered.json"), deviceId: identity.deviceId)
         }
+        let api: AccountApi? = Settings.apiURL.map { AccountClient(baseURL: $0) }
+        accounts = AccountManager(api: api, storage: KeychainAccountStore())
+        accountSession = accounts.session
+        signInState = accounts.signInState
+        lastAccountSessionTag = accounts.sessionTag()
         startupError = error
         accessEnabledFlag.value = settings.accessEnabled
         wire()
+        accounts.onSessionChange = { [weak self] session in
+            Task { @MainActor in
+                guard let self else { return }
+                self.accountSession = session
+                let nextTag = self.accounts.sessionTag()
+                if nextTag != self.lastAccountSessionTag {
+                    self.lastAccountSessionTag = nextTag
+                    if self.settings.relayEnabled && self.relayUsesAccount {
+                        self.restart()
+                    }
+                }
+            }
+        }
+        accounts.onSignInStateChange = { [weak self] state in
+            Task { @MainActor in self?.signInState = state }
+        }
         expiryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.expirePrompts() }
         }
@@ -110,19 +182,150 @@ final class AppModel {
         server.onActivity = { [weak self] n in Task { @MainActor in self?.runningCalls = n } }
     }
 
-    // MARK: Connection
+    // MARK: Connection & Accounts
+
+    /// First run of a build with a default relay: turns it on unless already decided, a setup link is waiting,
+    /// or the default relay needs a sign-in first (in which case onboarding / Connect offers "Continue with Google").
+    func applyDefaultRelayIfNeeded() {
+        guard !settings.defaultRelayDecided, pendingConfigure == nil, !signInNeeded else { return }
+        guard let defaultURL = defaultRelayURL, !DefaultRelay.somethingConfigured(relayURL: settings.relayURL) else {
+            settings.defaultRelayDecided = true
+            return
+        }
+        settings.relayEnabled = true
+        settings.relayURL = defaultURL
+        settings.accessKey = nil
+        settings.relayFromDefault = true
+        settings.defaultRelayDecided = true
+        restart()
+    }
+
+    /// "Go online" / "Use the default relay": turns on the build's default relay.
+    func useDefaultRelay() {
+        guard let defaultURL = defaultRelayURL else { return }
+        settings.relayEnabled = true
+        settings.relayURL = defaultURL
+        settings.accessKey = nil
+        settings.relayFromDefault = true
+        settings.defaultRelayDecided = true
+        restart()
+    }
+
+    /// Saves a custom relay URL (and optional access key), turns the relay on and connects.
+    func connectRelay(url: String, key: String?) {
+        let normalized = RelayURLs.normalize(url)
+        let cleanKey = key?.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.relayEnabled = true
+        settings.relayURL = normalized
+        settings.accessKey = (cleanKey?.isEmpty == false) ? cleanKey : nil
+        settings.relayFromDefault = false
+        settings.defaultRelayDecided = true
+        restart()
+    }
+
+    /// Accepts a confirmed `droidhands://configure` or pasted setup link.
+    func applyConfigure(_ request: ConfigureRequest) {
+        let sameRelay = RelayURLs.normalize(settings.relayURL).caseInsensitiveCompare(request.relayURL) == .orderedSame
+        let key = request.accessKey ?? (sameRelay ? settings.accessKey : nil)
+        settings.relayEnabled = true
+        settings.relayURL = request.relayURL
+        settings.accessKey = key
+        settings.relayFromDefault = false
+        settings.defaultRelayDecided = true
+        restart()
+        showBanner("Connecting to \(request.host)…")
+    }
+
+    /// Turns off the relay connection without deleting its address.
+    func disableRelay() {
+        settings.relayEnabled = false
+        stop()
+    }
+
+    /// Starts Google sign-in via `ASWebAuthenticationSession`. [useRelay]: go online with the default relay after.
+    func startSignIn(useRelay: Bool = true) {
+        accounts.clearSignInError()
+        guard let url = accounts.startSignIn(useRelay: useRelay) else { return }
+        accountBrowser.open(url: url) { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .callback(let callbackURL):
+                Task { await self.completeSignIn(url: callbackURL) }
+            case .cancelled:
+                break
+            case .failed(let message):
+                self.showBanner(message)
+            }
+        }
+    }
+
+    /// Finishes a sign-in from its `droidhands://signed-in` callback URL.
+    func completeSignIn(url: URL) async {
+        let outcome = await accounts.completeSignIn(url)
+        guard case .signedIn(let useRelay) = outcome else { return }
+        if useRelay, defaultRelayURL != nil {
+            useDefaultRelay()
+        } else if settings.relayEnabled && relayUsesAccount {
+            restart()
+        }
+    }
+
+    /// Re-reads the account profile; drops the session if signed out elsewhere.
+    func refreshAccount() {
+        Task { await accounts.refresh() }
+    }
+
+    /// Signs out of the DroidHands account and turns the hosted relay off.
+    func signOut() async {
+        guard !accountBusy else { return }
+        accountBusy = true
+        defer { accountBusy = false }
+        await accounts.signOut()
+        afterSignOut()
+        showBanner("Signed out")
+    }
+
+    /// Deletes the DroidHands account for good, then signs out.
+    func deleteAccount() async {
+        guard !accountBusy else { return }
+        accountBusy = true
+        defer { accountBusy = false }
+        if let failure = await accounts.deleteAccount() {
+            showBanner("Couldn't delete your account: \(failure)")
+        } else {
+            afterSignOut()
+            showBanner("Account deleted")
+        }
+    }
+
+    private func afterSignOut() {
+        if settings.relayEnabled && relayUsesAccount {
+            settings.relayEnabled = false
+            stop()
+        }
+    }
 
     func start() {
+        guard settings.relayEnabled, !settings.relayURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            stop()
+            return
+        }
         guard relay == nil else { return }
-        let config = RelayClient.Config(relayURL: settings.relayURL, accessKey: settings.accessKey,
+        let relayURL = settings.relayURL
+        let config = RelayClient.Config(relayURL: relayURL, accessKey: settings.accessKey,
                                         deviceName: UIDevice.current.name, appVersion: AppInfo.version)
-        let client = RelayClient(identity: identity, config: config, server: server, pairing: self)
+        let tokenProvider: (() async -> RelayAccountToken)? = relayUsesAccount
+            ? { [accounts] in await accounts.relayToken() }
+            : nil
+        let client = RelayClient(identity: identity, config: config, server: server, pairing: self, accountToken: tokenProvider)
         let deviceId = identity.deviceId
         client.onState = { [weak self] state in
             Task { @MainActor in
                 guard let self else { return }
                 self.relayState = state
-                if case .connected(let url?) = state { self.settings.setLastConnectURL(url, for: deviceId) }
+                if case .connected(let url?) = state {
+                    self.settings.setLastConnectURL(url, for: deviceId, relay: relayURL)
+                }
             }
         }
         relay = client
@@ -141,10 +344,19 @@ final class AppModel {
         start()
     }
 
-    func applyRelay(url: String, key: String?) {
-        settings.relayURL = url
-        settings.accessKey = key
-        restart()
+    func showBanner(_ message: String) {
+        bannerTask?.cancel()
+        bannerMessage = message
+        bannerTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.bannerMessage = nil
+        }
+    }
+
+    func dismissBanner() {
+        bannerTask?.cancel()
+        bannerMessage = nil
     }
 
     // MARK: Lifecycle
@@ -179,7 +391,11 @@ final class AppModel {
         backgroundTimer?.invalidate()
         backgroundTimer = nil
         endBackgroundTask()
-        if relay == nil || isAsleep { start() } else { relay?.reconnectIfWaiting() }
+        applyDefaultRelayIfNeeded()
+        refreshAccount()
+        if settings.relayEnabled {
+            if relay == nil || isAsleep { start() } else { relay?.reconnectIfWaiting() }
+        }
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
 
@@ -202,13 +418,62 @@ final class AppModel {
         }
     }
 
+    // MARK: Deep links
+
     func handle(url: URL) {
         if CallbackRouter.shared.handle(url) { return }
-        guard url.scheme == "droidhands", url.host == "configure",
-              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
-              let relay = items.first(where: { $0.name == "relay" })?.value, Settings.isValidRelay(relay),
-              Settings.isEncryptedOrLocal(relay) else { return }
-        pendingRelayChange = (relay, items.first { $0.name == "key" }?.value)
+        if SignInLinks.isSignInLink(url) {
+            Task { await completeSignIn(url: url) }
+            return
+        }
+        if let code = ApproveLinks.code(of: url) {
+            openApproveLink(code: code)
+            return
+        }
+        if ConfigureLinks.isConfigureLink(url) {
+            offerConfigure(ConfigureLinks.parse(url.absoluteString))
+            return
+        }
+    }
+
+    /// Parses a pasted setup link (`…/setup#key=…`, `droidhands://configure…`) and asks to confirm.
+    func offerSetupLink(_ raw: String) {
+        offerConfigure(SetupLinkParser.parse(raw))
+    }
+
+    private func offerConfigure(_ result: ConfigureLinkResult) {
+        switch result {
+        case .valid(let request):
+            pendingConfigure = request
+        case .invalid(let message):
+            showBanner(message)
+        }
+    }
+
+    /// A `droidhands://approve[?code=K7Q2]` link from the page an agent sent: brings the matching prompt
+    /// to the front, waiting briefly since a cold start may still be reconnecting when the link arrives.
+    func openApproveLink(code: String) {
+        approveWaitTask?.cancel()
+        approveWaitTask = Task { [weak self] in
+            let deadline = Date().addingTimeInterval(8)
+            while let self, !Task.isCancelled {
+                if let match = ApproveLinks.pick(from: self.pairings.map(\.request), code: code, now: Date()) {
+                    if let idx = self.pairings.firstIndex(where: { $0.id == match.id }), idx != 0 {
+                        let prompt = self.pairings.remove(at: idx)
+                        self.pairings.insert(prompt, at: 0)
+                    }
+                    return
+                }
+                if Date() >= deadline { break }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.showBanner(
+                code.isEmpty
+                    ? "No agent is waiting for approval. Ask your agent to try again."
+                    : "No request with code \(code) is waiting. Ask your agent to try again."
+            )
+        }
     }
 
     // MARK: Agents
@@ -412,27 +677,56 @@ enum AppInfo {
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0" }
 }
 
-/// The app's settings, in UserDefaults (nothing secret: the device secret is in the Keychain).
+/// The app's settings, in UserDefaults (nothing secret: the device secret and account session are in the Keychain).
 @Observable
 final class Settings {
     @ObservationIgnored private let defaults = UserDefaults.standard
 
-    static var defaultRelay: String {
-        let v = (Bundle.main.object(forInfoDictionaryKey: "DroidHandsDefaultRelayURL") as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
-        return isValidRelay(v) ? v : "https://connect.droidhands.com"
+    static var defaultRelay: String? {
+        #if DEBUG
+        if let env = ProcessInfo.processInfo.environment["DH_DEFAULT_RELAY_URL"] {
+            return DefaultRelay.url(env)
+        }
+        #endif
+        let v = Bundle.main.object(forInfoDictionaryKey: "DroidHandsDefaultRelayURL") as? String
+        return DefaultRelay.url(v)
+    }
+
+    static var apiURL: String? {
+        #if DEBUG
+        if let env = ProcessInfo.processInfo.environment["DH_API_URL"] {
+            return parseAPIURL(env)
+        }
+        #endif
+        let v = Bundle.main.object(forInfoDictionaryKey: "DroidHandsAPIURL") as? String
+        return parseAPIURL(v)
+    }
+
+    private static func parseAPIURL(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let c = URLComponents(string: trimmed),
+              let scheme = c.scheme?.lowercased(), ["https", "http"].contains(scheme),
+              let host = c.host, !host.isEmpty else { return nil }
+        return RelayURLs.normalize(trimmed)
     }
 
     static func isValidRelay(_ s: String) -> Bool {
-        guard let c = URLComponents(string: s.trimmingCharacters(in: .whitespaces)), let scheme = c.scheme?.lowercased(),
-              ["https", "http", "wss", "ws"].contains(scheme), let host = c.host, !host.isEmpty else { return false }
-        return true
+        switch RelayURLs.check(s) {
+        case .ok, .insecure: return true
+        case .empty, .invalid: return false
+        }
     }
 
-    /// Links from outside may only name https relays (or one on this device): the hello frame carries the
-    /// device secret, which must not cross a network in the clear.
+    /// Links from outside may only name https relays (or local/private ones).
     static func isEncryptedOrLocal(_ s: String) -> Bool {
-        guard let c = URLComponents(string: s.trimmingCharacters(in: .whitespaces)), let scheme = c.scheme?.lowercased() else { return false }
-        return scheme == "https" || scheme == "wss" || ["localhost", "127.0.0.1", "::1"].contains(c.host ?? "")
+        if case .ok = RelayURLs.check(s) { return true }
+        return false
+    }
+
+    var relayEnabled: Bool {
+        didSet { defaults.set(relayEnabled, forKey: "relayEnabled") }
     }
 
     var relayURL: String {
@@ -441,6 +735,14 @@ final class Settings {
 
     var accessKey: String? {
         didSet { defaults.set(accessKey, forKey: "accessKey") }
+    }
+
+    var relayFromDefault: Bool {
+        didSet { defaults.set(relayFromDefault, forKey: "relayFromDefault") }
+    }
+
+    var defaultRelayDecided: Bool {
+        didSet { defaults.set(defaultRelayDecided, forKey: "defaultRelayDecided") }
     }
 
     var accessEnabled: Bool {
@@ -452,13 +754,40 @@ final class Settings {
     }
 
     init() {
-        relayURL = defaults.string(forKey: "relayURL") ?? Settings.defaultRelay
+        if defaults.object(forKey: "relayEnabled") == nil {
+            if let existing = defaults.string(forKey: "relayURL")?.trimmingCharacters(in: .whitespacesAndNewlines), !existing.isEmpty {
+                let normalized = RelayURLs.normalize(existing)
+                relayEnabled = true
+                relayURL = normalized
+                relayFromDefault = (Settings.defaultRelay != nil && normalized.caseInsensitiveCompare(Settings.defaultRelay!) == .orderedSame)
+                defaultRelayDecided = true
+            } else {
+                relayEnabled = false
+                relayURL = ""
+                relayFromDefault = false
+                defaultRelayDecided = false
+            }
+        } else {
+            relayEnabled = defaults.bool(forKey: "relayEnabled")
+            relayURL = defaults.string(forKey: "relayURL") ?? ""
+            relayFromDefault = defaults.bool(forKey: "relayFromDefault")
+            defaultRelayDecided = defaults.bool(forKey: "defaultRelayDecided")
+        }
         accessKey = defaults.string(forKey: "accessKey")
         accessEnabled = defaults.object(forKey: "accessEnabled") as? Bool ?? true
         onboarded = defaults.bool(forKey: "onboarded")
     }
 
-    /// The last connection URL the relay announced for this identity, so it shows while offline.
-    func lastConnectURL(for deviceId: String) -> String? { defaults.string(forKey: "connectURL.\(deviceId)") }
-    func setLastConnectURL(_ url: String, for deviceId: String) { defaults.set(url, forKey: "connectURL.\(deviceId)") }
+    /// The last connection URL the relay announced for this identity and relay, so it shows while reconnecting.
+    func lastConnectURL(for deviceId: String, relay: String) -> String? {
+        defaults.string(forKey: connectURLKey(deviceId: deviceId, relay: relay))
+    }
+
+    func setLastConnectURL(_ url: String, for deviceId: String, relay: String) {
+        defaults.set(url, forKey: connectURLKey(deviceId: deviceId, relay: relay))
+    }
+
+    private func connectURLKey(deviceId: String, relay: String) -> String {
+        "connectURL.\(deviceId).\(RelayURLs.normalize(relay))"
+    }
 }

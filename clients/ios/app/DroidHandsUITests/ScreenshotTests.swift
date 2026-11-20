@@ -55,7 +55,27 @@ final class ScreenshotTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.staticTexts["Let your AI agents use your iPhone"].waitForExistence(timeout: 10))
         shot(app, "0-welcome")
-        app.buttons["Continue"].tap()
+
+        app.buttons["Get started"].tap()
+        XCTAssertTrue(app.staticTexts["Allow permissions"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.4)
         shot(app, "0-permissions")
+
+        app.buttons["Continue"].tap()
+        XCTAssertTrue(app.staticTexts["Connect this iPhone"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.4)
+        shot(app, "0-connect")
+
+        app.buttons["Do it yourself"].tap()
+        XCTAssertTrue(app.navigationBars["More ways to connect"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.4)
+        shot(app, "0-more-connect")
+
+        app.navigationBars["More ways to connect"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["Connect this iPhone"].waitForExistence(timeout: 5))
+        app.buttons["Skip for now"].tap()
+        XCTAssertTrue(app.staticTexts["Connect your first agent"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.4)
+        shot(app, "0-agent")
     }
 }

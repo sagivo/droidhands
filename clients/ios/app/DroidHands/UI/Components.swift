@@ -71,7 +71,7 @@ struct StatusPill: View {
     }
 }
 
-/// A two-letter circle for agents.
+/// A two-letter circle for agents or accounts.
 struct Monogram: View {
     let name: String
     var size: CGFloat = 36
@@ -86,10 +86,11 @@ struct Monogram: View {
     }
 }
 
-/// Monospaced text in a filled box with a Copy button.
+/// Monospaced text in a filled box with Copy and Share buttons.
 struct CopyableCode: View {
     let text: String
     var label = "Copy"
+    var onCopied: (() -> Void)? = nil
     @State private var copied = false
 
     var body: some View {
@@ -104,6 +105,7 @@ struct CopyableCode: View {
                 Button {
                     UIPasteboard.general.string = text
                     copied = true
+                    onCopied?()
                     Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
                 } label: {
                     Label(copied ? "Copied" : label, systemImage: copied ? "checkmark" : "doc.on.doc")
@@ -112,32 +114,43 @@ struct CopyableCode: View {
                 .buttonBorderShape(.capsule)
                 ShareLink(item: text) { Label("Share", systemImage: "square.and.arrow.up") }
                     .buttonStyle(.borderless)
+                    .simultaneousGesture(TapGesture().onEnded { onCopied?() })
             }
         }
     }
 }
 
-/// A callout: info, warning or danger.
-struct Notice: View {
+/// A callout: info, warning or danger, with an optional action below its text.
+struct Notice<Action: View>: View {
     enum Kind { case info, warning, danger }
     let kind: Kind
     let title: String
     var message: String?
+    @ViewBuilder var action: () -> Action
 
     private var color: Color { kind == .info ? Palette.brand : kind == .warning ? Palette.warning : Palette.error }
     private var symbol: String { kind == .info ? "info.circle.fill" : "exclamationmark.triangle.fill" }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(color)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.subheadline.weight(.semibold))
-                if let message { Text(message).font(.subheadline).foregroundStyle(.secondary) }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: symbol).foregroundStyle(color)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.subheadline.weight(.semibold))
+                    if let message { Text(message).font(.subheadline).foregroundStyle(.secondary) }
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            action()
         }
         .padding(12)
         .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+extension Notice where Action == EmptyView {
+    init(kind: Kind, title: String, message: String? = nil) {
+        self.init(kind: kind, title: title, message: message) { EmptyView() }
     }
 }
 
@@ -147,6 +160,7 @@ extension RelayClient.State {
         case .connected: return "Connected"
         case .connecting: return "Connecting…"
         case .waiting: return "Offline"
+        case .failed(_, let code) where code == RelayClient.accountRequiredCode: return "Sign in required"
         case .failed: return "Not connected"
         case .stopped: return "Off"
         }
@@ -155,7 +169,7 @@ extension RelayClient.State {
     var detail: String? {
         switch self {
         case .waiting(let reason, _): return "\(reason) Retrying…"
-        case .failed(let reason): return reason
+        case .failed(let reason, _): return reason
         default: return nil
         }
     }
@@ -165,6 +179,7 @@ extension RelayClient.State {
         case .connected: return Palette.ok
         case .connecting: return Palette.brand
         case .waiting: return Palette.warning
+        case .failed(_, let code) where code == RelayClient.accountRequiredCode: return Palette.warning
         case .failed: return Palette.error
         case .stopped: return Palette.off
         }

@@ -50,8 +50,11 @@ xcrun simctl bootstatus "$SIM" -b >/dev/null
 
 xcodegen generate --spec "$APP_DIR/project.yml" --project "$APP_DIR" --quiet
 build() {
+  local extra=()
+  [ -z "${DROIDHANDS_DEFAULT_RELAY_URL:-}" ] || extra+=("DROIDHANDS_DEFAULT_RELAY_URL=$DROIDHANDS_DEFAULT_RELAY_URL")
+  [ -z "${DROIDHANDS_API_URL:-}" ] || extra+=("DROIDHANDS_API_URL=$DROIDHANDS_API_URL")
   xcodebuild -project "$APP_DIR/DroidHands.xcodeproj" -scheme DroidHands -destination "platform=iOS Simulator,id=$SIM" \
-    -derivedDataPath "$DERIVED" -quiet "$@"
+    -derivedDataPath "$DERIVED" -quiet ${extra[@]+"${extra[@]}"} "$@"
 }
 
 case "$ACTION" in

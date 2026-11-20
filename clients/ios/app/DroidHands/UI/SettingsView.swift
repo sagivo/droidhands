@@ -6,6 +6,12 @@ struct SettingsView: View {
     @State private var confirmRevokeAll = false
     @State private var confirmReset = false
 
+    private var connectionSubtitle: String {
+        guard model.settings.relayEnabled, !model.settings.relayURL.isEmpty else { return "Off" }
+        let host = RelayURLs.host(of: model.settings.relayURL) ?? model.settings.relayURL
+        return "\(model.relayState.title) · \(host)"
+    }
+
     var body: some View {
         @Bindable var model = model
         NavigationStack {
@@ -13,12 +19,15 @@ struct SettingsView: View {
                 Section {
                     NavigationLink { ConnectionSettingsView() } label: {
                         TileRow(symbol: "antenna.radiowaves.left.and.right", color: Palette.brand, title: "Connection",
-                                subtitle: "\(model.relayState.title) · \(URL(string: model.settings.relayURL)?.host ?? model.settings.relayURL)")
+                                subtitle: connectionSubtitle)
                     }
                     NavigationLink { PermissionsView() } label: {
                         TileRow(symbol: "checkmark.shield.fill", color: Palette.ok, title: "Permissions",
                                 subtitle: "What DroidHands may use on this iPhone")
                     }
+                }
+                if model.relayNeedsAccount {
+                    AccountSettingsSection()
                 }
                 Section {
                     Toggle(isOn: $model.accessEnabled) {
@@ -35,6 +44,11 @@ struct SettingsView: View {
                 }
                 Section {
                     LabeledContent("Version", value: "\(AppInfo.version) (\(AppInfo.build))")
+                    Button {
+                        model.settings.onboarded = false
+                    } label: {
+                        Label("Run setup again", systemImage: "arrow.counterclockwise")
+                    }
                     Link(destination: URL(string: "https://droidhands.com")!) { Label("Website", systemImage: "globe") }
                     Link(destination: URL(string: "https://github.com/sagivo/droidhands/blob/main/docs/PRIVACY.md")!) { Label("Privacy", systemImage: "hand.raised") }
                     Link(destination: URL(string: "https://github.com/sagivo/droidhands")!) { Label("Source code (Apache 2.0)", systemImage: "chevron.left.forwardslash.chevron.right") }
@@ -66,9 +80,22 @@ struct ConnectionSettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var relay = ""
     @State private var key = ""
+    @State private var showKey = false
+
+    private var check: RelayURLCheck { RelayURLs.check(relay) }
+    private var isSetupLink: Bool { SetupLinkParser.isSetupLink(relay) }
+    private var usable: Bool {
+        if isSetupLink { return true }
+        switch check {
+        case .ok, .insecure: return true
+        case .empty, .invalid: return false
+        }
+    }
 
     private var changed: Bool {
-        relay.trimmingCharacters(in: .whitespaces) != model.settings.relayURL || key.trimmingCharacters(in: .whitespaces) != (model.settings.accessKey ?? "")
+        let trimmedRelay = RelayURLs.normalize(relay)
+        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedRelay != model.settings.relayURL || trimmedKey != (model.settings.accessKey ?? "") || !model.settings.relayEnabled
     }
 
     var body: some View {
@@ -76,27 +103,85 @@ struct ConnectionSettingsView: View {
             Section {
                 LabeledContent("Status") { StatusPill(text: model.relayState.title, color: model.relayState.color, dot: true) }
                 if let detail = model.relayState.detail { Text(detail).font(.subheadline).foregroundStyle(.secondary) }
-                Button("Reconnect") { model.restart() }
+                if model.settings.relayEnabled {
+                    Button("Reconnect") { model.restart() }
+                    Button("Disconnect relay", role: .destructive) { model.disableRelay() }
+                }
+            }
+            if model.relayState.isAccountRequired {
+                Section { AccountRequiredNotice() }
+                    .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+            }
+            if model.canOfferDefaultRelay, let defaultURL = model.defaultRelayURL {
+                let host = RelayURLs.host(of: defaultURL) ?? defaultURL
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(model.signInNeeded
+                             ? "Sign in with Google for a free DroidHands account on \(host)."
+                             : "Use \(host), the relay this app comes with.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        DefaultRelayButton(label: "Use the default relay")
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("Connect using DroidHands")
+                } footer: {
+                    Text(AccountCopy.defaultRelayNote)
+                }
             }
             Section {
-                TextField("https://relay.example.com", text: $relay)
+                TextField(text: $relay, prompt: Text(verbatim: "https://relay.example.com")) {
+                    Text("Relay URL")
+                }
                     .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                SecureField("Access key (only if your relay needs one)", text: $key)
+                if isSetupLink {
+                    Text("A setup link: tap Save and reconnect to review it.")
+                        .font(.footnote)
+                        .foregroundStyle(Palette.brand)
+                } else if case .invalid(let message) = check {
+                    Text(message).font(.footnote).foregroundStyle(Palette.error)
+                } else if case .insecure(_, let message) = check {
+                    Notice(kind: .danger, title: "Plain HTTP", message: message)
+                }
+                HStack {
+                    if showKey {
+                        TextField("Access key (only if your relay needs one)", text: $key)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    } else {
+                        SecureField("Access key (only if your relay needs one)", text: $key)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    }
+                    if !key.isEmpty {
+                        Button(showKey ? "Hide" : "Show") { showKey.toggle() }
+                            .font(.subheadline.weight(.medium))
+                    }
+                }
             } header: {
                 Text("Relay")
             } footer: {
-                Text("DroidHands connects out to this relay, which passes your agents' requests to this iPhone. It never stores them. The default is \(URL(string: Settings.defaultRelay)?.host ?? Settings.defaultRelay); you can run your own (see the source code).")
+                let defaultHost = model.defaultRelayURL.flatMap(RelayURLs.host(of:)) ?? "connect.droidhands.com"
+                Text("DroidHands connects out to this relay, which passes your agents' requests to this iPhone. It never stores them. The default is \(defaultHost); you can run your own (see the source code).")
             }
             Section {
                 Button("Save and reconnect") {
-                    model.applyRelay(url: relay.trimmingCharacters(in: .whitespaces), key: key.trimmingCharacters(in: .whitespaces).isEmpty ? nil : key.trimmingCharacters(in: .whitespaces))
+                    if isSetupLink {
+                        model.offerSetupLink(relay)
+                    } else {
+                        let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                        model.connectRelay(url: relay, key: trimmedKey.isEmpty ? nil : trimmedKey)
+                    }
                 }
-                .disabled(!changed || !Settings.isValidRelay(relay))
-                if model.settings.relayURL != Settings.defaultRelay {
-                    Button("Use the default relay") {
-                        relay = Settings.defaultRelay
-                        key = ""
-                        model.applyRelay(url: Settings.defaultRelay, key: nil)
+                .disabled(!changed || !usable)
+                if let defaultURL = model.defaultRelayURL, !model.defaultRelayInUse && !model.canOfferDefaultRelay {
+                    Button(model.signInNeeded ? "Switch to DroidHands relay (Sign in with Google)" : "Use the default relay") {
+                        if model.signInNeeded {
+                            model.startSignIn(useRelay: true)
+                        } else {
+                            relay = defaultURL
+                            key = ""
+                            model.useDefaultRelay()
+                        }
                     }
                 }
             }
@@ -109,6 +194,10 @@ struct ConnectionSettingsView: View {
         .navigationTitle("Connection")
         .onAppear {
             relay = model.settings.relayURL
+            key = model.settings.accessKey ?? ""
+        }
+        .onChange(of: model.settings.relayURL) { _, updated in
+            relay = updated
             key = model.settings.accessKey ?? ""
         }
     }

@@ -59,7 +59,7 @@ Settings (environment or $STORE_ENV):
   App Store Connect ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (the AuthKey_<id>.p8 file; default
                     ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8), APPLE_TEAM_ID (10 characters),
                     IOS_APP_BUNDLE_ID (default com.droidhands.ios).
-  Build             DROIDHANDS_DEFAULT_RELAY_URL.
+  Build             DROIDHANDS_DEFAULT_RELAY_URL, DROIDHANDS_API_URL.
 EOF
 }
 
@@ -107,7 +107,7 @@ load_settings() {
       '' | '#'*) continue ;;
       PB_KEYSTORE_PATH | PB_KEYSTORE_PASSWORD | PB_KEY_ALIAS | PB_KEY_PASSWORD | PLAY_SERVICE_ACCOUNT_JSON | \
         PLAY_PACKAGE_NAME | ASC_KEY_ID | ASC_ISSUER_ID | ASC_KEY_PATH | APPLE_TEAM_ID | IOS_APP_BUNDLE_ID | \
-        DROIDHANDS_DEFAULT_RELAY_URL) ;;
+        DROIDHANDS_DEFAULT_RELAY_URL | DROIDHANDS_API_URL) ;;
       *) continue ;;
     esac
     value="${value%"${value##*[![:space:]]}"}"
@@ -282,6 +282,7 @@ android_build() {
       "-Pdroidhands.versionName=$VERSION" "-Pdroidhands.versionCode=$VERSION_CODE" \
       -Pdroidhands.requireReleaseSigning=true "-Pdroidhands.githubRepo=" \
       ${DROIDHANDS_DEFAULT_RELAY_URL:+"-Pdroidhands.defaultRelayUrl=$DROIDHANDS_DEFAULT_RELAY_URL"} \
+      ${DROIDHANDS_API_URL:+"-Pdroidhands.apiUrl=$DROIDHANDS_API_URL"} \
       --console=plain
   ) || die "The Android build failed (see Gradle's output above)."
 
@@ -442,6 +443,7 @@ ios_lane() {
     -allowProvisioningUpdates "${auth[@]}" \
     CODE_SIGN_STYLE=Automatic "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" "PB_APP_BUNDLE_ID=$bundle_id" \
     ${DROIDHANDS_DEFAULT_RELAY_URL:+"DROIDHANDS_DEFAULT_RELAY_URL=$DROIDHANDS_DEFAULT_RELAY_URL"} \
+    ${DROIDHANDS_API_URL:+"DROIDHANDS_API_URL=$DROIDHANDS_API_URL"} \
     "MARKETING_VERSION=$VERSION" "CURRENT_PROJECT_VERSION=$build" ||
     die "The archive failed. Check that team $APPLE_TEAM_ID owns the API key and that the app id $bundle_id is registered to it."
   ok "Archived version $VERSION ($build)"

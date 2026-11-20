@@ -43,9 +43,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 enum DebugHooks {
     @MainActor static func run(_ model: AppModel) {
         let env = ProcessInfo.processInfo.environment
-        if let relay = env["DH_RELAY_URL"], model.settings.relayURL != relay {
+        if let relay = env["DH_RELAY_URL"], model.settings.relayURL != RelayURLs.normalize(relay) || !model.settings.relayEnabled {
             model.settings.onboarded = true
-            model.applyRelay(url: relay, key: env["DH_ACCESS_KEY"])
+            model.connectRelay(url: relay, key: env["DH_ACCESS_KEY"])
         }
         if env["DH_SKIP_ONBOARDING"] == "1" { model.settings.onboarded = true }
         if env["DH_RESET_ONBOARDING"] == "1" { model.settings.onboarded = false }
