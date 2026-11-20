@@ -74,6 +74,7 @@ import com.droidhands.android.ui.theme.statusColors
 internal fun PermissionsStep(setup: SetupViewModel) {
     val state by setup.state.collectAsStateWithLifecycle()
     var skipped by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var custom by rememberSaveable { mutableStateOf(false) }
     StepHeader(
         Icons.Filled.Lock,
         "Allow what your agents need",
@@ -92,7 +93,12 @@ internal fun PermissionsStep(setup: SetupViewModel) {
                 val accessibility = state.items.firstOrNull { it.id == SetupLogic.ACCESSIBILITY }
                 RestrictedSettingsCard(actions.openAppInfo, restricted.unlocks, accessibility?.let { { actions.onAction(it) } })
             }
-            RuntimeSection(state.items, restricted, actions)
+            if (!custom) {
+                GrantAllSection(state.items, restricted, actions, onCustom = { custom = true })
+            } else {
+                TertiaryButton("Back to Grant all", onClick = { custom = false })
+                RuntimeSection(state.items, restricted, actions)
+            }
             val next = OnboardingFlow.nextSpecialAccess(state.items, skipped.toSet())
             if (next != null) {
                 // Restricted settings not shown above yet: accessibility needs them first.
@@ -102,8 +108,28 @@ internal fun PermissionsStep(setup: SetupViewModel) {
             if (OnboardingFlow.essentialsDone(state.items)) {
                 Notice("The essentials are done. Continue whenever you're ready.")
             }
-            SpecialAccessSection(state.items, actions)
+            if (custom) SpecialAccessSection(state.items, actions)
         }
+    }
+}
+
+/** The default view: one big "Grant all" and a small "Custom" that opens the per-permission list. */
+@Composable
+private fun GrantAllSection(items: List<SetupItem>, restricted: RestrictedSettings.Advice, actions: SetupActions, onCustom: () -> Unit) {
+    val toRequest = OnboardingFlow.runtimeToRequest(items)
+    val blocked = OnboardingFlow.blockedRuntime(items)
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (toRequest.isNotEmpty()) {
+            PrimaryButton("Grant all", onClick = { actions.requestPermissions(toRequest) }, fullWidth = true)
+        }
+        if (toRequest.isEmpty() && blocked.isNotEmpty()) {
+            Notice(
+                RestrictedSettings.blockedNotice(blocked, restricted),
+                kind = NoticeKind.WARNING,
+                action = { SecondaryButton("Open App info", onClick = actions.openAppInfo) },
+            )
+        }
+        TertiaryButton("Custom", onClick = onCustom)
     }
 }
 
