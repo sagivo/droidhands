@@ -1,7 +1,7 @@
 # DroidHands for Android: Google Play listing
 
 What to enter in the [Play Console](https://play.google.com/console) for `com.droidhands.android`
-(account: sagiv4@gmail.com). Build and upload with `scripts/store-release.sh android --draft`
+(account: hello@droidhands.com). Build and upload with `scripts/store-release.sh android --draft`
 ([docs/RELEASING.md](../../docs/RELEASING.md)).
 
 ## Create app
@@ -64,7 +64,7 @@ What to enter in the [Play Console](https://play.google.com/console) for `com.dr
 |---|---|
 | App category | Productivity |
 | Tags | Productivity, Automation (pick what Play offers) |
-| Email | sagiv4@gmail.com |
+| Email | hello@droidhands.com |
 | Website | https://droidhands.com |
 | Privacy policy URL | https://github.com/sagivo/droidhands/blob/main/docs/PRIVACY.md |
 

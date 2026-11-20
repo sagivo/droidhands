@@ -10,4 +10,4 @@ export const SECURITY_ADVISORY_URL = `${GITHUB_URL}/security/advisories/new`;
 
 export const PRIVACY_URL = "/privacy";
 export const TERMS_URL = "/terms";
-export const CONTACT_EMAIL = "sagiv4@gmail.com";
+export const CONTACT_EMAIL = "hello@droidhands.com";
