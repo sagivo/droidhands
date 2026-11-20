@@ -44,10 +44,30 @@ if [ "$SKIP_GIT" -eq 0 ]; then
   git pull --ff-only origin main
 fi
 
-# 2. Ensure Android emulator is running with a GUI window
+# 2. Ensure Android emulator is running with a GUI window and laptop keyboard enabled
 echo "==> Preparing Android emulator ($AVD)..."
+AVD_DIR="${ANDROID_AVD_HOME:-$HOME/.android/avd}/${AVD}.avd"
+AVD_CONFIG="$AVD_DIR/config.ini"
+if [ -f "$AVD_CONFIG" ]; then
+  if grep -q '^hw\.keyboard=' "$AVD_CONFIG"; then
+    sed -i '' 's/^hw\.keyboard=.*/hw.keyboard=yes/' "$AVD_CONFIG"
+  else
+    printf '\nhw.keyboard=yes\n' >> "$AVD_CONFIG"
+  fi
+fi
+
+NEED_ANDROID_RESTART=0
 if pgrep -f "qemu-system.*$AVD.*-no-window" >/dev/null 2>&1; then
   echo "    Stopping headless Android emulator..."
+  NEED_ANDROID_RESTART=1
+elif [ -f "$AVD_DIR/hardware-qemu.ini" ] \
+  && grep -Eq '^hw\.keyboard[[:space:]]*=[[:space:]]*(false|no)$' "$AVD_DIR/hardware-qemu.ini" \
+  && adb devices | awk 'NR>1 && $2=="device" && $1 ~ /^emulator-/' | grep -q .; then
+  echo "    Restarting Android emulator to enable laptop keyboard..."
+  NEED_ANDROID_RESTART=1
+fi
+
+if [ "$NEED_ANDROID_RESTART" -eq 1 ]; then
   adb emu kill >/dev/null 2>&1 || true
   for _ in $(seq 1 20); do
     pgrep -f "qemu-system.*$AVD" >/dev/null 2>&1 || break
@@ -57,7 +77,7 @@ fi
 
 if ! adb devices | awk 'NR>1 && $2=="device" && $1 ~ /^emulator-/' | grep -q .; then
   echo "    Starting Android emulator ($AVD)..."
-  nohup emulator -avd "$AVD" -no-snapshot-save >/tmp/droidhands-android-emu.log 2>&1 </dev/null &
+  nohup emulator -avd "$AVD" -no-snapshot-load -no-snapshot-save >/tmp/droidhands-android-emu.log 2>&1 </dev/null &
   adb wait-for-device
 fi
 
@@ -70,8 +90,9 @@ done
 ANDROID_SERIAL="$(adb devices | awk 'NR>1 && $2=="device" && $1 ~ /^emulator-/ {print $1; exit}')"
 [ -n "$ANDROID_SERIAL" ] || { echo "✗ Android emulator did not come online." >&2; exit 1; }
 
-# 3. Ensure iOS simulator is booted and visible
+# 3. Ensure iOS simulator is booted and visible with laptop keyboard enabled
 echo "==> Preparing iOS simulator..."
+defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true 2>/dev/null || true
 IOS_SIM="$(xcrun simctl list devices booted | sed -n 's/.*iPhone.*(\([0-9A-F-]\{36\}\)) (Booted).*/\1/p' | head -n 1)"
 if [ -z "$IOS_SIM" ]; then
   IOS_SIM="$(xcrun simctl list devices available | sed -n 's/.*iPhone.*(\([0-9A-F-]\{36\}\)).*/\1/p' | head -n 1)"
@@ -79,7 +100,7 @@ if [ -z "$IOS_SIM" ]; then
   xcrun simctl boot "$IOS_SIM" 2>/dev/null || true
   xcrun simctl bootstatus "$IOS_SIM" -b >/dev/null
 fi
-open /Applications/Xcode.app/Contents/Applications/DeviceHub.app 2>/dev/null \
+open /Applications/Xcode.app/Contents/Applications/DeviceHub.app --args -alwaysSimulateHardwareKeyboard YES 2>/dev/null \
   || open -a Simulator 2>/dev/null || true
 
 # 4. Fresh clean build + install + launch on Android
