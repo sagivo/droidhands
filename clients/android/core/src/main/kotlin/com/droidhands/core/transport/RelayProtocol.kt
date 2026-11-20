@@ -93,6 +93,7 @@ internal object RelayProtocol {
         put("appVersion", hello.appVersion)
         put("deviceName", hello.deviceName)
         hello.accessKey?.takeIf { it.isNotBlank() }?.let { put("accessKey", it) }
+        hello.accountToken?.takeIf { it.isNotBlank() }?.let { put("accountToken", it) }
     }
 
     fun pong(t: JsonElement?): JsonObject = buildJsonObject {

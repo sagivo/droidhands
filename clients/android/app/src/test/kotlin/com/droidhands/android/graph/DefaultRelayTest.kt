@@ -62,6 +62,15 @@ class DefaultRelayTest {
     }
 
     @Test
+    fun aDefaultRelayThatNeedsAnAccountWaitsForTheSignIn() {
+        // Signed out: nothing changes and nothing is decided; the Connect step offers "Continue with Google".
+        assertSame(fresh, DefaultRelay.applyOnFirstRun(fresh, default, signInNeeded = true))
+        assertTrue(DefaultRelay.canOffer(fresh, default))
+        // Signed in: the usual first run.
+        assertTrue(DefaultRelay.inUse(DefaultRelay.applyOnFirstRun(fresh, default, signInNeeded = false)))
+    }
+
+    @Test
     fun neverReplacesWhatTheUserSetUp() {
         val own = fresh.copy(relayEnabled = true, relayUrl = "https://mine.example.com", relayAccessKey = "k")
         assertEquals(own.copy(defaultRelayDecided = true), DefaultRelay.applyOnFirstRun(own, default))

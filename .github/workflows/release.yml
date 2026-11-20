@@ -8,7 +8,8 @@
 # Needs the signing secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS
 # and ANDROID_KEY_PASSWORD (scripts/make-release-key.sh prints the commands). Without them the
 # workflow fails: a release is never signed with a debug key. The optional repository variable
-# DROIDHANDS_RELAY_URL becomes the app's default relay. See docs/RELEASING.md.
+# DROIDHANDS_RELAY_URL becomes the app's default relay, and DROIDHANDS_API_URL the accounts
+# server that relay needs a sign-in with (docs/PROTOCOL.md §7). See docs/RELEASING.md.
 name: Release
 
 on:
@@ -107,6 +108,7 @@ jobs:
           PB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           PB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           DROIDHANDS_DEFAULT_RELAY_URL: ${{ vars.DROIDHANDS_RELAY_URL }}
+          DROIDHANDS_API_URL: ${{ vars.DROIDHANDS_API_URL }}
           # GITHUB_REPOSITORY (set by Actions) becomes BuildConfig.GITHUB_REPO for the in-app update check.
         run: >-
           ./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleRelease

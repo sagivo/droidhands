@@ -1,5 +1,5 @@
 # Tests and builds on every push and pull request: the Android core and app (unit tests, plugin
-# checks, debug APK) and the relay (tests, build). No secrets are used.
+# checks, debug APK), the relay (tests, build) and the API Worker (tests). No secrets are used.
 name: CI
 
 on:
@@ -78,5 +78,27 @@ jobs:
         run: npm run conformance:node
       - name: Conformance suite against the Worker (wrangler dev --local)
         run: npm run conformance:worker
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+      - name: Type-check and tests (workerd)
+        run: npm test
         env:
           WRANGLER_SEND_METRICS: 'false'

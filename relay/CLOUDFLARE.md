@@ -103,6 +103,7 @@ them); secrets are set with `npx wrangler secret put <NAME>`. The variables are 
 |---|---|---|
 | `PUBLIC_URL` | *(empty)* | The relay's public URL. Empty: the address each request was sent to. Set it when the relay has a custom domain, so all URLs it hands out use it. |
 | `APK_URL` | *(empty)* | Where the setup page's **Install DroidHands** button points (for example the APK of the latest GitHub release); `/download/droidhands.apk` redirects there. Without it the page has no install button. |
+| `ACCOUNTS_URL` | *(empty)* | Require a DroidHands account ([api/](../api/README.md)): phones must show a relay token from this API server. With the `ACCOUNTS` service binding (wrangler.toml) its keys are fetched from the API Worker directly. |
 | `ALLOWED_ORIGINS` | *(empty)* | As on the Node relay: browser origins allowed to call the MCP endpoints. |
 | `SETUP_BANNER` | `false` | Log the setup link and a QR code once per Worker instance. Off by default: deployed logs are stored by Cloudflare, and the link contains `RELAY_ACCESS_KEY` if set. |
 | `HEARTBEAT_TIMEOUT_MS` | `75000` | A phone that sends heartbeats but was silent this long counts as offline (AI apps get `503 Device offline` at once). |

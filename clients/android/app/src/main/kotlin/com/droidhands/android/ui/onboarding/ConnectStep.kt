@@ -35,13 +35,15 @@ import com.droidhands.android.graph.LocalServerStatus
 import com.droidhands.android.service.TailscaleState
 import com.droidhands.android.settings.BridgeSettings
 import com.droidhands.android.ui.MainViewModel
+import com.droidhands.android.ui.account.AccountRequiredNotice
+import com.droidhands.android.ui.account.DefaultRelayButton
+import com.droidhands.android.ui.account.rememberSignInNeeded
 import com.droidhands.android.ui.components.Accents
 import com.droidhands.android.ui.components.AppCard
 import com.droidhands.android.ui.components.IconTile
 import com.droidhands.android.ui.components.ListRow
 import com.droidhands.android.ui.components.ListSection
 import com.droidhands.android.ui.components.Notice
-import com.droidhands.android.ui.components.PrimaryButton
 import com.droidhands.android.ui.components.SecondaryButton
 import com.droidhands.android.ui.components.SectionHeader
 import com.droidhands.android.ui.components.StatusPill
@@ -92,16 +94,22 @@ internal fun ConnectStep(main: MainViewModel) {
         return
     }
     ConnectionStatusLine(settings, relay, local, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+    AccountRequiredNotice(main, relay)
     val defaultUrl = main.defaultRelayUrl
     if (defaultUrl != null && DefaultRelay.canOffer(settings, defaultUrl)) {
+        val host = ConfigureLinks.hostOf(defaultUrl) ?: defaultUrl
         OptionCard(
             title = "Go online now",
-            text = "No relay of your own? Use ${ConfigureLinks.hostOf(defaultUrl) ?: defaultUrl}, the relay this app comes " +
-                "with. You can switch to your own relay at any time.",
+            text = if (rememberSignInNeeded(main)) {
+                "No relay of your own? Use $host, the relay this app comes with: sign in with Google to create your free " +
+                    "DroidHands account. You can switch to your own relay at any time."
+            } else {
+                "No relay of your own? Use $host, the relay this app comes with. You can switch to your own relay at any time."
+            },
             icon = Icons.Filled.CheckCircle,
             color = Accents.Indigo,
         ) {
-            PrimaryButton("Go online", onClick = main::useDefaultRelay, fullWidth = true)
+            DefaultRelayButton(main)
         }
     }
     OwnRelayOption(main, settings)
@@ -135,6 +143,7 @@ private fun DefaultRelayOnline(
             "DroidHands connects this phone to a relay, so AI agents can reach it on Wi-Fi or mobile data.",
         )
         ConnectionStatusLine(settings, relay, local, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        AccountRequiredNotice(main, relay)
     }
     Notice(title = "About the relay", text = DEFAULT_RELAY_NOTE)
     if (more) {

@@ -12,6 +12,8 @@ import type { DeviceObject } from './deviceObject.js';
 export interface Env {
   /** One Durable Object per device, named by its deviceId. */
   readonly DEVICES: DurableObjectNamespace<DeviceObject>;
+  /** Optional service binding to the API Worker (api/), used to fetch its public keys. */
+  readonly ACCOUNTS?: Fetcher;
   /** Variables and secrets; only string values are read. */
   readonly [name: string]: unknown;
 }

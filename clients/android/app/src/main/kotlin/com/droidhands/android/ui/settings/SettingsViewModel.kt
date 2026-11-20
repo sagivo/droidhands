@@ -10,7 +10,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.droidhands.android.BuildConfig
+import com.droidhands.android.account.SignInState
 import com.droidhands.android.graph.BridgeGraph
+import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.graph.LocalServerStatus
 import com.droidhands.android.plugins.ImportResult
 import com.droidhands.android.plugins.LocalPluginEntry
@@ -20,8 +23,10 @@ import com.droidhands.android.service.TailscaleState
 import com.droidhands.android.settings.BridgeSettings
 import com.droidhands.android.settings.LocalBind
 import com.droidhands.android.ui.GraphAdapters
+import com.droidhands.android.ui.account.AccountBrowser
 import com.droidhands.android.ui.apps.AppInfo
 import com.droidhands.android.ui.apps.LaunchableApps
+import com.droidhands.core.account.AccountSession
 import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +59,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /** Live transport status, for the connection URLs of the routes that are on. */
     val relayStatus: StateFlow<RelayStatus> = graph.relayStatus
     val localServerStatus: StateFlow<LocalServerStatus> = graph.localServerStatus
+
+    /** The default relay needs a DroidHands account: Settings shows the Account section. */
+    val relayNeedsAccount: Boolean = graph.accountRelayUrl != null
+
+    /** The signed-in DroidHands account, or null. */
+    val account: StateFlow<AccountSession?> = graph.accounts.session
+
+    val signInState: StateFlow<SignInState> = graph.accounts.signIn
+
+    /** Signing out or deleting the account is in progress. */
+    var accountBusy by mutableStateOf(false)
+        private set
 
     /** Tailscale on this phone (Settings › How agents reach this phone › Tailscale). */
     val tailscale: StateFlow<TailscaleState> = graph.tailscale.state
@@ -148,6 +165,45 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 _messages.send("Couldn't save settings: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 saving = false
+            }
+        }
+    }
+
+    /** Settings › Account › Sign in. Goes online with the default relay after, unless the user has a relay of their own. */
+    @MainThread
+    fun signIn(context: android.content.Context) {
+        graph.accounts.clearSignInError()
+        val url = graph.accounts.startSignIn(useRelay = DefaultRelay.canOffer(settings.value, BuildConfig.DEFAULT_RELAY_URL)) ?: return
+        if (!AccountBrowser.open(context, url)) _messages.trySend("Couldn't open a browser to sign in.")
+    }
+
+    /** Signs out of the DroidHands account; the DroidHands relay turns off. */
+    @MainThread
+    fun signOut() = accountAction {
+        graph.signOut()
+        _messages.send("Signed out")
+    }
+
+    /** Deletes the DroidHands account for good, then signs out. */
+    @MainThread
+    fun deleteAccount() = accountAction {
+        val failure = graph.deleteAccount()
+        _messages.send(if (failure == null) "Account deleted" else "Couldn't delete your account: $failure")
+    }
+
+    private fun accountAction(block: suspend () -> Unit) {
+        if (accountBusy) return
+        accountBusy = true
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { block() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Account action failed: ${e.javaClass.name}")
+                _messages.send("Something went wrong: ${e.message ?: e.javaClass.simpleName}")
+            } finally {
+                accountBusy = false
             }
         }
     }

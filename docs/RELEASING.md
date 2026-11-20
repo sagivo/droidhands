@@ -91,6 +91,7 @@ optional; blank counts as unset.
 | `droidhands.versionName` | | `0.1.0` | `versionName`, e.g. `1.2.3` |
 | `droidhands.versionCode` | | `1` | `versionCode` |
 | `droidhands.defaultRelayUrl` | `DROIDHANDS_DEFAULT_RELAY_URL` | empty | `BuildConfig.DEFAULT_RELAY_URL`: the relay a fresh install connects to on first run |
+| `droidhands.apiUrl` | `DROIDHANDS_API_URL` | empty | `BuildConfig.API_URL`: the DroidHands API server (sign in with Google). Set, the default relay needs a signed-in account and a fresh install waits for the sign-in; empty, no account is needed. |
 | `droidhands.githubRepo` | `GITHUB_REPOSITORY` | empty | `BuildConfig.GITHUB_REPO` (`owner/name`): the repository whose releases the daily update check reads. Empty turns the check off. |
 | `PB_KEYSTORE_PATH`, `PB_KEYSTORE_PASSWORD`, `PB_KEY_ALIAS`, `PB_KEY_PASSWORD` | same names | unset | Release signing key. All four or none. |
 | `droidhands.requireReleaseSigning` | | `false` | `true`: fail instead of signing a release with the debug key |

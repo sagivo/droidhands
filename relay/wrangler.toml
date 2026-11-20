@@ -18,6 +18,13 @@ workers_dev = true
 name = "DEVICES"
 class_name = "DeviceObject"
 
+# With ACCOUNTS_URL, the relay fetches the API server's public keys through this binding (no
+# trip over the internet). Uncomment once the droidhands-api Worker is deployed: a binding to a
+# Worker that doesn't exist fails the deploy.
+# [[services]]
+# binding = "ACCOUNTS"
+# service = "droidhands-api"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["DeviceObject"]
@@ -33,6 +40,10 @@ APK_URL = ""
 # Log the setup link (and a QR code) once per isolate. It contains RELAY_ACCESS_KEY when one is
 # set, and deployed Worker logs may be kept by Cloudflare, so it is off by default.
 SETUP_BANNER = "false"
+# Require a DroidHands account (docs/PROTOCOL.md §7): phones must show a relay token signed by this
+# API server (api/). Empty = anyone's phone may connect. Turning it on refuses every phone
+# without a signed-in app, so deploy api/ and ship the app with sign-in first.
+ACCOUNTS_URL = ""
 # Secrets (never put them here): `npx wrangler secret put RELAY_SECRET`, and optionally
 # `npx wrangler secret put RELAY_ACCESS_KEY` to keep strangers' phones off your relay.
 

@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -49,6 +50,7 @@ import com.droidhands.android.plugins.LocalPluginEntry
 import com.droidhands.android.plugins.PluginImports
 import com.droidhands.android.service.TailscaleState
 import com.droidhands.android.settings.LocalBind
+import com.droidhands.android.ui.account.AccountSection
 import com.droidhands.android.ui.components.Accents
 import com.droidhands.android.ui.components.BottomActionBar
 import com.droidhands.android.ui.components.CardPadding
@@ -86,7 +88,7 @@ class SettingsActions(
 /**
  * Settings, as inset grouped lists (the iOS Settings pattern): General first (permissions, which
  * may need attention, boot, the activity notification), Security (never-allow apps, hidden one-time
- * codes), how agents reach this phone (the connection URLs of the routes that are on, then the relay
+ * codes), Account (when the default relay needs one), how agents reach this phone (the connection URLs of the routes that are on, then the relay
  * and Tailscale), Advanced (the local server), Developer (local plugins), About, and Revoke all last. Connection changes are
  * saved together from the bottom bar; switches outside the form apply at once.
  */
@@ -100,6 +102,9 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
     val relayStatus by vm.relayStatus.collectAsStateWithLifecycle()
     val localStatus by vm.localServerStatus.collectAsStateWithLifecycle()
     val tailscale by vm.tailscale.collectAsStateWithLifecycle()
+    val account by vm.account.collectAsStateWithLifecycle()
+    val signIn by vm.signInState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val form = vm.form
     val validation = remember(form) { form.validate() }
     val dirty = form.differsFrom(current)
@@ -173,6 +178,18 @@ fun SettingsScreen(vm: SettingsViewModel, setup: SetupUiState, activeAgents: Int
                     onOpenNeverAllow = actions.onOpenNeverAllow,
                     onRedactChange = vm::setRedactOneTimeCodes,
                 )
+            }
+            if (vm.relayNeedsAccount) {
+                item(key = "account") {
+                    AccountSection(
+                        session = account,
+                        signIn = signIn,
+                        busy = vm.accountBusy,
+                        onSignIn = { vm.signIn(context) },
+                        onSignOut = vm::signOut,
+                        onDelete = vm::deleteAccount,
+                    )
+                }
             }
             item(key = "routes") {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

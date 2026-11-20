@@ -66,6 +66,8 @@ class TransportController(
     private val onRelayStatus: (RelayStatus) -> Unit,
     private val onLocalStatus: (LocalServerStatus) -> Unit,
     private val log: (message: String, error: Throwable?) -> Unit = { _, _ -> },
+    /** The relay that needs a DroidHands account and who is signed in ([TransportConfig.relay]); null for none. */
+    private val accountRelay: () -> AccountRelay? = { null },
 ) {
     private enum class Command { APPLY, RESTART_RELAY, RETRY_RELAY, RETRY_STALLED_RELAY, REFRESH_LOCAL_URLS, STOP_ALL }
 
@@ -154,7 +156,7 @@ class TransportController(
     private suspend fun reconcile() {
         val current = settings()
 
-        val wantedRelay = TransportConfig.relay(current)
+        val wantedRelay = TransportConfig.relay(current, accountRelay())
         if (relay?.config != wantedRelay) {
             stopRelay(publishIdle = wantedRelay == null)
             if (wantedRelay != null) startRelay(wantedRelay)

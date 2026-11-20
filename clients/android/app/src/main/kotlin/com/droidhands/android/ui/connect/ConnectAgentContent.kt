@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -48,6 +51,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
+import com.droidhands.android.ui.account.AccountRequiredNotice
+import com.droidhands.android.ui.account.DefaultRelayButton
+import com.droidhands.android.ui.account.rememberSignInNeeded
 import com.droidhands.android.ui.components.AppCard
 import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.ChoiceChip
@@ -64,7 +70,6 @@ import com.droidhands.android.ui.components.SectionHeader
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.components.rememberCopier
 import com.droidhands.android.ui.components.rememberNow
-import com.droidhands.android.ui.deeplink.ConfigureLinks
 import com.droidhands.android.ui.onboarding.DEFAULT_RELAY_NOTE
 import com.droidhands.android.ui.theme.TINT_ALPHA
 import com.droidhands.android.ui.theme.statusColors
@@ -114,6 +119,8 @@ internal fun ConnectAgentContent(
     var picked by rememberSaveable { mutableStateOf<AgentClient?>(null) }
     // Once an agent connected, its setup folds away behind "Add another agent".
     var addAnother by rememberSaveable { mutableStateOf(false) }
+    // "Do it myself": the form for the user's own relay, instead of the choice.
+    var ownRelay by rememberSaveable { mutableStateOf(false) }
     // The user is here waiting for the agent: open each new request's approval screen once, by itself,
     // instead of making them find the notification. Requests from before the page opened only get the card.
     val seenPairings = rememberSaveable { ArrayList(pairings.map { it.id }) }
@@ -177,6 +184,7 @@ internal fun ConnectAgentContent(
                     local,
                     footer = "Your connection URL appears here as soon as the phone is connected to the relay.",
                 )
+                AccountRequiredNotice(main, relay)
                 if (onOpenConnectionSettings != null) {
                     SecondaryButton("Connection settings", onClick = onOpenConnectionSettings)
                 }
@@ -195,16 +203,19 @@ internal fun ConnectAgentContent(
                     RelaySetupForm(settings, onConnect = main::connectRelay)
                 }
             }
-            offerDefault != null -> Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                FormSection(title = "First, get this phone online", footer = DEFAULT_RELAY_NOTE) {
-                    Text(
-                        "Use ${ConfigureLinks.hostOf(offerDefault) ?: offerDefault}, the relay this app comes with.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    PrimaryButton("Go online", onClick = main::useDefaultRelay, fullWidth = true)
+            offerDefault != null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SectionHeader("How do you want to connect?")
+                Column(Modifier.selectableGroup()) {
+                    ConnectOption("Use DroidHands Connect", "Easiest. Free account, sign in with Google.", selected = !ownRelay, onClick = { ownRelay = false })
+                    ConnectOption("Do it myself", "Use your own relay.", selected = ownRelay, onClick = { ownRelay = true })
                 }
-                FormSection(title = "Or connect to your own relay") {
-                    RelaySetupForm(settings.copy(relayUrl = "", relayAccessKey = ""), onConnect = main::connectRelay)
+                if (ownRelay) {
+                    FormSection(title = "Your own relay") {
+                        RelaySetupForm(settings.copy(relayUrl = "", relayAccessKey = ""), onConnect = main::connectRelay)
+                    }
+                } else {
+                    DefaultRelayButton(main)
+                    Text(DEFAULT_RELAY_NOTE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             else -> FormSection(
@@ -216,6 +227,25 @@ internal fun ConnectAgentContent(
             }
         }
         if (connected == null || addAnother) TokenAlternative(onUseToken)
+    }
+}
+
+/** One radio option: [title] and [subtitle] beside a radio button; the whole row selects. */
+@Composable
+private fun ConnectOption(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Spacer(Modifier.width(14.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

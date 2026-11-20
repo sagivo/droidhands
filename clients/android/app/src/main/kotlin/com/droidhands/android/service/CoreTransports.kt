@@ -11,6 +11,7 @@ import com.droidhands.core.oauth.LocalOAuth
 import com.droidhands.core.transport.DeviceHello
 import com.droidhands.core.transport.LocalHttpServer
 import com.droidhands.core.transport.PairingHandler
+import com.droidhands.core.transport.RelayAccountToken
 import com.droidhands.core.transport.RelayClient
 import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.flow.StateFlow
@@ -31,12 +32,14 @@ internal object CoreTransports {
     /**
      * @param pairingHandler answers one-tap pairing requests arriving over the relay
      *   (docs/PROTOCOL.md §5); resolved when each client is created, null disables pairing.
+     * @param accountToken the signed-in account's token for relays that need one ([RelayConfig.needsAccount]).
      */
     fun relayFactory(
         context: Context,
         identity: () -> DeviceIdentity,
         handler: suspend (TransportRequest) -> TransportResponse,
         pairingHandler: () -> PairingHandler? = { null },
+        accountToken: suspend () -> RelayAccountToken = { RelayAccountToken.SignedOut },
     ): RelayTransportFactory = RelayTransportFactory { config, scope ->
         val hello = DeviceHello(
             platform = "android",
@@ -52,6 +55,7 @@ internal object CoreTransports {
             scope = scope,
             httpClient = relayHttpClient,
             pairingHandler = pairingHandler(),
+            accountToken = if (config.needsAccount) accountToken else null,
         )
         object : RelayTransport {
             override val status: StateFlow<RelayStatus> get() = client.status

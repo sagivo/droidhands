@@ -21,6 +21,28 @@ class TransportConfigTest {
     }
 
     @Test
+    fun onlyTheAccountRelayGetsTheAccount() {
+        val account = AccountRelay("https://relay.example.com", sessionTag = "s1")
+        assertEquals(
+            RelayConfig("https://relay.example.com", null, needsAccount = true, accountSession = "s1"),
+            TransportConfig.relay(validRelay, account),
+        )
+        // Signed out: the relay still runs (and says to sign in), without a session.
+        assertEquals(
+            RelayConfig("https://relay.example.com", null, needsAccount = true, accountSession = null),
+            TransportConfig.relay(validRelay, account.copy(sessionTag = null)),
+        )
+        // A relay of the user's own never sees the account.
+        assertEquals(
+            RelayConfig("https://mine.example.com", null),
+            TransportConfig.relay(validRelay.copy(relayUrl = "https://mine.example.com"), account),
+        )
+        // A new sign-in is a new config, so the relay reconnects with it.
+        assertTrue(TransportConfig.relay(validRelay, account) != TransportConfig.relay(validRelay, account.copy(sessionTag = "s2")))
+        assertFalse(TransportConfig.relay(validRelay, account).toString().contains("s1"))
+    }
+
+    @Test
     fun localConfigFollowsSettings() {
         assertNull(TransportConfig.local(BridgeSettings(localServerEnabled = false)))
         assertEquals(LocalConfig(8765, LocalBind.LOOPBACK), TransportConfig.local(BridgeSettings(localServerEnabled = true)))
