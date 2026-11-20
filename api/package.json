@@ -1,0 +1,25 @@
+{
+  "name": "droidhands-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DroidHands API: login with Google (Better Auth on Cloudflare Workers + D1). Accounts unlock the hosted DroidHands relay.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run",
+    "db:migrate:local": "wrangler d1 migrations apply droidhands-api --local",
+    "db:migrate": "wrangler d1 migrations apply droidhands-api --remote",
+    "dev": "wrangler dev",
+    "deploy": "wrangler d1 migrations apply droidhands-api --remote && wrangler deploy"
+  },
+  "dependencies": {
+    "better-auth": "1.7.25"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.2",
+    "@cloudflare/workers-types": "^5.20261114.1",
+    "typescript": "~5.9.3",
+    "vitest": "~4.1.12",
+    "wrangler": "^4.162.0"
+  }
+}

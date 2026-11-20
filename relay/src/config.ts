@@ -15,6 +15,12 @@ export interface RelayConfig {
   readonly trustProxy: boolean;
   /** When set, devices must present it as `hello.accessKey`. */
   readonly accessKey: string | null;
+  /**
+   * Base URL of a DroidHands API server (api/, e.g. https://api.droidhands.com). When
+   * set, devices must present a relay token it signed as `hello.accountToken` (docs/PROTOCOL.md
+   * §3.1, §7.3): only people with an account can use the relay. null = open relay.
+   */
+  readonly accountsUrl: string | null;
   /** Accept `POST /mcp/<token>` for clients that cannot send headers. */
   readonly allowTokenInUrl: boolean;
   /**
@@ -78,6 +84,7 @@ export const DEFAULT_CONFIG: RelayConfig = Object.freeze({
   publicUrl: null,
   trustProxy: false,
   accessKey: null,
+  accountsUrl: null,
   allowTokenInUrl: false,
   allowedOrigins: [],
   allowImplicitDevice: false,
@@ -131,6 +138,7 @@ const ENV_NAMES: Partial<Record<keyof RelayConfig, string>> = {
   dataDir: 'DATA_DIR',
   publicDir: 'PUBLIC_DIR',
   apkUrl: 'APK_URL',
+  accountsUrl: 'ACCOUNTS_URL',
 };
 
 function label(field: keyof RelayConfig): string {
@@ -150,6 +158,8 @@ export function resolveConfig(overrides: Partial<RelayConfig> = {}): RelayConfig
     ...merged,
     publicUrl: merged.publicUrl === null ? null : normalizePublicUrl(merged.publicUrl, label('publicUrl')),
     accessKey: merged.accessKey === '' ? null : merged.accessKey,
+    accountsUrl:
+      merged.accountsUrl === null || merged.accountsUrl === '' ? null : normalizePublicUrl(merged.accountsUrl, label('accountsUrl')),
     allowedOrigins: Object.freeze(merged.allowedOrigins.map(normalizeOrigin).filter((o) => o !== '')),
     port: checkInt(merged.port, label('port'), 0, 65_535),
     requestTimeoutMs: checkInt(merged.requestTimeoutMs, label('requestTimeoutMs'), 1, MAX_TIMER_MS),
@@ -203,6 +213,7 @@ export function loadConfigFromEnv(env: NodeJS.ProcessEnv = process.env): RelayCo
     trustProxy: bool('TRUST_PROXY'),
     // Not trimmed: an access key is compared verbatim.
     accessKey: env.RELAY_ACCESS_KEY ? env.RELAY_ACCESS_KEY : undefined,
+    accountsUrl: str('ACCOUNTS_URL'),
     allowTokenInUrl: bool('ALLOW_TOKEN_IN_URL'),
     allowedOrigins: str('ALLOWED_ORIGINS')?.split(','),
     allowImplicitDevice: bool('ALLOW_IMPLICIT_DEVICE'),

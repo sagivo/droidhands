@@ -62,6 +62,7 @@ test('checkHello: order of checks and the URL device id', () => {
   assert.deepEqual(checkHello(hello({ deviceName: ' Pixel‮ 8 ' }), open), {
     ok: true,
     deviceId: identity.deviceId,
+    accountToken: null,
     info: { platform: undefined, appVersion: undefined, deviceName: 'Pixel 8' },
   });
   assert.equal(checkHello(hello(), { accessKey: null, urlDeviceId: identity.deviceId }).ok, true);

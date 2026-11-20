@@ -93,7 +93,9 @@ class RelayClientTest {
             TransportResponse(200, """{"jsonrpc":"2.0","id":1,"result":{}}""", mapOf("content-type" to "application/json"))
         },
         heartbeatIntervalMs: Long = RelayProtocol.HEARTBEAT_INTERVAL_MS,
-    ) = RelayClient(baseUrl, identity, hello, handler, scope, heartbeatIntervalMs = heartbeatIntervalMs).also { clients += it }
+        accountToken: (suspend () -> RelayAccountToken)? = null,
+    ) = RelayClient(baseUrl, identity, hello, handler, scope, heartbeatIntervalMs = heartbeatIntervalMs, accountToken = accountToken)
+        .also { clients += it }
 
     private fun RelayClient.await(predicate: (RelayStatus) -> Boolean): RelayStatus = runBlocking {
         withTimeout(10_000) { status.first(predicate) }
@@ -132,6 +134,69 @@ class RelayClientTest {
         val peer = peer()
         client(hello = DeviceHello("android", "1", "Phone", accessKey = " ")).start()
         assertNull(peer.next()["accessKey"])
+    }
+
+    @Test
+    fun accountTokenIsFetchedForEveryConnection() {
+        val tokens = java.util.concurrent.atomic.AtomicInteger()
+        val first = peer()
+        val second = peer()
+        val c = client(accountToken = { RelayAccountToken.Token("jwt-${tokens.incrementAndGet()}") })
+        c.start()
+        assertEquals("jwt-1", first.next()["accountToken"]!!.jsonPrimitive.content)
+        first.welcome()
+        c.await { it is RelayStatus.Connected }
+        first.ws().close(1001, "going away")
+        assertEquals("jwt-2", second.next()["accountToken"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun helloWithoutAccountTokenOmitsIt() {
+        val peer = peer()
+        client().start()
+        assertNull(peer.next()["accountToken"])
+        assertTrue(!DeviceHello("a", "1", "P", accountToken = "secret").toString().contains("secret"))
+    }
+
+    @Test
+    fun signedOutIsFatalWithoutConnecting() {
+        val c = client(accountToken = { RelayAccountToken.SignedOut })
+        c.start()
+        val status = assertIs<RelayStatus.Error>(c.await { it is RelayStatus.Error })
+        assertTrue(status.fatal)
+        assertEquals(RelayStatus.ACCOUNT_REQUIRED, status.code)
+        assertEquals(0, server.requestCount, "nothing is sent to the relay while signed out")
+    }
+
+    @Test
+    fun unavailableAccountRetriesWithBackoff() {
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val c = client(accountToken = {
+            if (calls.incrementAndGet() == 1) RelayAccountToken.Unavailable("offline") else RelayAccountToken.Token("jwt")
+        })
+        val peer = peer()
+        c.start()
+        val error = assertIs<RelayStatus.Error>(c.await { it is RelayStatus.Error })
+        assertTrue(!error.fatal)
+        assertEquals("offline", error.message)
+        assertNotNull(error.retryInMs)
+        assertEquals("jwt", peer.next()["accountToken"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun accountRequiredFromTheRelayIsFatal() {
+        val peer = peer()
+        peer() // a second upgrade that must never be used
+        val c = client(accountToken = { RelayAccountToken.Token("expired") })
+        c.start()
+        peer.next()
+        peer.ws().send("""{"type":"error","code":"account_required","message":"Sign in"}""")
+        peer.ws().close(4001, "account_required")
+        val status = assertIs<RelayStatus.Error>(c.await { it is RelayStatus.Error })
+        assertTrue(status.fatal)
+        assertEquals(RelayStatus.ACCOUNT_REQUIRED, status.code)
+        Thread.sleep(1_500)
+        assertEquals(1, server.requestCount, "no reconnect after account_required")
     }
 
     @Test

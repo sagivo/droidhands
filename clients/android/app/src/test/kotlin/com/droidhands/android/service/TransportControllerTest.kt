@@ -64,6 +64,7 @@ class TransportControllerTest {
         val lanAddresses = mutableListOf("192.168.1.20")
         var tailnet: TailnetAddress? = null
         var tailnetQueries = 0
+        var account: AccountRelay? = null
 
         val controller = TransportController(
             scope = scope.backgroundScope,
@@ -80,6 +81,7 @@ class TransportControllerTest {
             },
             onRelayStatus = { relayStatus = it },
             onLocalStatus = { localStatus = it },
+            accountRelay = { account },
         )
     }
 
@@ -114,6 +116,22 @@ class TransportControllerTest {
         assertEquals(1, h.relays.size)
         assertEquals(1, h.locals.size)
         assertEquals(0, h.relays[0].stops)
+    }
+
+    @Test
+    fun signingInReconnectsTheAccountRelay() = runTest {
+        val h = Harness(this, relayOn)
+        h.account = AccountRelay("https://relay.example.com", sessionTag = null)
+        h.controller.apply()
+        runCurrent()
+        assertTrue(h.relays.single().config.needsAccount)
+
+        h.account = AccountRelay("https://relay.example.com", sessionTag = "s1")
+        h.controller.apply()
+        runCurrent()
+        assertEquals(2, h.relays.size)
+        assertEquals(1, h.relays[0].stops)
+        assertEquals("s1", h.relays[1].config.accountSession)
     }
 
     @Test

@@ -1,0 +1,36 @@
+# The DroidHands API (login and accounts) on Cloudflare Workers + D1 (see README.md).
+#   npm run dev       local, on http://127.0.0.1:8788 (needs .dev.vars, see README.md)
+#   npm run deploy    applies migrations/ to the D1 database, then deploys
+name = "droidhands-api"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+# Better Auth uses node:async_hooks (AsyncLocalStorage).
+compatibility_flags = ["nodejs_compat"]
+
+routes = [{ pattern = "api.droidhands.com", custom_domain = true }]
+workers_dev = true
+
+[dev]
+port = 8788
+
+# The users, sessions and Google identities. `npx wrangler d1 create droidhands-api` prints
+# the id to put here.
+[[d1_databases]]
+binding = "DB"
+database_name = "droidhands-api"
+database_id = "e1abcc4b-e016-49bc-8766-b23f0524cb9a"
+migrations_dir = "migrations"
+
+[vars]
+# Public base URL of this Worker. Google's redirect URI is <this>/api/auth/callback/google, and
+# relays use <this> as the issuer of relay tokens (the relay's ACCOUNTS_URL).
+BETTER_AUTH_URL = "https://api.droidhands.com"
+# Secrets (never put them here):
+#   npx wrangler secret put BETTER_AUTH_SECRET     # openssl rand -base64 32
+#   npx wrangler secret put GOOGLE_CLIENT_ID
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
+
+[observability]
+enabled = true
+# Sign-in redirects carry OAuth state and one-time codes in the query: keep them out of the logs.
+redact_query_string = true

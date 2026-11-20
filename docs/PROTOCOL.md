@@ -80,12 +80,17 @@ The device MUST send `hello` as its first frame within 10 s of connecting:
   "platform": "android",
   "appVersion": "0.1.0",
   "deviceName": "Pixel 8",
-  "accessKey": "<optional, required if relay has RELAY_ACCESS_KEY set>"
+  "accessKey": "<optional, required if relay has RELAY_ACCESS_KEY set>",
+  "accountToken": "<optional, required if relay has ACCOUNTS_URL set (§7.3)>"
 }
 ```
 
 The relay verifies `deviceId == base32(SHA-256(base64urlDecode(deviceSecret))[0..16])`, using a
-constant-time comparison, and checks `accessKey` if the relay is locked down. On success:
+constant-time comparison, and checks `accessKey` if the relay is locked down. A relay that requires
+accounts then checks `accountToken` (§7.3): without a valid one it refuses with `account_required`
+and `4001`; when it can't check right now (the API server's keys can't be fetched) with
+`account_unavailable` and `1013`. Devices send `accountToken` only to relays they know require it
+(the app: its build's default relay), never to other relays. On success:
 
 ```json
 { "type": "welcome", "deviceId": "<id>", "mcpUrl": "https://relay.example.com/mcp", "serverTime": 1731500000000 }
@@ -94,10 +99,11 @@ constant-time comparison, and checks `accessKey` if the relay is locked down. On
 On failure the relay sends a single `error` frame, then closes:
 
 ```json
-{ "type": "error", "code": "unauthorized" | "bad_request" | "protocol_version" | "access_key" | "relay_full", "message": "..." }
+{ "type": "error", "code": "unauthorized" | "bad_request" | "protocol_version" | "access_key" | "relay_full" | "account_required" | "account_unavailable", "message": "..." }
 ```
 
-WebSocket close codes: `4000` bad request, `4001` unauthorized/access key, `4002` unsupported
+WebSocket close codes: `1013` try again later (`account_unavailable`), `4000` bad request, `4001`
+unauthorized/access key/account required, `4002` unsupported
 protocol version, `4008` hello timeout, `4009` replaced by a newer connection of the same device,
 `4013` relay full (`relay_full`: the relay's `MAX_DEVICES` other devices are connected; checked
 after authentication, and never for a device that is already connected, whose new connection
@@ -490,3 +496,62 @@ a `GET` with `Accept: text/event-stream` (the Streamable HTTP SSE stream) still 
 * Token prefix `pb1` versions the token format.
 * Tool names are stable public API (see [TOOLS.md](TOOLS.md)). Platforms may omit tools they
   cannot support, but MUST NOT change the semantics of a name.
+
+## 7. DroidHands accounts (hosted relay)
+
+The hosted DroidHands relay is for people with a DroidHands account. Accounts live on a separate
+server, the DroidHands API ([api/](../api/README.md), `https://api.droidhands.com`), which handles login: Better Auth on
+Cloudflare Workers, users in D1, sign-in with Google only. A relay requires accounts when it has
+`ACCOUNTS_URL` set; self-hosted relays don't by default. Agents are unaffected: they still pair with
+the phone (§5) and never see the account.
+
+### 7.1 Sign-in (browser, then the app)
+
+The app signs in like a native OAuth client (RFC 8252), with PKCE (RFC 7636) protecting the redirect:
+
+1. The app makes a `verifier` (43+ random base64url characters) and keeps it for this attempt only.
+   It opens `GET {api}/app/sign-in?code_challenge=<base64url(SHA-256(verifier))>&code_challenge_method=S256`
+   in a browser tab.
+2. The server sends the browser through Google (`prompt=select_account`). Google's redirect URI is
+   `{api}/api/auth/callback/google`. The new session's cookie is set for `{api}` only.
+3. `{api}/app/done` turns that browser session into a one-time **sign-in code** bound to the
+   challenge (valid 120 s, stored hashed), clears the session cookie from the browser (the session
+   now belongs to the phone), and redirects to `droidhands://signed-in?code=<code>`. Errors redirect
+   to `droidhands://signed-in?error=<access_denied|server_error|invalid_request>[&error_description=…]`.
+4. The app ignores a `signed-in` link unless it started a sign-in in the last few minutes, then calls
+   `POST {api}/app/token` with JSON `{"code": "…", "code_verifier": "…"}`. Answer `200`
+   `{"sessionToken": "…", "user": {"id", "name", "email", "image"}}`, or `400` `invalid_grant`. A code
+   gets one attempt: it is spent even when the verifier is wrong.
+
+A session lasts 90 days and is extended (at most daily) while the app uses it. The server keeps the
+Google identity (subject id, name, email, picture URL) and never stores Google's tokens.
+
+### 7.2 Account API
+
+All calls carry `Authorization: Bearer <sessionToken>`. `401` (`signed_out`) means the session ended
+(signed out, expired, or the account was deleted): the app forgets it and shows "signed out". Errors
+are JSON `{"error": "…", "error_description": "…"}`.
+
+| Call | Answer |
+|---|---|
+| `GET /app/me` | `{"user": {…}}` |
+| `POST /app/relay-token` | `{"token": "<JWT>", "expiresAt": <epoch ms>}` (§7.3) |
+| `POST /app/sign-out` | `204`, also when already signed out |
+| `POST /app/delete-account` | `204`: the user, their sessions and Google link are deleted |
+
+People can also delete their account on the web at `{api}/delete-account` (sign in with Google,
+then confirm), as Google Play requires.
+
+### 7.3 Relay tokens
+
+A relay token is a JWT signed by the API server (EdDSA/Ed25519, Better Auth's `jwt` plugin):
+`iss` = the API server's base URL, `aud` = `droidhands-relay`, `sub` = the account id, `exp` =
+10 minutes after issue, and no other claims (no name or email). The app gets a fresh one (or reuses
+one with more than a minute left) for every relay connection and sends it as `hello.accountToken`.
+
+The relay verifies it against `{ACCOUNTS_URL}/api/auth/jwks`: signature, `iss` equal to
+`ACCOUNTS_URL`, `aud`, `exp` (60 s clock tolerance) and a non-empty `sub`. It caches the keys for 10
+minutes and fetches them again (at most every 30 s) when a token names an unknown key, so rotated
+keys are picked up. The token is checked only in the handshake: a welcomed connection stays up until
+it drops, and the next connection needs a current token. The Cloudflare relay may fetch the keys
+through a service binding to the API Worker (`ACCOUNTS`, relay/wrangler.toml).

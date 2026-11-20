@@ -94,6 +94,21 @@
             </intent-filter>
         </activity>
 
+        <!-- droidhands://signed-in?code=... : the API server's answer after Google sign-in (PKCE-bound). -->
+        <activity
+            android:name=".account.SignInRedirectActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="droidhands" android:host="signed-in" />
+            </intent-filter>
+        </activity>
+
         <!-- One-tap agent pairing approval (docs/PROTOCOL.md §5). -->
         <activity
             android:name=".pairing.PairingActivity"

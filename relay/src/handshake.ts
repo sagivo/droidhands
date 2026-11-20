@@ -15,7 +15,7 @@ import { sanitizeDisplayText } from './text.js';
  */
 
 /** Optional descriptive hello fields; if present they must be strings. */
-const OPTIONAL_STRING_FIELDS = ['platform', 'appVersion', 'deviceName', 'accessKey'] as const;
+const OPTIONAL_STRING_FIELDS = ['platform', 'appVersion', 'deviceName', 'accessKey', 'accountToken'] as const;
 
 /** Longest device name kept for the pairing page. */
 const MAX_DEVICE_NAME_LENGTH = 60;
@@ -44,7 +44,13 @@ export interface HelloOptions {
 }
 
 export type HelloResult =
-  | { readonly ok: true; readonly deviceId: string; readonly info: HelloInfo }
+  | {
+      readonly ok: true;
+      readonly deviceId: string;
+      readonly info: HelloInfo;
+      /** `hello.accountToken`, checked by [AccountVerifier] when the relay requires accounts. */
+      readonly accountToken: string | null;
+    }
   | {
       readonly ok: false;
       readonly code: HandshakeErrorCode;
@@ -100,6 +106,7 @@ export function checkHello(text: string | null, options: HelloOptions): HelloRes
   return {
     ok: true,
     deviceId,
+    accountToken: typeof hello.accountToken === 'string' ? hello.accountToken : null,
     info: {
       platform: shortString(hello.platform),
       appVersion: shortString(hello.appVersion),

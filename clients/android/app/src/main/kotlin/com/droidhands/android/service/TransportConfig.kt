@@ -12,9 +12,21 @@ data class RelayConfig(
     val url: String,
     /** Null when the relay is open (no RELAY_ACCESS_KEY). */
     val accessKey: String?,
+    /** The relay needs a DroidHands account (the build's default relay, when the build has accounts). */
+    val needsAccount: Boolean = false,
+    /** [com.droidhands.android.account.AccountManager.sessionTag] while [needsAccount]: a new sign-in reconnects. */
+    val accountSession: String? = null,
 ) {
-    override fun toString(): String = "RelayConfig(url=$url, accessKey=${if (accessKey == null) "none" else "***"})"
+    override fun toString(): String =
+        "RelayConfig(url=$url, accessKey=${if (accessKey == null) "none" else "***"}, needsAccount=$needsAccount, " +
+            "signedIn=${accountSession != null})"
 }
+
+/**
+ * The relay that needs a DroidHands account ([relayUrl], normalized) and the current session's tag (null when
+ * signed out). Only that relay is ever sent the account's token.
+ */
+data class AccountRelay(val relayUrl: String, val sessionTag: String?)
 
 /**
  * What a running local server was bound with; a change in any field requires a rebind. With
@@ -38,10 +50,20 @@ data class LocalConfig(val port: Int, val bind: LocalBind, val tailnet: String? 
 
 /** Pure mapping from [BridgeSettings] to the transports that should be running. */
 object TransportConfig {
-    /** The relay to run, or null when disabled or the URL is invalid. */
-    fun relay(settings: BridgeSettings): RelayConfig? {
+    /**
+     * The relay to run, or null when disabled or the URL is invalid. With [account], the relay at its URL gets the
+     * account (and only that one: a relay of the user's own never sees the account's token).
+     */
+    fun relay(settings: BridgeSettings, account: AccountRelay? = null): RelayConfig? {
         if (!settings.relayEnabled || !RelayUrls.isValid(settings.relayUrl)) return null
-        return RelayConfig(RelayUrls.normalize(settings.relayUrl), settings.relayAccessKey.trim().ifEmpty { null })
+        val url = RelayUrls.normalize(settings.relayUrl)
+        val needsAccount = account != null && url == account.relayUrl
+        return RelayConfig(
+            url,
+            settings.relayAccessKey.trim().ifEmpty { null },
+            needsAccount = needsAccount,
+            accountSession = if (needsAccount) account?.sessionTag else null,
+        )
     }
 
     /**

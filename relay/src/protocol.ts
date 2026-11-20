@@ -27,6 +27,8 @@ export const CloseCode = Object.freeze({
   REPLACED: 4009,
   /** MAX_DEVICES phones are connected already; retry later with backoff (like 1013 "Try Again Later"). */
   RELAY_FULL: 4013,
+  /** The relay can't check accounts right now (`account_unavailable`); retry with backoff. */
+  TRY_AGAIN_LATER: 1013,
 });
 
 /**
@@ -41,7 +43,14 @@ export const HEARTBEAT_INTERVAL_MS = 30_000;
 /** A relay may treat a device as offline after this long without any frame or heartbeat from it. */
 export const HEARTBEAT_TIMEOUT_MS = 75_000;
 
-export type HandshakeErrorCode = 'unauthorized' | 'bad_request' | 'protocol_version' | 'access_key' | 'relay_full';
+export type HandshakeErrorCode =
+  | 'unauthorized'
+  | 'bad_request'
+  | 'protocol_version'
+  | 'access_key'
+  | 'relay_full'
+  | 'account_required'
+  | 'account_unavailable';
 
 /** First frame from the device. Optional descriptive fields are informational only. */
 export interface HelloFrame {
@@ -53,6 +62,8 @@ export interface HelloFrame {
   appVersion?: string;
   deviceName?: string;
   accessKey?: string;
+  /** Relay token from the API server, when the relay requires accounts (§3.1, §7.3). */
+  accountToken?: string;
 }
 
 export interface WelcomeFrame {

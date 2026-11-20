@@ -8,7 +8,7 @@ logged there ([SECURITY.md](SECURITY.md)).
 
 | Route | Who can reach the phone | Privacy | claude.ai / ChatGPT? | Setup |
 |---|---|---|---|---|
-| **DroidHands relay** (default) | Agents anywhere, with your connection URL | HTTPS to the relay. Whoever runs the relay could see the requests passing through. | Yes | None: the app is online after the wizard |
+| **DroidHands relay** (default) | Agents anywhere, with your connection URL | HTTPS to the relay. Whoever runs the relay could see the requests passing through. | Yes | Sign in with Google (a free DroidHands account) |
 | **Tailscale** (private, no relay) | Only your own devices on your tailnet | No relay. Tailscale (WireGuard) encrypts the traffic end to end. | No | Tailscale on the phone and the computer, then one switch |
 | **Your own relay** | Agents anywhere (or only your tailnet, see below) | Only you handle the requests | Yes, when it has a public HTTPS address | Run the relay, scan its QR code in DroidHands |
 | Same Wi-Fi (advanced) | Anyone on the same network | Unencrypted `http://` | No | Settings › Local server › All networks |
@@ -20,9 +20,11 @@ on, with **Copy** and **Share**. Home shows them too.
 
 ## DroidHands relay (default)
 
-Nothing to do. On first run the app connects to the relay it comes with, so the wizard goes straight
-from permissions to adding an agent. Tap **Connect an AI agent**, copy the message and send it to your
-agent, and tap **Allow** on the phone ([GETTING_STARTED.md](GETTING_STARTED.md#3-connect-your-ai-agent)).
+Sign in once: the relay this app comes with needs a free DroidHands account. In the wizard's
+**Connect** step (or on the Connect page) tap **Continue with Google**; once you're signed in the phone
+goes online by itself. Signing out (*Settings › Account*) turns this route off. Tap **Connect an AI agent**,
+copy the message and send it to your agent, and tap **Allow** on the phone
+([GETTING_STARTED.md](GETTING_STARTED.md#3-connect-your-ai-agent)).
 
 It works with every agent, including cloud ones (claude.ai, ChatGPT, Grok) and agents you chat or text
 with: an agent with no connector settings, such as Instinct, signs in by itself ([agent sign-in](PROTOCOL.md#56-agent-sign-in-device-flow)). It works on Wi-Fi or mobile data, and

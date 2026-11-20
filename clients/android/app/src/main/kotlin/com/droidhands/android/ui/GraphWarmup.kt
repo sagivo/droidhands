@@ -38,6 +38,7 @@ internal object GraphWarmup {
                     val graph = BridgeGraph.get(context.applicationContext)
                     graph.settings.state
                     graph.identity.deviceId
+                    graph.accounts.session
                     graph.tokenManager.tokens
                     graph.audit.entries
                     graph.confirmations.pendingRequests

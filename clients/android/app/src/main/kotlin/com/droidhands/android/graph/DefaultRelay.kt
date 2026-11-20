@@ -13,7 +13,9 @@ import com.droidhands.android.ui.settings.RelayUrls
  * local server), and it never replaces a relay the user chose. Choosing a relay (typing one,
  * opening a setup link, editing it in Settings) clears [BridgeSettings.relayFromDefault]. Any explicit
  * connection choice (those, or the local server) also sets [BridgeSettings.defaultRelayDecided], so
- * the default relay can't switch itself on later.
+ * the default relay can't switch itself on later. When the default relay needs a DroidHands account and nobody
+ * is signed in, the first run leaves it off and undecided: the user signs in from the Connect step, which turns
+ * it on ([use]).
  */
 object DefaultRelay {
     /**
@@ -30,8 +32,8 @@ object DefaultRelay {
      * First run: [settings] with the default relay turned on when nothing is set up yet, and the
      * decision recorded either way so it is made once. Unchanged once decided.
      */
-    fun applyOnFirstRun(settings: BridgeSettings, rawDefaultUrl: String): BridgeSettings {
-        if (settings.defaultRelayDecided) return settings
+    fun applyOnFirstRun(settings: BridgeSettings, rawDefaultUrl: String, signInNeeded: Boolean = false): BridgeSettings {
+        if (settings.defaultRelayDecided || signInNeeded) return settings
         val url = url(rawDefaultUrl)
         if (url == null || somethingConfigured(settings)) return settings.copy(defaultRelayDecided = true)
         return use(settings, url)

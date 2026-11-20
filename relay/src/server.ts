@@ -32,6 +32,7 @@ async function main(): Promise<void> {
     setupUrl: `${base}${SETUP_PATH}`,
     trustProxy: config.trustProxy,
     accessKey: config.accessKey === null ? 'off' : 'required',
+    accounts: config.accountsUrl ?? 'off',
     relaySecret: relay.relaySecretSource,
     tokenInUrl: config.allowTokenInUrl,
     allowedOrigins: config.allowedOrigins.join(',') || '(none)',

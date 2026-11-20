@@ -1,0 +1,5 @@
+# Local settings for `npm run dev` (copy to .dev.vars, which git ignores).
+BETTER_AUTH_URL=http://localhost:8788
+BETTER_AUTH_SECRET=change-me-to-the-output-of-openssl-rand-base64-32
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

@@ -7,6 +7,9 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.droidhands.android.BuildConfig
+import com.droidhands.android.account.AccountManager
+import com.droidhands.android.account.AccountStore
+import com.droidhands.android.account.SignInOutcome
 import com.droidhands.android.access.BridgeAccessibilityService
 import com.droidhands.android.confirm.NotificationConfirmationProvider
 import com.droidhands.android.live.AgentActivityTracker
@@ -21,6 +24,7 @@ import com.droidhands.android.service.BridgeService
 import com.droidhands.android.service.CoreTransports
 import com.droidhands.android.service.NetworkAddresses
 import com.droidhands.android.service.StatusText
+import com.droidhands.android.service.AccountRelay
 import com.droidhands.android.service.TailscaleMonitor
 import com.droidhands.android.service.TransportConfig
 import com.droidhands.android.service.TransportController
@@ -39,6 +43,7 @@ import com.droidhands.core.audit.AuditLog
 import com.droidhands.core.audit.FileAuditLog
 import com.droidhands.core.audit.TrackingAuditLog
 import com.droidhands.core.audit.UsageTracker
+import com.droidhands.core.account.AccountClient
 import com.droidhands.core.auth.DeviceIdentity
 import com.droidhands.core.auth.FileTokenStore
 import com.droidhands.core.auth.TokenManager
@@ -61,6 +66,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.io.File
 import java.time.ZoneId
@@ -91,6 +99,26 @@ class BridgeGraph private constructor(val app: Application) {
     val settings: SettingsRepository by lazy { SettingsRepository(app) }
 
     val identity: DeviceIdentity by lazy { IdentityStore.loadOrCreate(app) }
+
+    /**
+     * The DroidHands account (sign in with Google), which the build's default relay needs when the build names an
+     * API server (`BuildConfig.API_URL`). Without one, nothing needs an account.
+     */
+    val accounts: AccountManager by lazy {
+        AccountManager(
+            api = BuildConfig.API_URL.takeIf { it.isNotBlank() }?.let { AccountClient(it) },
+            storage = AccountStore(app),
+            log = { Log.i(TAG, it) },
+        )
+    }
+
+    /** The relay that needs the account: the build's default relay, when this build has accounts. */
+    val accountRelayUrl: String?
+        get() = if (accounts.enabled) DefaultRelay.url(BuildConfig.DEFAULT_RELAY_URL) else null
+
+    /** Using the default relay needs a sign-in first. */
+    val signInNeeded: Boolean
+        get() = accountRelayUrl != null && accounts.session.value == null
 
     val tokenManager: TokenManager by lazy {
         TokenManager(FileTokenStore(File(app.filesDir, TOKENS_FILE)), identity.deviceId)
@@ -244,13 +272,20 @@ class BridgeGraph private constructor(val app: Application) {
         TransportController(
             scope = appScope,
             settings = { settings.state.value },
-            relayFactory = CoreTransports.relayFactory(app, { identity }, requestHandler::handle, pairingHandler = { pairing }),
+            relayFactory = CoreTransports.relayFactory(
+                app,
+                { identity },
+                requestHandler::handle,
+                pairingHandler = { pairing },
+                accountToken = { accounts.relayToken() },
+            ),
             localFactory = CoreTransports.localFactory(requestHandler::handle, oauth = ::newLocalOAuth),
             lanAddresses = NetworkAddresses::nonLoopbackIpv4,
             tailnet = { tailscale.refresh() },
             onRelayStatus = ::updateRelayStatus,
             onLocalStatus = ::updateLocalServerStatus,
             log = { message, error -> Log.w(TAG, message, error) },
+            accountRelay = { accountRelayUrl?.let { AccountRelay(it, accounts.sessionTag()) } },
         )
     }
 
@@ -265,6 +300,44 @@ class BridgeGraph private constructor(val app: Application) {
             warmUp()
             warmUpAppActions()
         }
+        // Signed in or out (also when the server ended the session): reconnect the relay that needs the account.
+        appScope.launch {
+            accounts.session.map { it?.token }.distinctUntilChanged().drop(1).collect {
+                if (_serviceRunning.value && accountRelayUrl != null) transports.apply()
+            }
+        }
+    }
+
+    /**
+     * Finishes a sign-in from its `droidhands://signed-in` link. Started from the DroidHands relay option, it then
+     * goes online through the default relay. Blocking (network, settings I/O); call off the main thread.
+     */
+    suspend fun completeSignIn(link: String) {
+        val outcome = accounts.completeSignIn(link)
+        if (outcome !is SignInOutcome.SignedIn) return
+        Log.i(TAG, "Signed in to the DroidHands account")
+        if (outcome.useRelay && DefaultRelay.url(BuildConfig.DEFAULT_RELAY_URL) != null) useDefaultRelay() else applySettings()
+    }
+
+    /** Signs out of the DroidHands account and turns the default relay off (it can't connect without one). */
+    suspend fun signOut() {
+        accounts.signOut()
+        afterSignOut()
+    }
+
+    /** Deletes the DroidHands account (then as [signOut]). Null on success, else why it failed. */
+    suspend fun deleteAccount(): String? {
+        val failure = accounts.deleteAccount()
+        if (failure == null) afterSignOut()
+        return failure
+    }
+
+    private fun afterSignOut() {
+        val relayUrl = accountRelayUrl
+        settings.update { current ->
+            if (current.relayEnabled && relayUrl != null && RelayUrls.normalize(current.relayUrl) == relayUrl) current.copy(relayEnabled = false) else current
+        }
+        applySettings()
     }
 
     /**
@@ -288,7 +361,7 @@ class BridgeGraph private constructor(val app: Application) {
      */
     fun applyDefaultRelayIfNeeded() {
         if (settings.state.value.defaultRelayDecided) return
-        settings.update { DefaultRelay.applyOnFirstRun(it, BuildConfig.DEFAULT_RELAY_URL) }
+        settings.update { DefaultRelay.applyOnFirstRun(it, BuildConfig.DEFAULT_RELAY_URL, signInNeeded = signInNeeded) }
         if (DefaultRelay.inUse(settings.state.value)) {
             Log.i(TAG, "First run: connecting to the default relay")
             applySettings()
@@ -489,6 +562,7 @@ class BridgeGraph private constructor(val app: Application) {
             "settings" to { settings },
             "security defaults" to ::applySecurityDefaultsIfNeeded,
             "identity" to { identity },
+            "account" to { accounts },
             "tokens" to { tokenManager },
             "usage" to { usage },
             "audit" to { audit },

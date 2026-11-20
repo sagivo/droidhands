@@ -19,5 +19,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src/worker/**/*.ts", "test-worker/**/*.ts"]
+  "include": ["src/worker/**/*.ts", "test-worker/**/*.ts", "test-worker-accounts/**/*.ts"]
 }

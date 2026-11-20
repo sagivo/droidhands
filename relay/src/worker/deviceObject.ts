@@ -1,7 +1,9 @@
 import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
 import { DurableObject } from 'cloudflare:workers';
+import type { AccountVerifier } from '../account.js';
 import type { TunnelFailure, TunnelOutcome } from '../deviceConnection.js';
 import { checkHello, welcomeFrame, type HelloInfo } from '../handshake.js';
+import { accountVerifier } from './accounts.js';
 import { createLogger, deviceTag, errorMessage, type Logger } from '../logger.js';
 import { checkGrant, tokenResponseBody, INVALID_CODE_DESCRIPTION, type TokenError } from '../oauth/tokenRoute.js';
 import {
@@ -52,7 +54,8 @@ interface SocketState {
   readonly v: 1;
   /** Connection id: names the socket in pending requests and pairing channels. */
   readonly conn: string;
-  state: 'hello' | 'open' | 'closed';
+  /** 'checking': the hello is fine and its account token is being verified (ACCOUNTS_URL). */
+  state: 'hello' | 'checking' | 'open' | 'closed';
   /** The device this object serves (from the connection URL). */
   readonly deviceId: string;
   readonly ip: string;
@@ -135,6 +138,8 @@ export class DeviceObject extends DurableObject<Env> {
   private readonly authFailures: RateLimiter;
   private readonly pairings: PairingStore;
   private readonly storageKey: Buffer;
+  /** Checks `hello.accountToken` when the relay requires accounts; null otherwise. */
+  private readonly accounts: AccountVerifier | null;
   /** Plaintext of the last persisted pairing state, to skip writes that change nothing. */
   private persisted = '';
 
@@ -142,6 +147,7 @@ export class DeviceObject extends DurableObject<Env> {
     super(ctx, env);
     this.cfg = workerConfig(env);
     this.logger = createLogger(this.cfg.relay.logLevel, (line) => console.log(line));
+    this.accounts = accountVerifier(env, this.cfg);
     this.authFailures = new RateLimiter({
       windowMs: RATE_WINDOW_MS,
       maxRequests: Number.MAX_SAFE_INTEGER,
@@ -212,7 +218,7 @@ export class DeviceObject extends DurableObject<Env> {
   private closeLateHellos(): void {
     const now = Date.now();
     for (const [ws, state] of this.sockets()) {
-      if (state.state !== 'hello' || now < state.helloDeadline) continue;
+      if ((state.state !== 'hello' && state.state !== 'checking') || now < state.helloDeadline) continue;
       this.logger.info('device hello timeout', { ip: state.ip });
       this.markClosed(ws, state);
       closeQuietly(ws, CloseCode.HELLO_TIMEOUT, 'hello timeout');
@@ -285,14 +291,14 @@ export class DeviceObject extends DurableObject<Env> {
       accessKey: this.cfg.relay.accessKey,
       urlDeviceId: state.deviceId,
     });
-    if (!hello.ok) {
-      if (hello.authFailure) this.authFailures.recordAuthFailure(state.ipKey);
-      this.logger.info('device rejected', { ip: state.ip, code: hello.code });
-      const frame: ErrorFrame = { type: 'error', code: hello.code, message: hello.message };
-      sendQuietly(ws, JSON.stringify(frame));
-      this.markClosed(ws, state);
-      closeQuietly(ws, hello.closeCode, hello.code);
-      return this.scheduleAlarm();
+    if (!hello.ok) return this.refuseHello(ws, state, hello);
+    if (this.accounts !== null) {
+      // Frames that arrive while the token is checked are dropped (the device waits for the welcome).
+      state.state = 'checking';
+      ws.serializeAttachment(state);
+      const account = await this.accounts.check(hello.accountToken);
+      if (socketState(ws)?.state !== 'checking') return; // Closed or timed out meanwhile.
+      if (!account.ok) return this.refuseHello(ws, state, account);
     }
 
     const now = Date.now();
@@ -320,6 +326,20 @@ export class DeviceObject extends DurableObject<Env> {
     this.pairings.deviceConnected(state.deviceId, this.channel(state.conn));
     for (const conn of replaced) this.pairings.connectionClosed(this.channel(conn));
     await this.pairingsChanged();
+  }
+
+  private async refuseHello(
+    ws: WebSocket,
+    state: SocketState,
+    refusal: { code: ErrorFrame['code']; closeCode: number; message: string; authFailure: boolean },
+  ): Promise<void> {
+    if (refusal.authFailure) this.authFailures.recordAuthFailure(state.ipKey);
+    this.logger.info('device rejected', { ip: state.ip, code: refusal.code });
+    const frame: ErrorFrame = { type: 'error', code: refusal.code, message: refusal.message };
+    sendQuietly(ws, JSON.stringify(frame));
+    this.markClosed(ws, state);
+    closeQuietly(ws, refusal.closeCode, refusal.code);
+    return this.scheduleAlarm();
   }
 
   private async onSocketGone(ws: WebSocket, code: number, reason: string): Promise<void> {
@@ -378,7 +398,9 @@ export class DeviceObject extends DurableObject<Env> {
     // Only counters and queued notices left in storage: sweep them once they have all expired.
     if (next === null && this.persisted !== '') next = Date.now() + LEFTOVER_SWEEP_MS;
     for (const [, state] of this.sockets()) {
-      if (state.state === 'hello' && (next === null || state.helloDeadline < next)) next = state.helloDeadline;
+      if ((state.state === 'hello' || state.state === 'checking') && (next === null || state.helloDeadline < next)) {
+        next = state.helloDeadline;
+      }
     }
     const current = fromAlarm ? null : await this.ctx.storage.getAlarm();
     if (next === null) {

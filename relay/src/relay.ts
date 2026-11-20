@@ -2,6 +2,7 @@ import { STATUS_CODES, createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { AccountVerifier, httpJwksFetcher, type JwksFetcher } from './account.js';
 import { resolveConfig, type RelayConfig } from './config.js';
 import { DeviceRegistry } from './deviceRegistry.js';
 import { acceptDeviceSocket } from './deviceSocket.js';
@@ -43,6 +44,8 @@ export interface Relay {
 export interface RelayOptions {
   /** Defaults to a JSON-lines logger on stdout at `config.logLevel`. */
   readonly logger?: Logger;
+  /** Where the API server's public keys come from (tests); defaults to `GET {accountsUrl}/api/auth/jwks`. */
+  readonly fetchJwks?: JwksFetcher;
 }
 
 const RATE_WINDOW_MS = 60_000;
@@ -108,7 +111,9 @@ export async function createRelay(config: Partial<RelayConfig> = {}, options: Re
     maxPendingPerKey: cfg.maxPendingHandshakesPerIp,
     maxBytes: MAX_PRE_HELLO_BYTES,
   });
-  const socketDeps = { config: cfg, logger, registry, limiter, sockets, pairings };
+  const accounts =
+    cfg.accountsUrl === null ? null : new AccountVerifier(cfg.accountsUrl, options.fetchJwks ?? httpJwksFetcher(cfg.accountsUrl));
+  const socketDeps = { config: cfg, logger, registry, limiter, sockets, pairings, accounts };
 
   server.on('upgrade', (req, socket: Duplex, head: Buffer) => {
     socket.on('error', () => socket.destroy());

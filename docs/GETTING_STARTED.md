@@ -23,7 +23,8 @@ DroidHands is not on the Play Store, so it tells you itself when a new version i
 
 ## 2. Open it and follow the wizard
 
-The wizard has three short steps (four in builds without a default relay, which add **Connect**).
+The wizard has three short steps (four in builds without a default relay, or whose default relay needs
+an account, which add **Connect**).
 Every step can be skipped and reopened later from *Settings › About › Run setup again*.
 
 1. **Welcome**: what agents can and can't do.
@@ -56,6 +57,11 @@ Every step can be skipped and reopened later from *Settings › About › Run se
 
    Builds without a default relay (for example ones you build from source) have a **Connect** step
    before it, which asks for your relay or offers Tailscale.
+
+   When the default relay needs a DroidHands account (the official builds), the **Connect** step
+   shows **Continue with Google**: sign in once in the browser tab that opens, and the phone goes
+   online by itself. Your account (name and email) is under *Settings › Account*, with **Sign out**
+   and **Delete account**. Tailscale and your own relay need no account.
 
 ## 3. Connect your AI agent
 

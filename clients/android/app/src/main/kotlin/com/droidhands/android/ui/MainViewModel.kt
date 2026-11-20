@@ -10,12 +10,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.droidhands.android.BuildConfig
+import com.droidhands.android.account.SignInState
 import com.droidhands.android.graph.BridgeGraph
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.graph.LocalServerStatus
 import com.droidhands.android.service.TailscaleState
 import com.droidhands.android.settings.BridgeSettings
 import com.droidhands.android.settings.LocalBind
+import com.droidhands.android.ui.account.AccountBrowser
 import com.droidhands.android.ui.activity.ActivityQuery
 import com.droidhands.android.ui.agents.AgentPresentation
 import com.droidhands.android.ui.apps.ActionNames
@@ -25,6 +27,7 @@ import com.droidhands.android.ui.deeplink.ConfigureRequest
 import com.droidhands.android.ui.home.StatusPresentation
 import com.droidhands.android.ui.onboarding.OnboardingFlow
 import com.droidhands.android.ui.settings.RelayUrls
+import com.droidhands.core.account.AccountSession
 import com.droidhands.core.audit.AuditEntry
 import com.droidhands.core.audit.TokenUsage
 import com.droidhands.core.auth.TokenRecord
@@ -88,6 +91,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The build's default relay (normalized), or null when this build has none. */
     val defaultRelayUrl: String? = DefaultRelay.url(BuildConfig.DEFAULT_RELAY_URL)
 
+    /** The default relay needs a DroidHands account (this build has an API server); see [account]. */
+    val relayNeedsAccount: Boolean = graph.accountRelayUrl != null
+
+    /** The signed-in DroidHands account, or null. */
+    val account: StateFlow<AccountSession?> = graph.accounts.session
+
+    /** How the last sign-in went (for errors and "Finishing…"). */
+    val signInState: StateFlow<SignInState> = graph.accounts.signIn
+
     /** A newer release to offer on Home (e.g. "1.3.0"), while "Check for updates" is on. */
     val availableUpdate: StateFlow<String?> = combine(graph.updates.available, settings) { version, current ->
         version.takeIf { current.checkForUpdates }
@@ -136,6 +148,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.useDefaultRelay()
         _messages.send("Connecting…")
     }
+
+    /**
+     * "Continue with Google": opens the accounts page in a browser tab. Coming back signed in turns the default
+     * relay on ([BridgeGraph.completeSignIn]).
+     */
+    @MainThread
+    fun signIn(context: Context) {
+        graph.accounts.clearSignInError()
+        val url = graph.accounts.startSignIn(useRelay = true) ?: return
+        if (!AccountBrowser.open(context, url)) _messages.trySend("Couldn't open a browser to sign in.")
+    }
+
+    /** Re-reads the account (it may have been signed out or deleted elsewhere). */
+    fun refreshAccount() = io("Couldn't check your account") { graph.accounts.refresh() }
 
     /** Loads the installed apps' actions in the background, for [actionNames] (a no-op when loaded moments ago). */
     fun loadAppActions() = graph.appDirectory.refresh()

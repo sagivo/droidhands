@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
+import type { AccountVerifier } from './account.js';
 import type { RelayConfig } from './config.js';
 import { DeviceConnection } from './deviceConnection.js';
 import type { DeviceRegistry } from './deviceRegistry.js';
@@ -19,6 +20,8 @@ export interface DeviceSocketDeps {
   /** Every open device socket, authenticated or not (used for shutdown). */
   readonly sockets: Set<WebSocket>;
   readonly pairings: PairingStore;
+  /** Checks `hello.accountToken` when the relay requires accounts (ACCOUNTS_URL); null otherwise. */
+  readonly accounts: AccountVerifier | null;
 }
 
 /**
@@ -38,17 +41,19 @@ export function acceptDeviceSocket(
   deps: DeviceSocketDeps,
   onAuthenticated: () => void = () => {},
 ): void {
-  const { config, logger, registry, limiter, sockets, pairings } = deps;
+  const { config, logger, registry, limiter, sockets, pairings, accounts } = deps;
   const ip = clientAddress(req, config.trustProxy);
   const base = publicBaseUrl(req, config.publicUrl, config.trustProxy);
   // Optional (§3.1): the Node relay needs no routing hint, but a hello for another device is refused.
   const urlDeviceId = requestUrl(req.url)?.searchParams.get(DEVICE_ID_PARAM) ?? null;
-  let state: 'hello' | 'open' | 'closed' = 'hello';
+  // 'checking': the hello is fine, its account token is being verified. The device sends nothing
+  // else before the welcome; anything that arrives meanwhile is dropped.
+  let state: 'hello' | 'checking' | 'open' | 'closed' = 'hello';
   let connection: DeviceConnection | null = null;
   sockets.add(ws);
 
   const helloTimer = setTimeout(() => {
-    if (state !== 'hello') return;
+    if (state !== 'hello' && state !== 'checking') return;
     state = 'closed';
     logger.info('device hello timeout', { ip });
     closeHandshake(ws, CloseCode.HELLO_TIMEOUT, 'hello timeout');
@@ -63,12 +68,22 @@ export function acceptDeviceSocket(
     closeHandshake(ws, closeCode, code);
   };
 
-  const onHello = (text: string | null): void => {
+  const onHello = async (text: string | null): Promise<void> => {
     const hello = checkHello(text, { accessKey: config.accessKey, urlDeviceId });
     if (!hello.ok) {
       if (hello.authFailure) limiter.recordAuthFailure(rateLimitKey(ip));
       reject(hello.code, hello.closeCode, hello.message);
       return;
+    }
+    if (accounts !== null) {
+      state = 'checking';
+      const account = await accounts.check(hello.accountToken);
+      if (state !== 'checking') return; // Closed or timed out meanwhile.
+      if (!account.ok) {
+        if (account.authFailure) limiter.recordAuthFailure(rateLimitKey(ip));
+        reject(account.code, account.closeCode, account.message);
+        return;
+      }
     }
     // A phone that is connected already may always reconnect: its new connection replaces the old one.
     if (registry.get(hello.deviceId) === undefined && registry.size >= config.maxDevices) {
@@ -131,7 +146,12 @@ export function acceptDeviceSocket(
 
   ws.on('message', (data, isBinary) => {
     const text = isBinary ? null : rawToString(data);
-    if (state === 'hello') onHello(text);
+    if (state === 'hello') {
+      onHello(text).catch((err: unknown) => {
+        logger.error('device hello failed', { error: errorMessage(err) });
+        if (state !== 'closed') reject('account_unavailable', CloseCode.TRY_AGAIN_LATER, 'The relay could not check this device. Retrying.');
+      });
+    }
     else if (state === 'open' && connection !== null) onFrame(connection, text);
   });
 

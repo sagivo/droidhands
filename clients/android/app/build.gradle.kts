@@ -46,6 +46,18 @@ if (defaultRelayUrl.isNotEmpty() && !Regex("^https?://[^\\s/?#@\"\\\\]+(/[^\\s?#
     )
 }
 
+/**
+ * DroidHands API server (sign in with Google) for the default relay, e.g. https://api.droidhands.com
+ * (empty = no accounts: the default relay needs no sign-in). Only the build's default relay gets the account.
+ */
+val apiUrl: String = (input("droidhands.apiUrl", "DROIDHANDS_API_URL") ?: "").trimEnd('/')
+if (apiUrl.isNotEmpty() && !Regex("^https?://[^\\s/?#@\"\\\\]+(/[^\\s?#\"\\\\]*)?$").matches(apiUrl)) {
+    throw GradleException(
+        "droidhands.apiUrl / DROIDHANDS_API_URL must be an http(s) base URL such as " +
+            "https://api.example.com, got \"$apiUrl\"",
+    )
+}
+
 /** "owner/name" of the GitHub repository whose releases the in-app update check reads (empty = no check). */
 val githubRepo: String = input("droidhands.githubRepo", "GITHUB_REPOSITORY") ?: ""
 if (githubRepo.isNotEmpty() && !Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").matches(githubRepo)) {
@@ -83,6 +95,7 @@ android {
         versionName = pbVersionName
         buildConfigField("String", "DEFAULT_RELAY_URL", literal(defaultRelayUrl))
         buildConfigField("String", "GITHUB_REPO", literal(githubRepo))
+        buildConfigField("String", "API_URL", literal(apiUrl))
     }
 
     signingConfigs {
@@ -196,6 +209,8 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.9.3")
+    // Sign-in opens the accounts page in a Custom Tab (Google refuses sign-in inside a WebView).
+    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")

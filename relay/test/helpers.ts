@@ -6,7 +6,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { request, type IncomingHttpHeaders } from 'node:http';
 import type { TestContext } from 'node:test';
 import WebSocket from 'ws';
-import { createRelay, type Relay, type RelayConfig } from '../src/relay.js';
+import { createRelay, type Relay, type RelayConfig, type RelayOptions } from '../src/relay.js';
 
 export interface Identity {
   readonly secret: string;
@@ -40,14 +40,17 @@ export function testRelaySecret(): string {
 }
 
 /** Starts a quiet relay on 127.0.0.1:0 and closes it when the test ends. */
-export async function startRelay(t: TestContext, overrides: Partial<RelayConfig> = {}): Promise<Relay> {
-  const relay = await createRelay({
-    port: 0,
-    host: '127.0.0.1',
-    logLevel: 'silent',
-    relaySecret: testRelaySecret(),
-    ...overrides,
-  });
+export async function startRelay(t: TestContext, overrides: Partial<RelayConfig> = {}, options: RelayOptions = {}): Promise<Relay> {
+  const relay = await createRelay(
+    {
+      port: 0,
+      host: '127.0.0.1',
+      logLevel: 'silent',
+      relaySecret: testRelaySecret(),
+      ...overrides,
+    },
+    options,
+  );
   t.after(() => relay.close());
   return relay;
 }
