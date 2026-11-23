@@ -36,7 +36,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: DroidHands/Resources/DroidHands.entitlements
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: DroidHands/Resources/Info.plist
-        INFOPLIST_KEY_CFBundleDisplayName: DroidHands
+        INFOPLIST_KEY_CFBundleDisplayName: "Droid Hands"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES

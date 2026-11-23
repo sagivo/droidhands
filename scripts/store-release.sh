@@ -65,7 +65,8 @@ Settings (environment or $STORE_ENV):
   iOS signing       IOS_DISTRIBUTION_P12 and IOS_DISTRIBUTION_P12_PASSWORD: sign with this Apple Distribution
                     certificate and an App Store profile fetched through the API (for CI). Unset: Xcode's
                     automatic signing with the certificates in your keychain.
-  Build             DROIDHANDS_DEFAULT_RELAY_URL, DROIDHANDS_API_URL.
+  Build             DROIDHANDS_DEFAULT_RELAY_URL, DROIDHANDS_API_URL (the accounts server; unset builds both
+                    apps without accounts, which the store listings and privacy answers assume).
 EOF
 }
 
@@ -561,7 +562,7 @@ ios_lane() {
       -destination 'generic/platform=iOS' -archivePath "$dir/DroidHands.xcarchive" -derivedDataPath "$dir/DerivedData" \
       "${signing[@]}" "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" "PB_APP_BUNDLE_ID=$bundle_id" \
       ${DROIDHANDS_DEFAULT_RELAY_URL:+"DROIDHANDS_DEFAULT_RELAY_URL=$DROIDHANDS_DEFAULT_RELAY_URL"} \
-      ${DROIDHANDS_API_URL:+"DROIDHANDS_API_URL=$DROIDHANDS_API_URL"} \
+      "DROIDHANDS_API_URL=${DROIDHANDS_API_URL:-}" \
       "MARKETING_VERSION=$VERSION" "CURRENT_PROJECT_VERSION=$build" ||
       die "The archive failed. Check that team $APPLE_TEAM_ID owns the API key and that the app id $bundle_id is registered to it."
     ok "Archived version $VERSION ($build)"

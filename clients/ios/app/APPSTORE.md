@@ -8,7 +8,8 @@ iPhone simulator (1320 × 2868).
 
 | Field | Value |
 |---|---|
-| Name | DroidHands *(see "Name" below)* |
+| Name | Droid Hands (also the home-screen name) *(see "Name" below)* |
+| Icon | The robot logo, `DroidHands/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` (1024 × 1024, no alpha); App Store Connect takes it from the uploaded build |
 | Subtitle (30) | Let AI agents use your iPhone |
 | Bundle ID | com.droidhands.ios |
 | Primary category | Productivity |
