@@ -140,4 +140,7 @@ the store build:
    add a calendar event and a reminder, list them, location) so the lists aren't empty.
 3. `DROIDHANDS_API_URL= scripts/ios-app.sh screenshots --simulator <UDID>`.
 
-The listing uses `1-home`, `2-connect`, `3-agents`, `4-agent`, `5-access` and `6-activity`.
+Then `python3 scripts/app-store-images.py` turns `1-home`, `2-connect`, `5-access`, `6-activity`, `3-agents` and
+`4-agent` into the marketing images the listing uses (`dist/ios-marketing`): a headline about what the app does for
+you ("Control your iPhone with AI agents", "Connect your AI agent in a minute", …) above the screenshot in a phone
+frame. The headlines are in the script.
