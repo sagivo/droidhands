@@ -26,12 +26,18 @@ class ToolNamesTest {
         }
     }
 
-    /** docs/TOOLS.md documents exactly these tools (each as a table row starting with | `name` |). */
+    /**
+     * docs/TOOLS.md documents exactly these tools (each as a table row starting with | `name` |), apart from
+     * the sections marked "iPhone only".
+     */
     @Test
     fun matchesTheToolCatalogDoc() {
         val pluginsDir = System.getProperty("droidhands.pluginsDir")?.let(::File) ?: return
         val doc = File(pluginsDir.parentFile, "docs/TOOLS.md").readText()
-        val documented = Regex("^\\| `([a-z_]+)` \\|", RegexOption.MULTILINE).findAll(doc).map { it.groupValues[1] }.toSet()
+        val androidSections = doc.split(Regex("^## ", RegexOption.MULTILINE)).filterNot { "iPhone only" in it }
+        val documented = androidSections.flatMap { section ->
+            Regex("^\\| `([a-z_]+)` \\|", RegexOption.MULTILINE).findAll(section).map { it.groupValues[1] }.toList()
+        }.toSet()
         assertEquals(ToolNames.ALL.sorted(), documented.sorted())
     }
 }
