@@ -1,5 +1,6 @@
 # Tests and builds on every push and pull request: the Android core and app (unit tests, plugin
-# checks, debug APK), the iPhone app (unit tests), the relay (tests, build) and the API Worker (tests). No secrets are used.
+# checks, debug APK), the iPhone app (unit tests), the relay (tests, build), the API Worker (tests) and the
+# release scripts. No secrets are used.
 name: CI
 
 on:
@@ -80,6 +81,18 @@ jobs:
         run: npm run conformance:worker
         env:
           WRANGLER_SEND_METRICS: 'false'
+
+  release-scripts:
+    name: Release scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: App Store Connect helper and store release notes
+        run: node --test scripts/app-store-connect.test.mjs
 
   ios:
     name: iPhone app

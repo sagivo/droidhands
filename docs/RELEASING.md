@@ -1,6 +1,7 @@
 # Releasing
 
-Pushing a version tag publishes a release. [`.github/workflows/release.yml`](../.github/workflows/release.yml)
+A new version tag publishes everything: publish a release on GitHub with a new tag `vX.Y.Z` (*Releases ›
+Draft a new release*), or push the tag. [`.github/workflows/release.yml`](../.github/workflows/release.yml)
 then builds and uploads:
 
 | What | Where |
@@ -8,6 +9,11 @@ then builds and uploads:
 | Signed APK | GitHub Release `vX.Y.Z`: `DroidHands-X.Y.Z.apk` and the same file as `DroidHands.apk`, so `https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk` always serves the newest release (the in-app update check and the relay's `APK_URL` use it) |
 | Checksums | `SHA256SUMS` on the same release |
 | Relay image | `ghcr.io/sagivo/droidhands-relay:X.Y.Z` and `:latest` (amd64 and arm64) |
+| Android App Bundle | Google Play, production track (it goes live after Google's review) |
+| iPhone app | App Store Connect, submitted for App Review and released when Apple approves it |
+
+The store jobs need their own secrets and a one-time setup in each store: see
+[Automatic releases](#automatic-releases-to-google-play-and-the-app-store).
 
 The release runs the unit tests and plugin checks first. [`ci.yml`](../.github/workflows/ci.yml) runs
 the same tests, the debug build and the relay tests on every push and pull request, without secrets.
@@ -59,11 +65,18 @@ write` for the image). If your organization limits `GITHUB_TOKEN` to read-only, 
 
 ## Cutting a release
 
+On GitHub: *Releases › Draft a new release › Choose a tag ›* type `v1.2.3` *› Create new tag on publish*,
+target `main`, write the notes and *Publish release*. Or from a terminal:
+
 ```sh
 git checkout main && git pull
 git tag v1.2.3
 git push origin v1.2.3
 ```
+
+Google Play and the App Store show the release notes' `## What's new` section as "What's new" (plain text, at
+most 500 characters), so the rest of the notes can be about the APK download. Without that section the whole
+text is used, minus GitHub's generated links and contributor lists.
 
 * Tags look like `vMAJOR.MINOR.PATCH`, with MINOR and PATCH at most 99. Pre-release suffixes are
   not supported.
@@ -81,6 +94,60 @@ Then, in the workflow run and on the release page:
 3. Install the new APK over the previous release on a phone: it should update in place, keeping
    agents and settings. Phones on the previous release show "Update available" within a day.
 
+## Automatic releases to Google Play and the App Store
+
+The `google-play` and `app-store` jobs of the release workflow run
+[`scripts/store-release.sh`](../scripts/store-release.sh) (below) after the APK job passed its tests. A job
+fails with a list of what is missing when its secrets aren't set; the GitHub release still happens. Re-running a
+job is safe: a version a store already has is not uploaded or submitted again.
+
+### Google Play
+
+After the one-time setup below (the app exists in the Play Console, a release was made by hand, and a service
+account may release it), add these secrets next to the four `ANDROID_*` signing secrets:
+
+| Secret | Value |
+|---|---|
+| `PLAY_SERVICE_ACCOUNT_JSON` | The service account's JSON key, the whole file: `gh secret set PLAY_SERVICE_ACCOUNT_JSON < ~/.droidhands/play-service-account.json` |
+
+The `ANDROID_*` key is the Play *upload* key. Optional variable `PLAY_TRACK`: `internal`, `alpha` or `beta`
+instead of `production`.
+
+### App Store
+
+After the one-time setup below (API key, bundle id, the app in App Store Connect, and for the first version
+the listing, screenshots, privacy answers and review notes):
+
+1. Create the API key with the **Admin** role (CI creates the App Store provisioning profile through it).
+2. Create an Apple Distribution certificate for CI, with its private key, as a `.p12`:
+
+   ```sh
+   openssl rand -base64 24 > ~/.droidhands/ios-distribution.p12.password
+   ASC_KEY_ID=… ASC_ISSUER_ID=… ASC_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_….p8 \
+     node scripts/app-store-connect.mjs create-certificate --out ~/.droidhands/ios-distribution.p12 \
+     --password-file ~/.droidhands/ios-distribution.p12.password
+   ```
+
+   (Or export an existing "Apple Distribution" certificate with its key from Keychain Access.) A team can have
+   only a few distribution certificates; this one is valid for a year, then create a new one the same way.
+3. Add the secrets:
+
+   | Secret | Value |
+   |---|---|
+   | `ASC_KEY_ID` | The API key id |
+   | `ASC_ISSUER_ID` | The issuer id |
+   | `ASC_KEY_P8` | The `AuthKey_<id>.p8` file's contents: `gh secret set ASC_KEY_P8 < AuthKey_<id>.p8` |
+   | `APPLE_TEAM_ID` | The 10-character team id |
+   | `IOS_DISTRIBUTION_P12_BASE64` | `base64 -i ~/.droidhands/ios-distribution.p12 \| gh secret set IOS_DISTRIBUTION_P12_BASE64` |
+   | `IOS_DISTRIBUTION_P12_PASSWORD` | `gh secret set IOS_DISTRIBUTION_P12_PASSWORD < ~/.droidhands/ios-distribution.p12.password` |
+
+The job signs with that certificate and a profile named `<bundle id> App Store (CI)` (created or renewed
+through the API), uploads the build, waits for Apple to process it (up to 90 minutes), puts it on the App Store
+version `X.Y.Z` (creating it, or renaming the version in progress), sets "What's New" and submits it for review
+with "release automatically after approval". Set the variable `APP_STORE_SUBMIT` to `false` to stop at
+TestFlight. App Review may still reject a version; fix it and publish a new version tag, or resubmit in App
+Store Connect.
+
 ## App stores
 
 [`scripts/store-release.sh`](../scripts/store-release.sh) builds the signed release on your computer and
@@ -92,6 +159,7 @@ git tag v1.2.3
 ./scripts/store-release.sh android                  # signed .aab → Google Play, internal track
 ./scripts/store-release.sh android --track beta --notes "What's new"
 ./scripts/store-release.sh ios                      # signed .ipa → App Store Connect / TestFlight
+./scripts/store-release.sh ios --submit --notes "What's new"   # … then submit it for App Review
 ./scripts/store-release.sh all --build-only         # build and sign both, upload nothing
 ```
 
@@ -127,7 +195,8 @@ APPLE_TEAM_ID=ABCDE12345
 
 ### App Store Connect, one-time setup
 
-1. *Users and Access › Integrations › App Store Connect API*: create a key with the *App Manager* role,
+1. *Users and Access › Integrations › App Store Connect API*: create a key with the *Admin* role (*App Manager*
+   is enough on your own computer, where Xcode signs with your certificates),
    download `AuthKey_<id>.p8` (Apple lets you download it once), and note the key id and the issuer id.
 2. Register the bundle id `com.droidhands.ios` (or your own, via `IOS_APP_BUNDLE_ID`) under *Certificates,
    Identifiers & Profiles › Identifiers*, then create the app in App Store Connect (*Apps › +*) with it. Automatic
@@ -136,8 +205,8 @@ APPLE_TEAM_ID=ABCDE12345
    [clients/ios/app/APPSTORE.md](../clients/ios/app/APPSTORE.md). The privacy policy URL is
    `https://github.com/sagivo/droidhands/blob/main/docs/PRIVACY.md`. Screenshots: `scripts/ios-app.sh screenshots`
    on a 6.9" iPhone simulator.
-4. After an upload, the build appears in TestFlight once Apple has processed it. Adding it to a version and
-   submitting for review is done in App Store Connect.
+4. After an upload, the build appears in TestFlight once Apple has processed it. `--submit` then adds it to
+   the App Store version and submits it for review; without it, do that in App Store Connect.
 
 The iOS lane builds DroidHands for iPhone (`clients/ios/app`, [docs/IOS.md](IOS.md)). It bakes in
 `DROIDHANDS_DEFAULT_RELAY_URL` when set, otherwise `project.yml`'s default (`https://connect.droidhands.com`).

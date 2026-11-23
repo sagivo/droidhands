@@ -3,7 +3,7 @@
 # TestFlight and App Review). See docs/RELEASING.md, "App stores".
 #
 #   ./scripts/store-release.sh android [--track internal|alpha|beta|production] [--draft] [--notes TEXT]
-#   ./scripts/store-release.sh ios [--build-number N]
+#   ./scripts/store-release.sh ios [--build-number N] [--submit]
 #   ./scripts/store-release.sh all
 #   ./scripts/store-release.sh <lane> --build-only      # build and sign, upload nothing
 #
@@ -49,6 +49,9 @@ Android:
 iOS:
   --build-number N      CFBundleVersion (default: the versionCode). App Store Connect wants a higher one
                         for every upload of the same version.
+  --submit              After the upload, wait for Apple to process the build, then put it on the App Store
+                        version and submit it for review (released when approved). --notes become "What's New".
+  --wait-minutes N      How long --submit waits for Apple's processing (default 60).
 
 Settings (environment or $STORE_ENV):
   Android signing   PB_KEYSTORE_PATH, PB_KEYSTORE_PASSWORD, PB_KEY_ALIAS, PB_KEY_PASSWORD. Defaults to the
@@ -59,6 +62,9 @@ Settings (environment or $STORE_ENV):
   App Store Connect ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (the AuthKey_<id>.p8 file; default
                     ~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8), APPLE_TEAM_ID (10 characters),
                     IOS_APP_BUNDLE_ID (default com.droidhands.ios).
+  iOS signing       IOS_DISTRIBUTION_P12 and IOS_DISTRIBUTION_P12_PASSWORD: sign with this Apple Distribution
+                    certificate and an App Store profile fetched through the API (for CI). Unset: Xcode's
+                    automatic signing with the certificates in your keychain.
   Build             DROIDHANDS_DEFAULT_RELAY_URL, DROIDHANDS_API_URL.
 EOF
 }
@@ -87,6 +93,7 @@ cleanup() {
   if [ -n "$EDIT_ID" ] && [ -f "$WORK/auth" ]; then
     "${CURL:-curl}" -s -o /dev/null -X DELETE -H "@$WORK/auth" "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID" || true
   fi
+  [ -z "${KEYCHAIN:-}" ] || ios_keychain_cleanup
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -107,7 +114,7 @@ load_settings() {
       '' | '#'*) continue ;;
       PB_KEYSTORE_PATH | PB_KEYSTORE_PASSWORD | PB_KEY_ALIAS | PB_KEY_PASSWORD | PLAY_SERVICE_ACCOUNT_JSON | \
         PLAY_PACKAGE_NAME | ASC_KEY_ID | ASC_ISSUER_ID | ASC_KEY_PATH | APPLE_TEAM_ID | IOS_APP_BUNDLE_ID | \
-        DROIDHANDS_DEFAULT_RELAY_URL | DROIDHANDS_API_URL) ;;
+        IOS_DISTRIBUTION_P12 | IOS_DISTRIBUTION_P12_PASSWORD | DROIDHANDS_DEFAULT_RELAY_URL | DROIDHANDS_API_URL) ;;
       *) continue ;;
     esac
     value="${value%"${value##*[![:space:]]}"}"
@@ -139,6 +146,8 @@ NOTES=""
 NOTES_FILE=""
 NOTES_LANGUAGE="en-US"
 BUILD_NUMBER=""
+SUBMIT=0
+WAIT_MINUTES=60
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -159,6 +168,8 @@ while [ $# -gt 0 ]; do
     --notes-language) need_value "$@"; NOTES_LANGUAGE="$2"; shift 2 ;;
     --relay-url) need_value "$@"; DROIDHANDS_DEFAULT_RELAY_URL="$2"; export DROIDHANDS_DEFAULT_RELAY_URL; shift 2 ;;
     --build-number) need_value "$@"; BUILD_NUMBER="$2"; shift 2 ;;
+    --submit) SUBMIT=1; shift ;;
+    --wait-minutes) need_value "$@"; WAIT_MINUTES="$2"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
     *) usage >&2; die "Unknown option: $1" ;;
   esac
@@ -171,6 +182,9 @@ case "$TRACK" in
 esac
 case "$BUILD_NUMBER" in
   *[!0-9]*) die "--build-number must be a whole number." ;;
+esac
+case "$WAIT_MINUTES" in
+  '' | *[!0-9]*) die "--wait-minutes must be a whole number." ;;
 esac
 if [ -n "$NOTES_FILE" ]; then
   [ -z "$NOTES" ] || die "Use --notes or --notes-file, not both."
@@ -353,12 +367,24 @@ play_upload() {
   EDIT_ID="$(jq -r .id "$WORK/resp")"
   [ -n "$EDIT_ID" ] && [ "$EDIT_ID" != null ] || die "Google Play did not open an edit."
 
-  play POST "$PLAY_UPLOAD/$PLAY_PACKAGE/edits/$EDIT_ID/bundles?uploadType=media" \
-    -H 'Content-Type: application/octet-stream' --data-binary "@$AAB" --max-time 900
-  local uploaded
-  uploaded="$(jq -r .versionCode "$WORK/resp")"
-  [ "$uploaded" = "$VERSION_CODE" ] || die "Google Play stored versionCode $uploaded, expected $VERSION_CODE."
-  ok "Uploaded the bundle"
+  # Running again for the same version (a re-run CI job) changes nothing that is already there.
+  play GET "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID/tracks"
+  if jq -e --arg track "$TRACK" --arg code "$VERSION_CODE" \
+    '[.tracks[]? | select(.track == $track) | .releases[]? | .versionCodes[]?] | index($code)' "$WORK/resp" >/dev/null; then
+    ok "versionCode $VERSION_CODE is already on the $TRACK track: nothing to upload."
+    return 0
+  fi
+  play GET "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID/bundles"
+  if jq -e --argjson code "$VERSION_CODE" '[.bundles[]? | .versionCode] | index($code)' "$WORK/resp" >/dev/null; then
+    ok "Google Play already has versionCode $VERSION_CODE; reusing it"
+  else
+    play POST "$PLAY_UPLOAD/$PLAY_PACKAGE/edits/$EDIT_ID/bundles?uploadType=media" \
+      -H 'Content-Type: application/octet-stream' --data-binary "@$AAB" --max-time 900
+    local uploaded
+    uploaded="$(jq -r .versionCode "$WORK/resp")"
+    [ "$uploaded" = "$VERSION_CODE" ] || die "Google Play stored versionCode $uploaded, expected $VERSION_CODE."
+    ok "Uploaded the bundle"
+  fi
 
   local status=completed
   [ "$DRAFT" -eq 0 ] || status=draft
@@ -401,6 +427,8 @@ ios_prepare() {
   [ "$(uname -s)" = Darwin ] || die "The iOS lane needs macOS with Xcode."
   XCODEBUILD="${XCODEBUILD:-xcodebuild}"
   XCRUN="${XCRUN:-xcrun}"
+  SECURITY="${SECURITY:-security}"
+  NODE="${NODE:-node}"
   command -v "$XCODEBUILD" >/dev/null 2>&1 || die "xcodebuild not found. Install Xcode, then run: xcode-select -s /Applications/Xcode.app"
   if [ -z "${XCODEGEN:-}" ]; then
     XCODEGEN="$(command -v xcodegen || first_file /opt/homebrew/bin/xcodegen /usr/local/bin/xcodegen)"
@@ -420,6 +448,61 @@ ios_prepare() {
   case "$BUNDLE_ID" in
     *[!A-Za-z0-9.-]* | .* | *.) die "IOS_APP_BUNDLE_ID may hold only letters, digits, '-' and '.'." ;;
   esac
+  if [ -n "${IOS_DISTRIBUTION_P12:-}" ]; then
+    [ -f "$IOS_DISTRIBUTION_P12" ] || die "No certificate file at $IOS_DISTRIBUTION_P12 (IOS_DISTRIBUTION_P12)."
+    [ -n "${IOS_DISTRIBUTION_P12_PASSWORD:-}" ] || die "Set IOS_DISTRIBUTION_P12_PASSWORD for $IOS_DISTRIBUTION_P12."
+    command -v jq >/dev/null 2>&1 || die "jq not found (brew install jq)."
+  fi
+  if [ "$BUILD_ONLY" -eq 0 ] || [ -n "${IOS_DISTRIBUTION_P12:-}" ]; then
+    command -v "$NODE" >/dev/null 2>&1 || die "Node.js not found; the iOS lane uses it to talk to App Store Connect (scripts/app-store-connect.mjs)."
+  fi
+}
+
+# node scripts/app-store-connect.mjs COMMAND [options…], with the API key.
+asc() {
+  ASC_KEY_ID="$ASC_KEY_ID" ASC_ISSUER_ID="$ASC_ISSUER_ID" ASC_KEY_PATH="$KEY_PATH" "$NODE" "$SCRIPT_DIR/app-store-connect.mjs" "$@"
+}
+
+KEYCHAIN=""
+OLD_KEYCHAINS=()
+CERT_SERIAL=""
+
+# Puts the distribution certificate in a keychain of its own for this run (removed on exit), and sets
+# CERT_SERIAL to the certificate's serial number.
+ios_keychain() {
+  KEYCHAIN="$WORK/signing.keychain-db"
+  local password
+  password="$(openssl rand -hex 16)"
+  local line
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line#\"}"
+    OLD_KEYCHAINS+=("${line%\"}")
+  done < <("$SECURITY" list-keychains -d user)
+  "$SECURITY" create-keychain -p "$password" "$KEYCHAIN" || die "Could not create a keychain for signing."
+  "$SECURITY" set-keychain-settings -lut 21600 "$KEYCHAIN"
+  "$SECURITY" unlock-keychain -p "$password" "$KEYCHAIN"
+  "$SECURITY" import "$IOS_DISTRIBUTION_P12" -k "$KEYCHAIN" -f pkcs12 -P "$IOS_DISTRIBUTION_P12_PASSWORD" \
+    -T /usr/bin/codesign -T /usr/bin/security >/dev/null || die "Could not import $IOS_DISTRIBUTION_P12 (is IOS_DISTRIBUTION_P12_PASSWORD right?)."
+  # Apple's intermediate certificate, so codesign can build the chain on a machine that lacks it.
+  if "${CURL:-curl}" -sSf --max-time 60 -o "$WORK/AppleWWDRCAG3.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer; then
+    "$SECURITY" import "$WORK/AppleWWDRCAG3.cer" -k "$KEYCHAIN" >/dev/null 2>&1 || true
+  fi
+  "$SECURITY" set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$KEYCHAIN" >/dev/null ||
+    die "Could not allow codesign to use the certificate's key."
+  "$SECURITY" list-keychains -d user -s "$KEYCHAIN" ${OLD_KEYCHAINS[@]+"${OLD_KEYCHAINS[@]}"}
+  local serial
+  serial="$("$SECURITY" find-certificate -c "Apple Distribution" -p "$KEYCHAIN" | openssl x509 -noout -serial 2>/dev/null)" ||
+    die "$IOS_DISTRIBUTION_P12 holds no Apple Distribution certificate."
+  CERT_SERIAL="${serial#serial=}"
+  [ -n "$CERT_SERIAL" ] || die "$IOS_DISTRIBUTION_P12 holds no Apple Distribution certificate."
+}
+
+ios_keychain_cleanup() {
+  [ -n "$KEYCHAIN" ] || return 0
+  "$SECURITY" list-keychains -d user -s ${OLD_KEYCHAINS[@]+"${OLD_KEYCHAINS[@]}"} 2>/dev/null || true
+  "$SECURITY" delete-keychain "$KEYCHAIN" 2>/dev/null || true
+  KEYCHAIN=""
 }
 
 ios_lane() {
@@ -434,21 +517,55 @@ ios_lane() {
   mkdir -p "$dir"
   local auth=(-authenticationKeyPath "$key_path" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
 
-  "$XCODEGEN" generate --spec "$IOS_APP_DIR/project.yml" --project "$IOS_APP_DIR" --quiet || die "xcodegen could not generate the Xcode project."
-  ok "Generated DroidHands.xcodeproj"
+  # Running again for the same version (a re-run CI job) skips what Apple already has.
+  local uploaded=no
+  if [ "$BUILD_ONLY" -eq 0 ]; then
+    uploaded="$(asc has-build --bundle-id "$bundle_id" --version "$VERSION" --build "$build")" ||
+      die "Could not ask App Store Connect about build $VERSION ($build)."
+  fi
 
-  say "Archiving (xcodebuild archive)…"
-  "$XCODEBUILD" archive -project "$IOS_APP_DIR/DroidHands.xcodeproj" -scheme "$IOS_SCHEME" -configuration Release \
-    -destination 'generic/platform=iOS' -archivePath "$dir/DroidHands.xcarchive" -derivedDataPath "$dir/DerivedData" \
-    -allowProvisioningUpdates "${auth[@]}" \
-    CODE_SIGN_STYLE=Automatic "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" "PB_APP_BUNDLE_ID=$bundle_id" \
-    ${DROIDHANDS_DEFAULT_RELAY_URL:+"DROIDHANDS_DEFAULT_RELAY_URL=$DROIDHANDS_DEFAULT_RELAY_URL"} \
-    ${DROIDHANDS_API_URL:+"DROIDHANDS_API_URL=$DROIDHANDS_API_URL"} \
-    "MARKETING_VERSION=$VERSION" "CURRENT_PROJECT_VERSION=$build" ||
-    die "The archive failed. Check that team $APPLE_TEAM_ID owns the API key and that the app id $bundle_id is registered to it."
-  ok "Archived version $VERSION ($build)"
+  if [ "$uploaded" = yes ]; then
+    ok "App Store Connect already has $VERSION ($build): nothing to build or upload."
+  else
+    "$XCODEGEN" generate --spec "$IOS_APP_DIR/project.yml" --project "$IOS_APP_DIR" --quiet || die "xcodegen could not generate the Xcode project."
+    ok "Generated DroidHands.xcodeproj"
 
-  cat >"$dir/ExportOptions.plist" <<EOF
+    # Automatic signing uses the certificates in your keychain. With IOS_DISTRIBUTION_P12 (CI, where every
+    # machine is new), the build signs with that certificate and a profile fetched through the API instead.
+    local signing=(-allowProvisioningUpdates "${auth[@]}" CODE_SIGN_STYLE=Automatic)
+    local export_signing="<key>signingStyle</key><string>automatic</string>"
+    if [ -n "${IOS_DISTRIBUTION_P12:-}" ]; then
+      local profile name uuid
+      ios_keychain
+      ok "Imported the distribution certificate (serial $CERT_SERIAL)"
+      profile="$(asc profile --bundle-id "$bundle_id" --certificate-serial "$CERT_SERIAL" --out "$dir/profile.mobileprovision")" ||
+        die "Could not get an App Store provisioning profile for $bundle_id."
+      name="$(jq -r .name <<<"$profile")"
+      uuid="$(jq -r .uuid <<<"$profile")"
+      local profiles
+      for profiles in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+        mkdir -p "$profiles"
+        cp "$dir/profile.mobileprovision" "$profiles/$uuid.mobileprovision"
+      done
+      ok "Installed the provisioning profile \"$name\""
+      signing=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Apple Distribution" "PROVISIONING_PROFILE_SPECIFIER=$name"
+        "OTHER_CODE_SIGN_FLAGS=--keychain $KEYCHAIN")
+      export_signing="<key>signingStyle</key><string>manual</string>
+  <key>signingCertificate</key><string>Apple Distribution</string>
+  <key>provisioningProfiles</key><dict><key>$bundle_id</key><string>$name</string></dict>"
+    fi
+
+    say "Archiving (xcodebuild archive)…"
+    "$XCODEBUILD" archive -project "$IOS_APP_DIR/DroidHands.xcodeproj" -scheme "$IOS_SCHEME" -configuration Release \
+      -destination 'generic/platform=iOS' -archivePath "$dir/DroidHands.xcarchive" -derivedDataPath "$dir/DerivedData" \
+      "${signing[@]}" "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" "PB_APP_BUNDLE_ID=$bundle_id" \
+      ${DROIDHANDS_DEFAULT_RELAY_URL:+"DROIDHANDS_DEFAULT_RELAY_URL=$DROIDHANDS_DEFAULT_RELAY_URL"} \
+      ${DROIDHANDS_API_URL:+"DROIDHANDS_API_URL=$DROIDHANDS_API_URL"} \
+      "MARKETING_VERSION=$VERSION" "CURRENT_PROJECT_VERSION=$build" ||
+      die "The archive failed. Check that team $APPLE_TEAM_ID owns the API key and that the app id $bundle_id is registered to it."
+    ok "Archived version $VERSION ($build)"
+
+    cat >"$dir/ExportOptions.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -456,29 +573,45 @@ ios_lane() {
   <key>method</key><string>app-store-connect</string>
   <key>destination</key><string>export</string>
   <key>teamID</key><string>$APPLE_TEAM_ID</string>
-  <key>signingStyle</key><string>automatic</string>
+  $export_signing
   <key>uploadSymbols</key><true/>
   <key>manageAppVersionAndBuildNumber</key><false/>
 </dict>
 </plist>
 EOF
-  "$XCODEBUILD" -exportArchive -archivePath "$dir/DroidHands.xcarchive" -exportPath "$dir/export" \
-    -exportOptionsPlist "$dir/ExportOptions.plist" -allowProvisioningUpdates "${auth[@]}" ||
-    die "Exporting the archive failed (see xcodebuild's output above)."
-  local ipa
-  ipa="$(find "$dir/export" -maxdepth 1 -name '*.ipa' | head -n 1)"
-  [ -n "$ipa" ] || die "The export produced no .ipa."
-  ok "Exported $ipa"
+    local export_auth=(-allowProvisioningUpdates "${auth[@]}")
+    [ -z "${IOS_DISTRIBUTION_P12:-}" ] || export_auth=()
+    "$XCODEBUILD" -exportArchive -archivePath "$dir/DroidHands.xcarchive" -exportPath "$dir/export" \
+      -exportOptionsPlist "$dir/ExportOptions.plist" ${export_auth[@]+"${export_auth[@]}"} ||
+      die "Exporting the archive failed (see xcodebuild's output above)."
+    ios_keychain_cleanup
+    local ipa
+    ipa="$(find "$dir/export" -maxdepth 1 -name '*.ipa' | head -n 1)"
+    [ -n "$ipa" ] || die "The export produced no .ipa."
+    ok "Exported $ipa"
 
-  if [ "$BUILD_ONLY" -eq 1 ]; then
-    say "Build only: nothing was uploaded."
+    if [ "$BUILD_ONLY" -eq 1 ]; then
+      say "Build only: nothing was uploaded."
+      return 0
+    fi
+    say "Uploading to App Store Connect…"
+    "$XCRUN" altool --upload-app -f "$ipa" --type ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --p8-file-path "$key_path" ||
+      die "The upload failed (see altool's output above)."
+    ok "Uploaded $VERSION ($build). It shows in TestFlight once Apple has processed it (usually 5 to 30 minutes)."
+  fi
+
+  if [ "$SUBMIT" -eq 0 ]; then
+    say "  To release it: App Store Connect > your app > add the build to a version and submit it for review."
+    say "  (or run this again with --submit)"
     return 0
   fi
-  say "Uploading to App Store Connect…"
-  "$XCRUN" altool --upload-app -f "$ipa" --type ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --p8-file-path "$key_path" ||
-    die "The upload failed (see altool's output above)."
-  ok "Uploaded $VERSION ($build). It shows in TestFlight once Apple has processed it (usually 5 to 30 minutes)."
-  say "  To release it: App Store Connect > your app > add the build to a version and submit it for review."
+  local notes_args=()
+  if [ -n "$NOTES" ]; then
+    printf '%s\n' "$NOTES" >"$WORK/whats-new.txt"
+    notes_args=(--notes-file "$WORK/whats-new.txt")
+  fi
+  asc submit --bundle-id "$bundle_id" --version "$VERSION" --build "$build" --wait-minutes "$WAIT_MINUTES" \
+    ${notes_args[@]+"${notes_args[@]}"} || die "Submitting $VERSION ($build) for App Review failed (see above)."
 }
 
 first_file() {
