@@ -80,7 +80,7 @@ internal fun AgentUsageSection(usage: TokenUsage?, today: LocalDate, formatDay: 
     }
 }
 
-/** A tool and its share of the calls. Raw tool names are code, so they are set in monospace. */
+/** A tool and its share of the calls. Raw tool names are code, so they are set in monospace (under the title when there is one). */
 @Composable
 private fun ToolUsageRow(name: ToolName, value: String) {
     Row(
@@ -92,7 +92,7 @@ private fun ToolUsageRow(name: ToolName, value: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (name.isAppAction) {
+            if (name.title != name.raw) {
                 Text(name.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     name.raw,

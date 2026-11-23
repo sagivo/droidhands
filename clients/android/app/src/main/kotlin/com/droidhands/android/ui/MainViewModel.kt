@@ -32,6 +32,7 @@ import com.droidhands.core.audit.AuditEntry
 import com.droidhands.core.audit.TokenUsage
 import com.droidhands.core.auth.TokenRecord
 import com.droidhands.core.confirm.ConfirmationRequest
+import com.droidhands.core.tools.Tool
 import com.droidhands.core.transport.PairingRequest
 import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.CancellationException
@@ -44,7 +45,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -74,10 +74,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val usage: StateFlow<Map<String, TokenUsage>> = GraphAdapters.usage(graph)
     val deviceId: String = graph.identity.deviceId
 
-    /** Readable names of app actions ("Spotify – Play music") for the Activity tab; see [loadAppActions]. */
-    val actionNames: StateFlow<ActionNames.Index> = graph.appDirectory.apps
-        .map { ActionNames.Index(it.orEmpty()) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ActionNames.Index(graph.appDirectory.apps.value.orEmpty()))
+    private val registryTools = MutableStateFlow<List<Tool>>(emptyList())
+
+    /**
+     * Readable tool names ("Create calendar event", "Spotify – Play music") for Home and the Activity tab;
+     * app actions need [loadAppActions].
+     */
+    val actionNames: StateFlow<ActionNames.Index> = GraphAdapters.actionNames(graph, registryTools, viewModelScope)
 
     /** One-off user-facing messages (snackbar). */
     val messages: Flow<String> = _messages.receiveAsFlow()
@@ -109,6 +112,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val updateDownloadUrl: String? = graph.updates.downloadUrl
 
     init {
+        viewModelScope.launch { registryTools.value = GraphAdapters.registryTools(graph) }
         viewModelScope.launch {
             val completed = try {
                 prefs.onboardingCompleted()

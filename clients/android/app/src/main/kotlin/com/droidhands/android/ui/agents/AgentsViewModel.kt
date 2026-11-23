@@ -16,6 +16,7 @@ import com.droidhands.core.audit.AuditEntry
 import com.droidhands.core.audit.TokenUsage
 import com.droidhands.core.auth.GrantDraft
 import com.droidhands.core.auth.TokenRecord
+import com.droidhands.core.tools.Tool
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -59,10 +60,10 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
     /** True while the app actions are being (re)loaded. */
     val appActionsLoading: StateFlow<Boolean> = graph.appDirectory.loading
 
-    /** Readable names of app actions ("Spotify – Play music") for usage and activity rows. */
-    val actionNames: StateFlow<ActionNames.Index> = graph.appDirectory.apps
-        .map { ActionNames.Index(it.orEmpty()) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, ActionNames.Index(graph.appDirectory.apps.value.orEmpty()))
+    private val registryTools = MutableStateFlow<List<Tool>>(emptyList())
+
+    /** Readable tool names ("Create calendar event", "Spotify – Play music") for usage and activity rows. */
+    val actionNames: StateFlow<ActionNames.Index> = GraphAdapters.actionNames(graph, registryTools, viewModelScope)
 
     /** Id of the agent shown on the detail page. */
     var editingId by mutableStateOf<String?>(null)
@@ -95,16 +96,9 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch {
-            // Building the registry instantiates every tool: keep it off the main thread.
-            val loaded = try {
-                withContext(Dispatchers.IO) { graph.registry.all().map(ToolInfo::of) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Loading tools failed: ${e.javaClass.name}")
-                emptyList()
-            }
-            _tools.value = loaded
+            val loaded = GraphAdapters.registryTools(graph)
+            registryTools.value = loaded
+            _tools.value = loaded.map(ToolInfo::of)
         }
         viewModelScope.launch {
             tokens.collect { list ->

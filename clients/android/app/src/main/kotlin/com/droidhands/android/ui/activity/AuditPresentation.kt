@@ -4,9 +4,23 @@ import com.droidhands.android.ui.apps.ActionNames
 import com.droidhands.android.ui.apps.ToolName
 import com.droidhands.core.audit.AuditEntry
 import com.droidhands.core.audit.AuditOutcome
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /** Coarse outcome groups; each has its own chip color. */
 enum class OutcomeCategory { SUCCESS, ERROR, DENIED }
+
+/** One logged argument as shown: "Duration" / "60 min". */
+data class ArgumentRow(val label: String, val value: String)
 
 /** Outcome filter chips on the Activity screen. */
 enum class AuditFilter(val label: String) { ALL("All"), OK("OK"), ERRORS("Errors"), DENIED("Denied") }
@@ -38,7 +52,7 @@ object AuditPresentation {
 
     fun label(outcome: AuditOutcome): String = when (outcome) {
         AuditOutcome.OK -> "OK"
-        AuditOutcome.TOOL_ERROR -> "Tool error"
+        AuditOutcome.TOOL_ERROR -> "Failed"
         AuditOutcome.UNKNOWN_TOOL -> "Unknown tool"
         AuditOutcome.DENIED_SCOPE -> "Not in scope"
         AuditOutcome.DENIED_POLICY -> "Blocked by rule"
@@ -72,6 +86,60 @@ object AuditPresentation {
     /** [title] as people read it: app actions become "Spotify – Play music" ([ActionNames]). */
     fun displayTitle(entry: AuditEntry, names: ActionNames.Index = ActionNames.Index.EMPTY): ToolName =
         ActionNames.display(title(entry), names)
+
+    /**
+     * The logged arguments as labelled rows people can read: names humanized ("Duration" for
+     * `duration_minutes`, with "60 min"), ISO dates and times through [formatDateTime] / [formatDate]
+     * (offsets converted to [zone]), booleans as Yes/No, nested values as compact JSON. Null when there
+     * are none or the preview isn't a whole JSON object (it is cut at 300 characters).
+     */
+    fun argumentRows(
+        argsPreview: String?,
+        zone: ZoneId,
+        formatDateTime: (ZonedDateTime) -> String,
+        formatDate: (LocalDate) -> String,
+    ): List<ArgumentRow>? {
+        val json = argsPreview?.takeIf { it.isNotBlank() } ?: return null
+        val obj = runCatching { Json.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return null
+        if (obj.isEmpty()) return null
+        return obj.map { (key, value) ->
+            val unit = UNITS.firstOrNull { key.endsWith(it.first) }
+            val name = unit?.let { key.removeSuffix(it.first) }?.takeIf { it.isNotEmpty() } ?: key
+            val text = when {
+                value is JsonNull -> "–"
+                value is JsonPrimitive && value.isString -> dateTime(value.content, zone, formatDateTime, formatDate) ?: value.content
+                value is JsonPrimitive && value.booleanOrNull != null -> if (value.boolean) "Yes" else "No"
+                value is JsonPrimitive -> unit?.let { "${value.content} ${it.second}" } ?: value.content
+                else -> value.toString()
+            }
+            ArgumentRow(ActionNames.humanize(name), text)
+        }
+    }
+
+    private val UNITS = listOf("_minutes" to "min", "_seconds" to "s", "_ms" to "ms")
+    private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
+    private val ISO_DATE_TIME = Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}.*""")
+
+    private fun dateTime(text: String, zone: ZoneId, formatDateTime: (ZonedDateTime) -> String, formatDate: (LocalDate) -> String): String? =
+        runCatching {
+            when {
+                ISO_DATE.matches(text) -> formatDate(LocalDate.parse(text))
+                !ISO_DATE_TIME.matches(text) -> null
+                else -> formatDateTime(
+                    runCatching { OffsetDateTime.parse(text).atZoneSameInstant(zone) }.getOrNull()
+                        ?: LocalDateTime.parse(text).atZone(zone),
+                )
+            }
+        }.getOrNull()
+
+    /** Plain-text account of [entry] for the clipboard (bug reports, asking the agent to retry). */
+    fun report(entry: AuditEntry, names: ActionNames.Index, time: String): String = buildString {
+        appendLine(displayTitle(entry, names).title)
+        appendLine("${label(entry.outcome)} · $time · ${tokenLabel(entry)}")
+        entry.detail?.let { appendLine(it) }
+        appendLine("Tool: ${title(entry)} (${entry.method}, ${transportLabel(entry.transport)}, ${entry.durationMs} ms)")
+        entry.argsPreview?.let { append("Arguments: ").appendLine(it) }
+    }.trimEnd()
 
     fun tokenLabel(entry: AuditEntry): String = entry.tokenName?.takeIf { it.isNotBlank() }
         ?: entry.tokenId?.let { "Token $it" }

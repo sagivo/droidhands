@@ -38,7 +38,7 @@ fun rememberNow(intervalMs: Long = 30_000): State<Long> {
 
 /**
  * Formatter `(timestamp, now) -> text` honoring the locale and the user's 12/24-hour setting:
- * time with seconds for today, "Nov 12, 14:03" this year, and with the year otherwise.
+ * time for today ("14:03"), "Nov 12, 14:03" this year, and with the year otherwise.
  */
 @Composable
 fun rememberTimestampFormatter(): (Long, Long) -> String {
@@ -47,7 +47,7 @@ fun rememberTimestampFormatter(): (Long, Long) -> String {
     val is24h = DateFormat.is24HourFormat(context)
     return remember(locale, is24h) {
         val hour = if (is24h) "Hm" else "hma"
-        val today = pattern(locale, if (is24h) "Hms" else "hmsa") ?: DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM)
+        val today = pattern(locale, hour) ?: DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
         val thisYear = pattern(locale, "MMMd$hour") ?: DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
         val older = pattern(locale, "yMMMd$hour") ?: DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
         val formatter: (Long, Long) -> String = { ts, now ->
@@ -63,14 +63,19 @@ fun rememberTimestampFormatter(): (Long, Long) -> String {
     }
 }
 
-/** Formatter for a time of day ("14:03:27" / "2:03:27 PM"), honoring the 12/24-hour setting. */
+/**
+ * Formatter for a time of day ("14:03:27" / "2:03:27 PM", or "14:03" / "2:03 PM" without [seconds]),
+ * honoring the 12/24-hour setting.
+ */
 @Composable
-fun rememberTimeOfDayFormatter(): (Long) -> String {
+fun rememberTimeOfDayFormatter(seconds: Boolean = true): (Long) -> String {
     val context = LocalContext.current
     val locale: Locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     val is24h = DateFormat.is24HourFormat(context)
-    return remember(locale, is24h) {
-        val formatter = pattern(locale, if (is24h) "Hms" else "hmsa") ?: DateTimeFormatter.ofLocalizedTime(FormatStyle.MEDIUM)
+    return remember(locale, is24h, seconds) {
+        val skeleton = (if (is24h) "Hm" else "hm") + (if (seconds) "s" else "") + (if (is24h) "" else "a")
+        val formatter = pattern(locale, skeleton)
+            ?: DateTimeFormatter.ofLocalizedTime(if (seconds) FormatStyle.MEDIUM else FormatStyle.SHORT)
         val format: (Long) -> String = { ts -> formatter.format(Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault())) }
         format
     }

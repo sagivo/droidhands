@@ -22,9 +22,6 @@ data class ActivityQuery(
 /** One entry of the agent dropdown; [agent] as in [ActivityQuery.agent]. */
 data class AgentOption(val agent: String?, val label: String)
 
-/** Counts for the summary line above the list. */
-data class ActivitySummary(val total: Int, val ok: Int, val errors: Int, val denied: Int)
-
 /** A row of the day-grouped list. */
 sealed interface ActivityRow {
     val key: String
@@ -36,14 +33,15 @@ sealed interface ActivityRow {
     data class Item(val entry: AuditEntry, override val key: String) : ActivityRow
 }
 
-/** Pure filtering, grouping and summaries for the Activity screen (unit-tested). */
+/** Pure filtering and grouping for the Activity screen (unit-tested). */
 object ActivityFilters {
     /** [ActivityQuery.agent] value selecting requests that carried no valid token. */
     const val NO_TOKEN = "~no-token"
 
     /**
      * The entries matching [query]. The search looks at the tool name, the method and, when [names] knows
-     * them, app action names as shown ("Spotify – Play music"), so "play music" finds `com.spotify.music/play`.
+     * them, tool names as shown ("Spotify – Play music", "Create calendar event"), so "play music" finds
+     * `com.spotify.music/play`.
      */
     fun apply(entries: List<AuditEntry>, query: ActivityQuery, names: ActionNames.Index = ActionNames.Index.EMPTY): List<AuditEntry> {
         if (!query.isFiltered) return entries
@@ -58,7 +56,7 @@ object ActivityFilters {
 
     private fun matchesShownName(entry: AuditEntry, needle: String, names: ActionNames.Index): Boolean {
         val shown = AuditPresentation.displayTitle(entry, names)
-        return shown.isAppAction && normalize(shown.title).contains(needle)
+        return shown.title != shown.raw && normalize(shown.title).contains(needle)
     }
 
     fun matchesAgent(entry: AuditEntry, agent: String?): Boolean = when (agent) {
@@ -117,31 +115,6 @@ object ActivityFilters {
         today -> "Today"
         today.minusDays(1) -> "Yesterday"
         else -> formatDate(date)
-    }
-
-    fun summary(entries: List<AuditEntry>): ActivitySummary {
-        var ok = 0
-        var errors = 0
-        var denied = 0
-        entries.forEach {
-            when (AuditPresentation.category(it.outcome)) {
-                OutcomeCategory.SUCCESS -> ok++
-                OutcomeCategory.ERROR -> errors++
-                OutcomeCategory.DENIED -> denied++
-            }
-        }
-        return ActivitySummary(entries.size, ok, errors, denied)
-    }
-
-    /** "48 requests · 40 OK · 5 errors · 3 denied" (zero counts left out). */
-    fun summaryText(summary: ActivitySummary): String {
-        if (summary.total == 0) return "No requests"
-        return listOfNotNull(
-            if (summary.total == 1) "1 request" else "${summary.total} requests",
-            summary.ok.takeIf { it > 0 }?.let { "$it OK" },
-            summary.errors.takeIf { it > 0 }?.let { if (it == 1) "1 error" else "$it errors" },
-            summary.denied.takeIf { it > 0 }?.let { "$it denied" },
-        ).joinToString(" · ")
     }
 
     fun dayOf(timestamp: Long, zone: ZoneId): LocalDate = Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate()

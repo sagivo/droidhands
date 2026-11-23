@@ -78,13 +78,4 @@ class ActivityFiltersTest {
         assertEquals("Yesterday", ActivityFilters.dayLabel(today.minusDays(1), today) { "x" })
         assertEquals("Nov 10", ActivityFilters.dayLabel(LocalDate.of(2024, 11, 10), today) { "Nov ${it.dayOfMonth}" })
     }
-
-    @Test
-    fun summaries() {
-        val summary = ActivityFilters.summary(entries)
-        assertEquals(ActivitySummary(total = 5, ok = 2, errors = 1, denied = 2), summary)
-        assertEquals("5 requests · 2 OK · 1 error · 2 denied", ActivityFilters.summaryText(summary))
-        assertEquals("1 request · 1 OK", ActivityFilters.summaryText(ActivitySummary(1, 1, 0, 0)))
-        assertEquals("No requests", ActivityFilters.summaryText(ActivitySummary(0, 0, 0, 0)))
-    }
 }

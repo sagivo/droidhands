@@ -32,6 +32,8 @@ struct ConnectAgentSections: View {
     @State private var initializedBaseline = false
     @State private var started = false
     @State private var addAnother = false
+    /// No agent was connected when the page opened: the one that connects now is the first, so confetti.
+    @State private var firstAgent = false
 
     private var newlyConnected: TokenRecord? {
         guard initializedBaseline else { return nil }
@@ -76,7 +78,25 @@ struct ConnectAgentSections: View {
                     let waiting = started && newlyConnected == nil && model.pairings.isEmpty
                     Section {
                         CopyableCode(text: AgentPrompt.signIn(url), label: "Copy message") {
-                            started = true
+                            withAnimation { started = true }
+                        }
+                        if waiting {
+                            HStack(alignment: .center, spacing: 12) {
+                                ProgressView()
+                                    .tint(Palette.brand)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Waiting for connection…")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Palette.brand)
+                                    Text("An approval prompt will appear here as soon as your agent connects.")
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(12)
+                            .background(Palette.brand.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                         }
                         HStack(alignment: .top, spacing: 10) {
                             Text("1").font(.footnote.weight(.bold)).foregroundStyle(.white)
@@ -85,14 +105,9 @@ struct ConnectAgentSections: View {
                                 .font(.subheadline)
                         }
                         HStack(alignment: .top, spacing: 10) {
-                            if waiting {
-                                ProgressView()
-                                    .frame(width: 22, height: 22)
-                            } else {
-                                Text("2").font(.footnote.weight(.bold)).foregroundStyle(.white)
-                                    .frame(width: 22, height: 22).background(Palette.brand, in: Circle())
-                            }
-                            Text(waiting ? "Waiting for your agent… then tap Allow when this iPhone asks." : "Tap Allow when this iPhone asks.")
+                            Text("2").font(.footnote.weight(.bold)).foregroundStyle(.white)
+                                .frame(width: 22, height: 22).background(Palette.brand, in: Circle())
+                            Text("Tap Allow when this iPhone asks.")
                                 .font(.subheadline)
                         }
                         Button("Agent can't sign in? Use a token instead", action: onUseToken)
@@ -168,8 +183,15 @@ struct ConnectAgentSections: View {
         .onAppear {
             if !initializedBaseline {
                 baseline = Set(model.agents.map(\.id))
+                firstAgent = model.activeAgents.isEmpty
                 initializedBaseline = true
             }
+        }
+        .onChange(of: newlyConnected?.id) { _, id in
+            let key = "firstAgentCelebrated"
+            guard id != nil, firstAgent, !UserDefaults.standard.bool(forKey: key) else { return }
+            UserDefaults.standard.set(true, forKey: key)
+            Confetti.burst()
         }
     }
 }
@@ -259,5 +281,60 @@ struct ManualTokenView: View {
             }
         }
         .promptSheets()
+    }
+}
+
+/// A short confetti burst over the whole window, from the top edge. The view ignores touches, so the screen
+/// below stays usable, and removes itself when done. Nothing happens with Reduce Motion on.
+@MainActor
+enum Confetti {
+    static func burst() {
+        guard !UIAccessibility.isReduceMotionEnabled,
+              let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap(\.windows)
+                .first(where: \.isKeyWindow)
+        else { return }
+        let view = UIView(frame: window.bounds)
+        view.isUserInteractionEnabled = false
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.accessibilityElementsHidden = true
+        window.addSubview(view)
+
+        let emitter = CAEmitterLayer()
+        emitter.emitterPosition = CGPoint(x: window.bounds.midX, y: -10)
+        emitter.emitterShape = .line
+        emitter.emitterSize = CGSize(width: window.bounds.width, height: 1)
+        let colors: [UIColor] = [.systemBlue, .systemTeal, .systemYellow, .systemPink, .systemPurple, .systemGreen]
+        emitter.emitterCells = colors.flatMap { color in [piece(color, size: CGSize(width: 10, height: 6)), piece(color, size: CGSize(width: 7, height: 7), round: true)] }
+        emitter.beginTime = CACurrentMediaTime()
+        view.layer.addSublayer(emitter)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        // Stop emitting after a short burst, let the pieces fall, then fade away.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { emitter.birthRate = 0 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            UIView.animate(withDuration: 0.6, animations: { view.alpha = 0 }, completion: { _ in view.removeFromSuperview() })
+        }
+    }
+
+    private static func piece(_ color: UIColor, size: CGSize, round: Bool = false) -> CAEmitterCell {
+        let cell = CAEmitterCell()
+        cell.contents = UIGraphicsImageRenderer(size: size).image { ctx in
+            color.setFill()
+            let rect = CGRect(origin: .zero, size: size)
+            if round { ctx.cgContext.fillEllipse(in: rect) } else { ctx.fill(rect) }
+        }.cgImage
+        cell.birthRate = 6
+        cell.lifetime = 6
+        cell.velocity = 180
+        cell.velocityRange = 80
+        cell.emissionLongitude = .pi
+        cell.emissionRange = .pi / 5
+        cell.yAcceleration = 220
+        cell.spin = 3
+        cell.spinRange = 6
+        cell.scaleRange = 0.4
+        return cell
     }
 }

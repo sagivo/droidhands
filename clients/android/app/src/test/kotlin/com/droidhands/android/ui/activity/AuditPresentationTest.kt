@@ -3,8 +3,10 @@ package com.droidhands.android.ui.activity
 import com.droidhands.core.audit.AuditEntry
 import com.droidhands.core.audit.AuditOutcome
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.ZoneId
 
 class AuditPresentationTest {
     private fun entry(outcome: AuditOutcome, ts: Long = 1L, tool: String? = "sms_send", tokenName: String? = "Claude") = AuditEntry(
@@ -72,5 +74,37 @@ class AuditPresentationTest {
         val newKeys = AuditPresentation.stableKeys(newer)
         assertEquals(4, newKeys.toSet().size)
         assertEquals(oldKeys, newKeys.drop(1))
+    }
+
+    @Test
+    fun argumentsReadAsRows() {
+        val zone = ZoneId.of("America/New_York")
+        val rows = AuditPresentation.argumentRows(
+            """{"title":"Lunch","start":"2026-11-23T13:00-06:00","end":"2026-11-23T15:30","day":"2026-11-24","duration_minutes":60,""" +
+                """"all_day":false,"to":["a","b"],"x":null}""",
+            zone,
+            formatDateTime = { it.toLocalDateTime().toString() },
+            formatDate = { "day $it" },
+        )
+        assertEquals(
+            listOf(
+                ArgumentRow("Title", "Lunch"),
+                // The offset is converted to the phone's zone.
+                ArgumentRow("Start", "2026-11-23T14:00"),
+                ArgumentRow("End", "2026-11-23T15:30"),
+                ArgumentRow("Day", "day 2026-11-24"),
+                ArgumentRow("Duration", "60 min"),
+                ArgumentRow("All day", "No"),
+                ArgumentRow("To", """["a","b"]"""),
+                ArgumentRow("X", "–"),
+            ),
+            rows,
+        )
+        // Cut at 300 characters, not an object, or empty: shown as raw JSON instead.
+        val none = { preview: String? -> AuditPresentation.argumentRows(preview, zone, { "" }, { "" }) }
+        assertNull(none("""{"title":"Lun"""))
+        assertNull(none("[1]"))
+        assertNull(none("{}"))
+        assertNull(none(null))
     }
 }

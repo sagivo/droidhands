@@ -9,15 +9,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,11 +23,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.ui.MainViewModel
 import com.droidhands.android.ui.apps.SearchField
 import com.droidhands.android.ui.apps.lazyListSection
-import com.droidhands.android.ui.components.CardPadding
 import com.droidhands.android.ui.components.ChoiceChip
 import com.droidhands.android.ui.components.ConfirmDialog
 import com.droidhands.android.ui.components.DropdownSelector
 import com.droidhands.android.ui.components.EmptyState
+import com.droidhands.android.ui.components.MenuAction
+import com.droidhands.android.ui.components.OverflowMenu
 import com.droidhands.android.ui.components.ScreenScaffold
 import com.droidhands.android.ui.components.TertiaryButton
 import com.droidhands.android.ui.components.padded
@@ -41,11 +36,13 @@ import com.droidhands.android.ui.components.rememberDayFormatter
 import com.droidhands.android.ui.components.rememberNow
 import com.droidhands.android.ui.components.rememberTimeOfDayFormatter
 import com.droidhands.android.ui.theme.statusColors
+import com.droidhands.core.audit.AuditEntry
 import java.time.ZoneId
 
 /**
- * Audit log: every agent request handled on this phone, newest first, grouped by day, filterable
- * by agent, outcome and tool. Tapping a row shows its details.
+ * Audit log: every agent request handled on this phone, newest first, grouped by day. Rows say what
+ * was done and, for failures, why; tapping one opens its details. Search and filters show up once
+ * they can narrow something down.
  */
 @Composable
 fun ActivityScreen(vm: MainViewModel) {
@@ -54,10 +51,11 @@ fun ActivityScreen(vm: MainViewModel) {
     val names by vm.actionNames.collectAsStateWithLifecycle()
     val tokens by vm.tokens.collectAsStateWithLifecycle()
     val now by rememberNow()
-    val formatTime = rememberTimeOfDayFormatter()
+    val formatTime = rememberTimeOfDayFormatter(seconds = false)
+    val formatFullTime = rememberTimeOfDayFormatter()
     val formatDay = rememberDayFormatter()
     var confirmClear by rememberSaveable { mutableStateOf(false) }
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
+    var selected by remember { mutableStateOf<AuditEntry?>(null) }
     val query = vm.activityQuery
     val zone = ZoneId.systemDefault()
     val today = remember(now, zone) { ActivityFilters.dayOf(now, zone) }
@@ -68,61 +66,65 @@ fun ActivityScreen(vm: MainViewModel) {
     val counts = remember(forCounts) { AuditPresentation.counts(forCounts) }
     val visible = remember(entries, query, names) { ActivityFilters.apply(entries, query, names) }
     val days = remember(visible, zone) { daySections(ActivityFilters.rows(visible, zone)) }
-    val summary = remember(visible) { ActivityFilters.summaryText(ActivityFilters.summary(visible)) }
     val colors = statusColors()
+
+    // Only offer what can narrow the list: a search once it is long, an agent choice when there are
+    // several, outcome chips when there is more than one outcome. Active filters always stay visible.
+    val showSearch = entries.size >= SEARCH_MIN_ENTRIES || query.search.isNotBlank()
+    val showAgents = options.size > 2 || query.agent != null
+    val outcomes = AuditFilter.entries.filter { it != AuditFilter.ALL && (counts[it] ?: 0) > 0 }
+    val showOutcomes = outcomes.size > 1 || query.outcome != AuditFilter.ALL
 
     ScreenScaffold(
         title = "Activity",
-        large = true,
         actions = {
             if (entries.isNotEmpty()) {
-                IconButton(onClick = { confirmClear = true }) { Icon(Icons.Filled.Delete, contentDescription = "Clear activity log") }
+                OverflowMenu(listOf(MenuAction("Clear activity log", destructive = true) { confirmClear = true }))
             }
         },
     ) { padding ->
         LazyColumn(contentPadding = padding.padded(horizontal = 0.dp)) {
-            item(key = "search") {
-                SearchField(
-                    value = query.search,
-                    onValueChange = { vm.activityQuery = query.copy(search = it) },
-                    placeholder = "Search by tool or app, e.g. whatsapp",
-                    modifier = Modifier.padding(horizontal = GUTTER),
-                )
-            }
-            item(key = "filters") {
-                // One swipeable row, edge to edge: agent first, then the outcomes with their counts.
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = GUTTER, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    DropdownSelector(
-                        label = "Agent",
-                        options = options,
-                        selected = options.firstOrNull { it.agent == query.agent } ?: options.first(),
-                        optionLabel = { it.label },
-                        onSelect = { vm.activityQuery = query.copy(agent = it.agent) },
+            if (showSearch) {
+                item(key = "search") {
+                    SearchField(
+                        value = query.search,
+                        onValueChange = { vm.activityQuery = query.copy(search = it) },
+                        placeholder = "Search by tool or app",
+                        modifier = Modifier.padding(horizontal = GUTTER, vertical = 4.dp),
                     )
-                    AuditFilter.entries.forEach { f ->
-                        ChoiceChip(
-                            text = "${f.label} ${counts[f] ?: 0}",
-                            selected = query.outcome == f,
-                            onClick = { vm.activityQuery = query.copy(outcome = f) },
-                        )
-                    }
                 }
             }
-            if (entries.isNotEmpty()) {
-                item(key = "summary") {
-                    Text(
-                        summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = GUTTER + CardPadding),
-                    )
+            if (showAgents || showOutcomes) {
+                item(key = "filters") {
+                    // One swipeable row, edge to edge: the agent, then the outcomes with their counts.
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = GUTTER, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (showAgents) {
+                            DropdownSelector(
+                                label = "Agent",
+                                options = options,
+                                selected = options.firstOrNull { it.agent == query.agent } ?: options.first(),
+                                optionLabel = { it.label },
+                                onSelect = { vm.activityQuery = query.copy(agent = it.agent) },
+                            )
+                        }
+                        if (showOutcomes) {
+                            (listOf(AuditFilter.ALL) + outcomes + listOfNotNull(query.outcome.takeIf { it != AuditFilter.ALL && it !in outcomes }))
+                                .forEach { f ->
+                                    ChoiceChip(
+                                        text = if (f == AuditFilter.ALL) f.label else "${f.label} ${counts[f] ?: 0}",
+                                        selected = query.outcome == f,
+                                        onClick = { vm.activityQuery = query.copy(outcome = f) },
+                                    )
+                                }
+                        }
+                    }
                 }
             }
             if (visible.isEmpty()) {
@@ -148,21 +150,32 @@ fun ActivityScreen(vm: MainViewModel) {
                     key = day.header.key,
                     rows = day.items,
                     rowKey = { it.key },
-                    title = "${ActivityFilters.dayLabel(day.header.date, today, formatDay)} · ${day.header.count}",
+                    title = ActivityFilters.dayLabel(day.header.date, today, formatDay),
                     gutter = GUTTER,
-                    spaceAbove = if (index == 0) 12.dp else 20.dp,
+                    dividerInset = ROW_TEXT_INSET,
+                    spaceAbove = if (index == 0) 8.dp else 20.dp,
                 ) { row ->
                     AuditRow(
                         entry = row.entry,
                         time = formatTime(row.entry.timestamp),
                         colors = colors,
-                        expanded = expanded[row.key] == true,
-                        onToggle = { expanded[row.key] = expanded[row.key] != true },
+                        onClick = { selected = row.entry },
                         names = names,
                     )
                 }
             }
         }
+    }
+
+    selected?.let { entry ->
+        val day = ActivityFilters.dayLabel(ActivityFilters.dayOf(entry.timestamp, zone), today, formatDay)
+        AuditDetailSheet(
+            entry = entry,
+            time = "$day, ${formatFullTime(entry.timestamp)}",
+            colors = colors,
+            names = names,
+            onDismiss = { selected = null },
+        )
     }
 
     if (confirmClear) {
@@ -172,7 +185,7 @@ fun ActivityScreen(vm: MainViewModel) {
             confirmLabel = "Clear",
             destructive = true,
             onConfirm = {
-                expanded.clear()
+                selected = null
                 vm.clearAudit()
             },
             onDismiss = { confirmClear = false },
@@ -204,3 +217,9 @@ private fun daySections(rows: List<ActivityRow>): List<DaySection> {
 
 /** Screen gutter: the list runs edge to edge so the filter row can scroll under the screen edges. */
 private val GUTTER = 16.dp
+
+/** Below this many entries the list is short enough to scan, so there is no search field. */
+private const val SEARCH_MIN_ENTRIES = 8
+
+/** Dividers start at the row text: [AuditRow]'s padding, badge and gap. */
+private val ROW_TEXT_INSET = 16.dp + 36.dp + 12.dp

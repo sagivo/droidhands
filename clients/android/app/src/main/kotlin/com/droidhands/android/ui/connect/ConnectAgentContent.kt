@@ -1,5 +1,6 @@
 package com.droidhands.android.ui.connect
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.droidhands.android.graph.DefaultRelay
 import com.droidhands.android.ui.MainViewModel
+import com.droidhands.android.ui.UiPrefs
 import com.droidhands.android.ui.account.AccountRequiredNotice
 import com.droidhands.android.ui.account.DefaultRelayButton
 import com.droidhands.android.ui.account.rememberSignInNeeded
@@ -61,10 +65,10 @@ import com.droidhands.core.transport.RelayStatus
 import kotlinx.coroutines.launch
 
 /**
- * "Add an agent": one message for every agent ([AgentPrompt]) to copy or share, then "Tap Allow when this phone
- * asks", spinning once it was copied. A request that arrives while this is on screen opens the approval screen by
- * itself; then "✓ Claude connected". Shared by the Connect page and the last onboarding step. Scroll is up to the
- * host.
+ * "Add an agent": one message for every agent ([AgentPrompt]) to copy or share, a waiting indicator once it was
+ * copied or shared, then "Tap Allow when this phone asks". A request that arrives while this is on screen opens
+ * the approval screen by itself; then "✓ Claude connected". Shared by the Connect page and the last onboarding
+ * step. Scroll is up to the host.
  *
  * @param onConnected label and action of the button shown once an agent connected; null for none (the host
  *   has its own, like the wizard's Done).
@@ -89,6 +93,12 @@ internal fun ConnectAgentContent(
     // Agents that existed when the page opened; anything newer is "the one you just connected".
     var baseline by rememberSaveable { mutableStateOf(ArrayList(tokens.map { it.id })) }
     val connected = remember(tokens, baseline) { PairingWatch.newlyPaired(tokens, baseline.toSet()) }
+    // Confetti for the very first agent: none was connected when the page opened, and never before.
+    val view = LocalView.current
+    val firstAgent = rememberSaveable { tokens.none { !it.revoked } }
+    LaunchedEffect(connected?.id) {
+        if (connected != null && firstAgent && UiPrefs(context).consumeFirstAgentCelebration()) Confetti.burst(view)
+    }
     val connectUrl = (relay as? RelayStatus.Connected)?.connectUrl?.takeIf { it.isNotBlank() }
     val livePairings = pairings.filter { it.expiresAt > now }
     // No relay yet, but the build comes with one: offer it first.
@@ -194,8 +204,8 @@ internal fun ConnectAgentContent(
 }
 
 /**
- * The message to send any agent, with Copy and Share, then the steps: send it, then "Tap Allow when this phone
- * asks", which spins while [waiting]. [onStarted] runs once it was copied or shared.
+ * The message to send any agent, with Copy and Share, a "Waiting for connection…" indicator while [waiting],
+ * and the steps below. [onStarted] runs once it was copied or shared.
  */
 @Composable
 private fun PromptCard(prompt: String, waiting: Boolean, onStarted: () -> Unit, onUseToken: () -> Unit) {
@@ -215,33 +225,57 @@ private fun PromptCard(prompt: String, waiting: Boolean, onStarted: () -> Unit, 
             onShareFailed = { scope.launch { snackbar.showSnackbar("No app can receive shared text.") } },
             onCopied = onStarted,
         )
-        GuideSteps(listOf(SEND_STEP), waiting)
+        AnimatedVisibility(visible = waiting) {
+            WaitingForConnectionBanner()
+        }
+        GuideSteps(listOf(SEND_STEP, ALLOW_STEP))
         // Clients that can't sign in at all (config-file clients) take a token instead.
         TertiaryButton("Agent can't sign in? Use a token instead", onClick = onUseToken)
     }
 }
 
-/**
- * [steps] numbered, then the last one on this phone, "Tap Allow when this phone asks", which spins while
- * [waiting] for the agent.
- */
+/** Tinted status banner shown once the prompt was copied or shared, while waiting for the agent. */
 @Composable
-private fun GuideSteps(steps: List<String>, waiting: Boolean, modifier: Modifier = Modifier) {
+private fun WaitingForConnectionBanner(modifier: Modifier = Modifier) {
+    val tint = statusColors().pending
+    Surface(
+        color = tint.copy(alpha = 0.08f),
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = tint,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Waiting for connection…",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = tint,
+                )
+                Text(
+                    "An approval prompt will appear here as soon as your agent connects.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** Numbered instructions under the prompt. */
+@Composable
+private fun GuideSteps(steps: List<String>, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         steps.forEachIndexed { index, step -> StepLine(leading = { StepNumber(index + 1) }, text = step) }
-        StepLine(
-            leading = {
-                if (waiting) {
-                    Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    }
-                } else {
-                    StepNumber(steps.size + 1)
-                }
-            },
-            text = if (waiting) ALLOW_STEP_WAITING else ALLOW_STEP,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        )
     }
 }
 
@@ -293,7 +327,6 @@ private fun StepNumber(number: Int) {
 
 private const val SEND_STEP = "Send it to your agent (Claude, ChatGPT, Grok or any other) in a chat, or on the computer it runs on."
 private const val ALLOW_STEP = "Tap Allow when this phone asks."
-private const val ALLOW_STEP_WAITING = "Waiting for your agent… then tap Allow when this phone asks."
 
 /** A titled white group holding free-form content (a form, a URL, a button), padded like a card. */
 @Composable

@@ -40,6 +40,18 @@ internal class UiPrefs(context: Context) {
         }
     }
 
+    /** True exactly once per install: the first agent just connected, celebrate it now. */
+    suspend fun consumeFirstAgentCelebration(): Boolean = withContext(Dispatchers.IO) {
+        synchronized(lock) {
+            if (prefs.getBoolean(KEY_FIRST_AGENT_CELEBRATED, false)) {
+                false
+            } else {
+                prefs.edit { putBoolean(KEY_FIRST_AGENT_CELEBRATED, true) }
+                true
+            }
+        }
+    }
+
     suspend fun onboardingCompleted(): Boolean = withContext(Dispatchers.IO) { prefs.getBoolean(KEY_ONBOARDING_DONE, false) }
 
     /** Finished or skipped (true); false re-arms it (Settings > About > Run setup again). */
@@ -52,5 +64,6 @@ internal class UiPrefs(context: Context) {
         const val KEY_ASKED = "asked_permissions"
         const val KEY_NOTIFICATION_PROMPTED = "notification_prompted"
         const val KEY_ONBOARDING_DONE = "onboarding_done"
+        const val KEY_FIRST_AGENT_CELEBRATED = "first_agent_celebrated"
     }
 }

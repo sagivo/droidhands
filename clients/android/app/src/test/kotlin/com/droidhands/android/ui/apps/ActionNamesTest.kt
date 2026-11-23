@@ -8,6 +8,10 @@ import com.droidhands.android.ui.apps.AppTestData.listing
 import com.droidhands.core.audit.AuditEntry
 import com.droidhands.core.audit.AuditOutcome
 import com.droidhands.core.plugins.Integration
+import com.droidhands.core.tools.Risk
+import com.droidhands.core.tools.Scopes
+import com.droidhands.core.tools.ToolResult
+import com.droidhands.core.tools.tool
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -57,5 +61,18 @@ class ActionNamesTest {
         // Without names the raw tool name still matches.
         assertEquals(listOf(play), ActivityFilters.apply(entries, ActivityQuery(search = "spotify")))
         assertEquals(emptyList<AuditEntry>(), ActivityFilters.apply(entries, ActivityQuery(search = "play music")))
+    }
+
+    @Test
+    fun builtInToolsReadAsTheirTitle() {
+        val create = tool(
+            name = "calendar_event_create", title = "Create calendar event", description = "", scope = Scopes.CALENDAR_WRITE, risk = Risk.ACTION,
+        ) { _, _ -> ToolResult.text("ok") }
+        val names = ActionNames.Index(emptyList(), listOf(create))
+        assertEquals(ToolName("Create calendar event", "calendar_event_create"), ActionNames.display("calendar_event_create", names))
+        assertEquals(ToolName("sms_send", "sms_send"), ActionNames.display("sms_send", names))
+        // Search finds the title too.
+        val entry = AuditEntry(timestamp = 1, tokenId = "t1", tokenName = "Claude", transport = "relay", method = "tools/call", tool = "calendar_event_create", outcome = AuditOutcome.OK)
+        assertEquals(listOf(entry), ActivityFilters.apply(listOf(entry), ActivityQuery(search = "calendar event"), names))
     }
 }
