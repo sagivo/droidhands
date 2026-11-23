@@ -6,6 +6,7 @@ struct PairingSheet: View {
     let prompt: PairingPrompt
     @State private var name: String
     @State private var grant: GrantDraft
+    @State private var armed = false
 
     init(prompt: PairingPrompt) {
         self.prompt = prompt
@@ -46,6 +47,14 @@ struct PairingSheet: View {
                     Text("How this agent appears in DroidHands.")
                 }
                 GrantEditor(grant: $grant)
+                Section {
+                    LabeledContent(r.viaAgent ? "Signed in" : "Website", value: r.viaAgent ? "In the agent's chat" : r.redirectHost)
+                    if let ip = r.remoteAddress { LabeledContent("Requested from", value: ip) }
+                } header: {
+                    Text("Details")
+                } footer: {
+                    Text("Only allow it if you started this yourself.")
+                }
             }
             .navigationTitle("Connect agent")
             .navigationBarTitleDisplayMode(.inline)
@@ -65,15 +74,22 @@ struct PairingSheet: View {
                         Text("Allow").frame(maxWidth: .infinity).padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(grant.error != nil)
+                    .disabled(grant.error != nil || !armed)
                 }
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
                 .padding()
                 .background(.bar)
             }
+            .task { await PromptArming.wait(); armed = true }
         }
     }
+}
+
+/// Allow buttons ignore taps until the prompt has been on screen briefly, so a tap meant for what was there
+/// before can't approve it (Android arms them after 700 ms too).
+enum PromptArming {
+    static func wait() async { try? await Task.sleep(nanoseconds: 700_000_000) }
 }
 
 /// Everything, or only chosen abilities, plus "ask me first". Shared by pairing, manual tokens and an agent's Access page.
@@ -134,6 +150,7 @@ extension Ability {
 struct ApprovalSheet: View {
     @Environment(AppModel.self) private var model
     let prompt: ApprovalPrompt
+    @State private var armed = false
 
     var body: some View {
         let r = prompt.request
@@ -145,11 +162,17 @@ struct ApprovalSheet: View {
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            StatusPill(text: r.tool, color: r.risk == .SENSITIVE ? Palette.warning : Palette.brand)
+            HStack(spacing: 6) {
+                StatusPill(text: ToolCatalog.titles[r.tool] ?? r.tool, color: r.risk == .SENSITIVE ? Palette.warning : Palette.brand)
+                StatusPill(text: riskLabel(r.risk), color: r.risk == .SENSITIVE ? Palette.warning : r.risk == .ACTION ? Palette.brand : Palette.ok)
+            }
             TimelineView(.periodic(from: .now, by: 1)) { _ in
-                Text("\(max(0, Int(r.expiresAt.timeIntervalSinceNow))) s left").font(.footnote).foregroundStyle(.secondary).monospacedDigit()
+                Text("Expires in \(max(0, Int(r.expiresAt.timeIntervalSinceNow))) s").font(.footnote).foregroundStyle(.secondary).monospacedDigit()
             }
             Spacer()
+            Text("Only allow actions you asked your agent to do. Text it read may try to trick it.")
+                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .padding(.horizontal)
             HStack(spacing: 10) {
                 Button(role: .cancel) { model.answer(prompt, approved: false) } label: {
                     Text("Deny").frame(maxWidth: .infinity).padding(.vertical, 6)
@@ -159,6 +182,7 @@ struct ApprovalSheet: View {
                     Text("Allow").frame(maxWidth: .infinity).padding(.vertical, 6)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!armed)
             }
             .buttonBorderShape(.capsule)
             .controlSize(.large)
@@ -166,5 +190,14 @@ struct ApprovalSheet: View {
         }
         .padding(.bottom)
         .presentationDetents([.medium, .large])
+        .task { await PromptArming.wait(); armed = true }
+    }
+
+    private func riskLabel(_ risk: Risk) -> String {
+        switch risk {
+        case .READ: return "Read only"
+        case .ACTION: return "Changes something"
+        case .SENSITIVE: return "Sensitive"
+        }
     }
 }

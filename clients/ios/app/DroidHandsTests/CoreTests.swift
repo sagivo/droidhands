@@ -60,7 +60,9 @@ final class TokenTests: XCTestCase {
         XCTAssertTrue(token.range(of: #"^pb1\.[a-z2-7]{26}\.[a-z2-7]{12}\.[A-Za-z0-9_-]{43}$"#, options: .regularExpression) != nil)
         guard case .ok(let ok) = m.authenticate("Bearer \(token)") else { return XCTFail("should authenticate") }
         XCTAssertNotNil(ok.lastUsedAt)
-        let wrong = token.dropLast() + (token.hasSuffix("x") ? "y" : "x")
+        // Change the secret's first character: the last one carries 2 unused bits, so changing it may not change the secret.
+        let secret = TokenFormat.parse(token)!.secret
+        let wrong = token.dropLast(43) + (secret.hasPrefix("x") ? "y" : "x") + secret.dropFirst()
         guard case .denied = m.authenticate("Bearer \(wrong)") else { return XCTFail("wrong secret") }
         try m.revoke(record.id)
         guard case .denied = m.authenticate(token) else { return XCTFail("revoked") }
@@ -181,6 +183,22 @@ final class McpServerTests: XCTestCase {
         XCTAssertEqual(list?["result"]?["tools"]?.arrayValue?.compactMap { $0["name"]?.stringValue }, ["call_status"])
         let (_, call) = await post(s, token, #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo"}}"#)
         XCTAssertEqual(call?["result"]?["isError"], true)
+    }
+
+    func testActiveHoursRefuseOutsideTheWindow() async throws {
+        let (r, token) = try tokens.issue(name: "Night", scopes: Scopes.all, confirmPolicy: .NEVER)
+        let now = ActiveWindow.minuteOfDay(Date())
+        // A one-minute window that ended a minute ago.
+        try tokens.update(r.id) { $0.activeHours = ActiveHours(startMinute: (now + 1438) % 1440, endMinute: (now + 1439) % 1440) }
+        let s = server()
+        let (_, call) = await post(s, token, #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"call_status"}}"#)
+        XCTAssertEqual(call?["result"]?["isError"], true)
+        XCTAssertTrue(call?["result"]?["content"]?.arrayValue?.first?["text"]?.stringValue?.contains("may only act between") ?? false)
+        XCTAssertEqual(audit.all.first?.outcome, .DENIED_POLICY)
+        // Inside the window it runs.
+        try tokens.update(r.id) { $0.activeHours = ActiveHours(startMinute: now, endMinute: (now + 1) % 1440) }
+        let (_, ok) = await post(s, token, #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"call_status"}}"#)
+        XCTAssertNil(ok?["result"]?["isError"])
     }
 
     /// Ignores cancellation, like a tool waiting on a system callback.
@@ -315,5 +333,71 @@ final class RelayTests: XCTestCase {
         XCTAssertEqual(ISODates.parse("2026-03-14T15:00:00Z")?.date, Date(timeIntervalSince1970: 1773500400))
         XCTAssertNotNil(ISODates.parse("2026-03-14T15:00"))
         XCTAssertNil(ISODates.parse("tomorrow"))
+    }
+}
+
+final class ScheduleAndUsageTests: XCTestCase {
+    func testActiveWindow() {
+        let day = ActiveHours(startMinute: 8 * 60, endMinute: 23 * 60)
+        XCTAssertTrue(ActiveWindow.contains(day, minute: 8 * 60))
+        XCTAssertFalse(ActiveWindow.contains(day, minute: 23 * 60))
+        let night = ActiveHours(startMinute: 22 * 60, endMinute: 6 * 60)
+        XCTAssertTrue(ActiveWindow.contains(night, minute: 23 * 60 + 30))
+        XCTAssertTrue(ActiveWindow.contains(night, minute: 5 * 60 + 59))
+        XCTAssertFalse(ActiveWindow.contains(night, minute: 6 * 60))
+        XCTAssertEqual(ActiveWindow.length(night), 8 * 60)
+        XCTAssertFalse(ActiveWindow.isValid(ActiveHours(startMinute: 60, endMinute: 60)))
+        XCTAssertFalse(ActiveWindow.contains(ActiveHours(startMinute: 60, endMinute: 60), minute: 60))
+        XCTAssertEqual(ActiveWindow.format(485), "08:05")
+    }
+
+    func testUsageCountsCallsAndSurvivesLogClear() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = UsageStore(file: JSONFile(name: "u.json", directory: dir))
+        let audit = AuditLog(file: JSONFile(name: "a.json", directory: dir))
+        audit.onRecord = { store.record($0) }
+        func entry(_ outcome: AuditOutcome, tool: String = "echo", token: String? = "t1", method: String = "tools/call") -> AuditEntry {
+            AuditEntry(timestamp: Date(), tokenId: token, tokenName: "T", method: method, tool: tool, argsPreview: nil, outcome: outcome, durationMs: 1, detail: nil)
+        }
+        audit.record(entry(.OK))
+        audit.record(entry(.OK, tool: "other"))
+        audit.record(entry(.TOOL_ERROR))
+        audit.record(entry(.DENIED_POLICY))
+        audit.record(entry(.AUTH_FAILED))
+        audit.record(entry(.OK, method: "tools/list"))
+        audit.record(entry(.OK, token: nil))
+        audit.clear()
+        let u = try XCTUnwrap(store.all["t1"])
+        XCTAssertEqual(u.totalCalls, 4)
+        XCTAssertEqual([u.okCalls, u.errorCalls, u.deniedCalls], [2, 1, 1])
+        XCTAssertEqual(u.perTool, ["echo": 3, "other": 1])
+        XCTAssertEqual(u.calls(on: Date()), 4)
+        store.flush()
+        let reloaded = try XCTUnwrap(UsageStore(file: JSONFile(name: "u.json", directory: dir)).all["t1"])
+        XCTAssertEqual(reloaded.totalCalls, u.totalCalls)
+        XCTAssertEqual(reloaded.perDay, u.perDay)
+        XCTAssertEqual(reloaded.lastCallAt?.timeIntervalSince1970 ?? 0, u.lastCallAt?.timeIntervalSince1970 ?? 1, accuracy: 0.01)
+    }
+
+    func testArgumentsAreReadable() {
+        let rows = ActivityText.arguments(#"{"duration_minutes":5,"all_day":true,"date":"2026-11-23","note":null}"#)
+        let values = Dictionary(uniqueKeysWithValues: (rows ?? []).map { ($0.name, $0.value) })
+        XCTAssertEqual(Set(values.keys), ["Duration", "All day", "Date", "Note"])
+        XCTAssertEqual(values["Duration"], "5 min")
+        XCTAssertEqual(values["All day"], "Yes")
+        XCTAssertEqual(values["Note"], "–")
+        XCTAssertNil(ActivityText.arguments("{}"))
+        XCTAssertNil(ActivityText.arguments(#"{"text":"cut off"#))
+    }
+
+    func testActivityQuery() {
+        let e = AuditEntry(timestamp: Date(), tokenId: nil, tokenName: nil, method: "tools/call", tool: "device_status",
+                           argsPreview: nil, outcome: .AUTH_FAILED, durationMs: nil, detail: nil)
+        XCTAssertTrue(ActivityQuery(search: "device status").matches(e))
+        XCTAssertTrue(ActivityQuery(agent: ActivityQuery.noAgent).matches(e))
+        XCTAssertFalse(ActivityQuery(agent: "abc").matches(e))
+        XCTAssertTrue(ActivityQuery(outcome: .denied).matches(e))
+        XCTAssertFalse(ActivityQuery(outcome: .ok).matches(e))
     }
 }

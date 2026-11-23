@@ -232,6 +232,11 @@ class AgentsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Ends the agent's running tool calls (audited as stopped by the user); it keeps its access. */
+    fun stop(record: TokenRecord) = io("Couldn't stop \"${record.name}\"", "Stopped what \"${record.name}\" was doing") {
+        graph.stopAgentCalls(listOf(record.id))
+    }
+
     /** Locks the agent out and stops its calls that are still running. */
     fun revoke(record: TokenRecord) = io("Couldn't revoke \"${record.name}\"", "\"${record.name}\" revoked") {
         GraphAdapters.revokeAgent(graph, record.id)

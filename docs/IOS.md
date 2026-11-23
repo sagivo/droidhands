@@ -13,8 +13,8 @@ There are two ways to use DroidHands with an iPhone:
 
 A SwiftUI app with no dependencies. It speaks the same protocols as the Android app ([PROTOCOL.md](PROTOCOL.md)):
 an outbound WebSocket to the relay, the same tokens, one-tap OAuth pairing and agent sign-in, the same grant
-(Everything, or chosen abilities, plus "ask me before sensitive actions"), per-tool rules, pause, revoke and an
-activity log. The Kotlin core runs only on the JVM, so the app has a Swift port of the parts a phone needs:
+(Everything, or chosen abilities, plus "ask me before sensitive actions"), per-tool rules, active hours, expiry,
+pause, stop, revoke, per-agent usage and an activity log with filters and search. The Kotlin core runs only on the JVM, so the app has a Swift port of the parts a phone needs:
 
 | Swift (`clients/ios/app/DroidHands`) | Kotlin counterpart (`clients/android/core`) |
 |---|---|

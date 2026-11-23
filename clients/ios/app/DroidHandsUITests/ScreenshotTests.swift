@@ -36,13 +36,24 @@ final class ScreenshotTests: XCTestCase {
         if firstAgent.waitForExistence(timeout: 3) {
             firstAgent.tap()
             shot(app, "4-agent")
-            button(app, "Access").tap()
+            let access = button(app, "Access")
+            for _ in 0..<4 where !access.isHittable { app.swipeUp() }
+            shot(app, "4b-agent-settings")
+            access.tap()
             app.buttons["Only what I choose"].tap()
             shot(app, "5-access")
         }
 
         app.tabBars.buttons["Activity"].tap()
         shot(app, "6-activity")
+        let entry = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "status")).firstMatch
+        if entry.waitForExistence(timeout: 2) {
+            entry.tap()
+            if app.navigationBars["Request"].waitForExistence(timeout: 3) {
+                shot(app, "6b-request")
+                app.navigationBars["Request"].buttons.firstMatch.tap()
+            }
+        }
         app.tabBars.buttons["Settings"].tap()
         shot(app, "7-settings")
         button(app, "Permissions").tap()

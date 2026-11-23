@@ -255,6 +255,7 @@ private fun AgentDetailContent(vm: AgentsViewModel, record: TokenRecord, draft: 
             block(key = "danger") {
                 RemoveSection(
                     active = state == TokenState.ACTIVE,
+                    onStop = { vm.stop(record) },
                     onRevoke = { confirm = REVOKE },
                     onDelete = { confirm = DELETE },
                 )
@@ -438,12 +439,17 @@ private fun HeroStat(value: String, label: String, modifier: Modifier = Modifier
     }
 }
 
-/** "Remove", last on the page: Revoke (while active) and Delete, both red and both confirmed. */
+/**
+ * "Remove", last on the page: Stop (ends running calls, keeps access) while active, then Revoke (while active) and
+ * Delete, both red and both confirmed.
+ */
 @Composable
-private fun RemoveSection(active: Boolean, onRevoke: () -> Unit, onDelete: () -> Unit) {
+private fun RemoveSection(active: Boolean, onStop: () -> Unit, onRevoke: () -> Unit, onDelete: () -> Unit) {
     val red = MaterialTheme.colorScheme.error
     ListSection(title = "Remove") {
         if (active) {
+            ListRow(title = "Stop what it's doing", subtitle = "Ends its running requests. It keeps its access.", onClick = onStop, showChevron = false)
+            ListDivider()
             ListRow(title = "Revoke access", titleColor = red, onClick = onRevoke, showChevron = false)
             ListDivider()
         }

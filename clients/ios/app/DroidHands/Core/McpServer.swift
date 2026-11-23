@@ -256,6 +256,10 @@ final class McpServer {
             refuse(.DENIED_POLICY, args, "above the agent's risk cap")
             return result(.error(GrantText.aboveRiskCap(agent: token.name, tool: name)))
         }
+        if let hours = token.activeHours, let refusal = ActiveWindow.refusal(hours, now: started) {
+            refuse(.DENIED_POLICY, args, "outside its active hours")
+            return result(.error(refusal))
+        }
         if let reason = tool.unavailableReason() {
             audit.record(entry(.TOOL_ERROR, args, reason))
             return result(.error("\(tool.title) is unavailable: \(reason)"))

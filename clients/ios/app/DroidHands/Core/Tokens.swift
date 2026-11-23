@@ -18,6 +18,8 @@ struct TokenRecord: Codable, Identifiable, Equatable {
     /// The client's own name when the phone shows another one.
     var declaredName: String?
     var toolRules: [String: ToolRule] = [:]
+    /// Phone-local hours when the agent may act (nil = any time).
+    var activeHours: ActiveHours?
     /// Highest tool risk this agent may use (nil = no cap).
     var maxRisk: Risk?
 

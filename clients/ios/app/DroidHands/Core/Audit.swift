@@ -47,6 +47,8 @@ final class AuditLog {
     private var refusals: [String: (minute: Int, count: Int)] = [:]
 
     var onChange: (([AuditEntry]) -> Void)?
+    /// Called with each entry as it is recorded (for usage counters, which outlive the log).
+    var onRecord: ((AuditEntry) -> Void)?
 
     init(file: JSONFile<[AuditEntry]>, limit: Int = 2000) {
         self.file = file
@@ -63,6 +65,7 @@ final class AuditLog {
             return entries
         }
         scheduleSave()
+        onRecord?(entry)
         onChange?(snapshot)
     }
 

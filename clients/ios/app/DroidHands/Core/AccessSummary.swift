@@ -13,6 +13,7 @@ enum AccessSummary {
         let missing = missing(t)
         if !missing.isEmpty { s += "- You may not: \(missing.map(\.phrase).joined(separator: "; ")). Such requests are refused.\n" }
         if t.maxRisk == .READ { s += "- Limit: read-only tools: you may look but not change anything on the phone.\n" }
+        if t.activeHours != nil { s += "- Active hours: \(ActiveWindow.summary(t.activeHours))\n" }
         s += "- Approvals: \(approvalLine(t))\n"
         s += "Stay inside this access. If a task needs more, don't look for workarounds: tell the user what to allow in \(GrantText.accessPath(t.name))."
         return s
@@ -24,6 +25,7 @@ enum AccessSummary {
             ("not_allowed", .strings(missing(t).map(\.phrase))),
             ("asks_user_before", .string(askScope(t.confirmPolicy))),
             ("approvals", .string(approvalLine(t))),
+            ("active_hours", .string(ActiveWindow.summary(t.activeHours))),
             ("change_in", .string(GrantText.accessPath(t.name))),
         ]))
     }

@@ -2,17 +2,17 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
-    @State private var tab = Tab.home
 
     enum Tab { case home, agents, activity, settings }
 
     var body: some View {
+        @Bindable var model = model
         Group {
             if !model.settings.onboarded {
                 OnboardingView()
             } else {
-                TabView(selection: $tab) {
-                    HomeView(openAgents: { tab = .agents })
+                TabView(selection: $model.tab) {
+                    HomeView(openAgents: { model.tab = .agents })
                         .tabItem { Label("Home", systemImage: "house.fill") }.tag(Tab.home)
                     AgentsView()
                         .tabItem { Label("Agents", systemImage: "person.2.fill") }.tag(Tab.agents)

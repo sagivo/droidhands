@@ -25,6 +25,7 @@ final class AppModel {
     private(set) var identity: DeviceIdentity
     private(set) var tokens: TokenManager
     let audit: AuditLog
+    let usageStore: UsageStore
     let accounts: AccountManager
     private(set) var server: McpServer!
     private var relay: RelayClient?
@@ -33,6 +34,12 @@ final class AppModel {
     private(set) var relayState: RelayClient.State = .stopped
     private(set) var agents: [TokenRecord] = []
     private(set) var activity: [AuditEntry] = []
+    /// Agent id → usage counters (kept when the activity log is cleared).
+    private(set) var usage: [String: TokenUsage] = [:]
+    /// The selected tab, so screens can send the user to another one (Home's "See all").
+    var tab: RootView.Tab = .home
+    /// Activity's filters, so other screens can open it preset (an agent's "See all").
+    var activityQuery = ActivityQuery()
     private(set) var pairings: [PairingPrompt] = []
     private(set) var approvals: [ApprovalPrompt] = []
     private(set) var runningCalls = 0
@@ -135,6 +142,7 @@ final class AppModel {
         }
         self.identity = identity
         audit = AuditLog(file: JSONFile(name: "activity.json"))
+        usageStore = UsageStore(file: JSONFile(name: "usage.json"))
         do {
             tokens = try TokenManager(store: JSONFile(name: "agents.json"), deviceId: identity.deviceId)
         } catch let e {
@@ -175,6 +183,10 @@ final class AppModel {
         activity = audit.all
         tokens.onChange = { [weak self] list in Task { @MainActor in self?.agents = list } }
         audit.onChange = { [weak self] list in Task { @MainActor in self?.activity = list } }
+        usage = usageStore.all
+        let usageStore = usageStore
+        audit.onRecord = { usageStore.record($0) }
+        usageStore.onChange = { [weak self] all in Task { @MainActor in self?.usage = all } }
         let flag = accessEnabledFlag
         server = McpServer(tools: ToolCatalog.all(), tokens: tokens, audit: audit, confirmations: self,
                            instructions: AgentInstructions.text, serverVersion: AppInfo.version,
@@ -366,6 +378,7 @@ final class AppModel {
     func didEnterBackground() {
         isInForeground = false
         audit.flush()
+        usageStore.flush()
         guard backgroundTask == .invalid else { return }
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "DroidHands relay") { [weak self] in
             // iOS calls this on the main thread and expects the task to end before it returns.
@@ -478,8 +491,9 @@ final class AppModel {
 
     // MARK: Agents
 
-    func issueManualToken(name: String, grant: GrantDraft) throws -> String {
-        let (_, plaintext) = try tokens.issue(name: name, scopes: grant.scopes, confirmPolicy: grant.confirmPolicy, origin: "manual")
+    func issueManualToken(name: String, grant: GrantDraft, expiresIn: TimeInterval? = nil) throws -> String {
+        let (_, plaintext) = try tokens.issue(name: name, scopes: grant.scopes, confirmPolicy: grant.confirmPolicy, origin: "manual",
+                                              expiresIn: expiresIn)
         return plaintext
     }
 
@@ -500,7 +514,21 @@ final class AppModel {
 
     func delete(_ id: String) {
         try? tokens.delete(id)
+        usageStore.remove(id)
         server.cancelCalls(tokenId: id, reason: .deleted)
+    }
+
+    /// Clears the activity log; usage totals per agent stay.
+    func clearActivity() {
+        audit.clear()
+        activityQuery = ActivityQuery()
+        showBanner("Activity log cleared")
+    }
+
+    /// Opens Activity filtered to one agent (nil: every agent).
+    func openActivity(agent: String? = nil) {
+        activityQuery = ActivityQuery(agent: agent)
+        tab = .activity
     }
 
     func revokeAll() {
@@ -515,6 +543,7 @@ final class AppModel {
         stop()
         server.cancelCalls(reason: .deleted)
         try? tokens.deleteAll()
+        usageStore.clear()
         if let fresh = try? IdentityStore.reset() {
             identity = fresh
             if let manager = try? TokenManager(store: JSONFile(name: "agents.json"), deviceId: fresh.deviceId) { tokens = manager }

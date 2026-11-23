@@ -233,19 +233,29 @@ struct ConnectView: View {
 
 /// Makes a token by hand; its secret is shown once.
 struct ManualTokenView: View {
+    /// "Claude", or "Claude 2", "Claude 3"… when taken.
+    private var defaultName: String {
+        let taken = Set(model.agents.map { $0.name.lowercased() })
+        if !taken.contains("claude") { return "Claude" }
+        return (2...).lazy.map { "Claude \($0)" }.first { !taken.contains($0.lowercased()) }!
+    }
+
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var grant = GrantDraft()
+    @State private var expiry = ExpiryChoice.never
     @State private var token: String?
     @State private var error: String?
+    @State private var copied = false
+    @State private var confirmLeave = false
 
     var body: some View {
         NavigationStack {
             Form {
                 if let token {
                     Section {
-                        CopyableCode(text: token, label: "Copy token")
+                        CopyableCode(text: token, label: "Copy token") { copied = true }
                     } header: {
                         Text("Token for \(name)")
                     } footer: {
@@ -253,7 +263,7 @@ struct ManualTokenView: View {
                     }
                     if let url = model.connectURL {
                         Section {
-                            CopyableCode(text: AgentPrompt.withToken(url, token: token), label: "Copy message")
+                            CopyableCode(text: AgentPrompt.withToken(url, token: token), label: "Copy message") { copied = true }
                         } header: {
                             Text("Send this to your agent")
                         } footer: {
@@ -263,17 +273,36 @@ struct ManualTokenView: View {
                 } else {
                     Section("Name") { TextField("e.g. My laptop", text: $name) }
                     GrantEditor(grant: $grant)
+                    Section {
+                        Picker("Expires", selection: $expiry) {
+                            ForEach(ExpiryChoice.allCases) { Text($0 == .never ? "Never" : "In \($0.rawValue)").tag($0) }
+                        }
+                    } footer: {
+                        Text("After that the agent can't act until you pick a new expiry on its page.")
+                    }
                     if let error { Section { Text(error).foregroundStyle(Palette.error) } }
                 }
             }
-            .navigationTitle("Token")
+            .navigationTitle(token == nil ? "New token" : "Token created")
             .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(token != nil && !copied)
+            .onAppear { if name.isEmpty { name = defaultName } }
+            .confirmationDialog("Leave without copying?", isPresented: $confirmLeave, titleVisibility: .visible) {
+                Button("Leave", role: .destructive) { dismiss() }
+                Button("Stay", role: .cancel) {}
+            } message: {
+                Text("The token can't be shown again; you'd have to create a new one.")
+            }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(token == nil ? "Cancel" : "Done") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(token == nil ? "Cancel" : "Done") {
+                        if token != nil && !copied { confirmLeave = true } else { dismiss() }
+                    }
+                }
                 if token == nil {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Create") {
-                            do { token = try model.issueManualToken(name: name, grant: grant) } catch { self.error = error.localizedDescription }
+                            do { token = try model.issueManualToken(name: name, grant: grant, expiresIn: expiry.interval) } catch { self.error = error.localizedDescription }
                         }
                         .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || grant.error != nil)
                     }

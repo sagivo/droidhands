@@ -74,12 +74,37 @@ struct HomeView: View {
                     }
                 }
 
-                let today = model.activity.filter { Calendar.current.isDateInToday($0.timestamp) && $0.method == "tools/call" }
-                if !today.isEmpty {
+                let today = TodaySummary(activity: model.activity, usage: model.usage)
+                if !model.activeAgents.isEmpty || today.actions > 0 {
                     Section {
-                        ForEach(today.prefix(4)) { ActivityRow(entry: $0) }
+                        Button(action: openAgents) { TodayTiles(summary: today) }
+                            .buttonStyle(.plain)
                     } header: {
-                        Text("Today · \(today.count) action\(today.count == 1 ? "" : "s")")
+                        Text("Today")
+                    } footer: {
+                        Text(today.sentence)
+                    }
+                }
+
+                Section {
+                    let recent = model.activity.prefix(5)
+                    if recent.isEmpty {
+                        Text("Nothing yet. Every request from an agent will show up here.").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(recent) { entry in
+                            Button { model.openActivity() } label: { ActivityRow(entry: entry, smartTime: true) }
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text("Recent activity")
+                        Spacer()
+                        if !model.activity.isEmpty {
+                            Button("See all") { model.openActivity() }
+                                .font(.subheadline)
+                                .textCase(nil)
+                        }
                     }
                 }
             }
@@ -132,5 +157,59 @@ struct StatusHero: View {
         if running > 0 { return "An agent is working now." }
         if case .stopped = state { return "Connect to DroidHands or your own relay to go online." }
         return state.detail ?? (state.isConnected ? "Agents you allowed can reach this iPhone." : "Waiting for the relay.")
+    }
+}
+
+/// Today's numbers on Home: actions, agents that acted, and how many were denied or failed.
+struct TodaySummary {
+    var actions = 0
+    var agents = 0
+    var denied = 0
+    var failed = 0
+
+    init(activity: [AuditEntry], usage: [String: TokenUsage], now: Date = Date()) {
+        let today = activity.filter { $0.method == "tools/call" && $0.tokenId != nil && Calendar.current.isDate($0.timestamp, inSameDayAs: now) }
+        var perAgent: [String: Int] = [:]
+        for e in today { perAgent[e.tokenId!, default: 0] += 1 }
+        // The log may have been cleared today; the usage counters still know.
+        for (id, u) in usage where u.calls(on: now) > (perAgent[id] ?? 0) { perAgent[id] = u.calls(on: now) }
+        actions = perAgent.values.reduce(0, +)
+        agents = perAgent.filter { $0.value > 0 }.count
+        denied = today.filter { $0.outcome.category == .denied }.count
+        failed = today.filter { $0.outcome.category == .error }.count
+    }
+
+    /// "23 actions by 2 agents · 1 denied · 1 failed".
+    var sentence: String {
+        guard actions > 0 else { return "No agent activity today." }
+        var s = "\(actions) action\(actions == 1 ? "" : "s") by \(agents) agent\(agents == 1 ? "" : "s")"
+        if denied > 0 { s += " · \(denied) denied" }
+        if failed > 0 { s += " · \(failed) failed" }
+        return s
+    }
+}
+
+private struct TodayTiles: View {
+    let summary: TodaySummary
+
+    var body: some View {
+        HStack(spacing: 0) {
+            tile(summary.actions, "actions", .primary)
+            Divider()
+            tile(summary.agents, summary.agents == 1 ? "agent" : "agents", .primary)
+            Divider()
+            tile(summary.denied + summary.failed, "denied or failed", summary.denied + summary.failed > 0 ? Palette.error : .primary)
+        }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+    }
+
+    private func tile(_ value: Int, _ label: String, _ color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value.compact).font(.title2.weight(.semibold)).foregroundStyle(color).monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
