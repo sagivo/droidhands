@@ -269,7 +269,7 @@ private fun RelaySection(
                 modifier = Modifier.fillMaxWidth(),
             )
             validation.relayUrlWarning?.let { Notice(it, kind = NoticeKind.DANGER) }
-            if (usingDefault) Notice(DEFAULT_RELAY_NOTE, title = "The relay this app comes with")
+            if (usingDefault) Notice(DEFAULT_RELAY_NOTE, title = "The relay this app comes with", icon = Icons.Filled.Lock)
             OutlinedTextField(
                 value = form.relayAccessKey,
                 onValueChange = { v -> edit { it.copy(relayAccessKey = v) } },

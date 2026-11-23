@@ -360,7 +360,19 @@ struct OnboardingView: View {
                 }
                 .listRowBackground(Color.clear)
 
-                if !connected {
+                if connected {
+                    let secure = model.settings.relayURL.lowercased().hasPrefix("https://")
+                    Section {
+                        TileRow(
+                            symbol: secure ? "lock.fill" : "checkmark.circle.fill",
+                            color: Palette.ok,
+                            title: "Online through \(host)",
+                            subtitle: secure ? "Encrypted connection" : nil
+                        ) {
+                            StatusPill(text: "Live", color: Palette.ok, dot: true)
+                        }
+                    }
+                } else {
                     Section {
                         TileRow(
                             symbol: "antenna.radiowaves.left.and.right",
@@ -376,7 +388,7 @@ struct OnboardingView: View {
                 }
 
                 Section {
-                    Notice(kind: .info, title: "About the relay", message: AccountCopy.defaultRelayNote)
+                    Notice(kind: .info, title: "Safe by default", message: AccountCopy.defaultRelayNote, symbol: "lock.fill")
                 }
                 .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
 
@@ -387,6 +399,7 @@ struct OnboardingView: View {
                 .listRowBackground(Color.clear)
             } else if connected {
                 let host = RelayURLs.host(of: model.settings.relayURL) ?? "your relay"
+                let secure = model.settings.relayURL.lowercased().hasPrefix("https://")
                 Section {
                     OnboardingHeader(
                         symbol: "checkmark.circle.fill",
@@ -398,7 +411,12 @@ struct OnboardingView: View {
                 .listRowBackground(Color.clear)
 
                 Section {
-                    TileRow(symbol: "checkmark.circle.fill", color: Palette.ok, title: "Connected to \(host)") {
+                    TileRow(
+                        symbol: secure ? "lock.fill" : "checkmark.circle.fill",
+                        color: Palette.ok,
+                        title: "Connected to \(host)",
+                        subtitle: secure ? "Encrypted connection" : nil
+                    ) {
                         StatusPill(text: "Live", color: Palette.ok, dot: true)
                     }
                 }

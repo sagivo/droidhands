@@ -99,11 +99,12 @@ fun Notice(
     modifier: Modifier = Modifier,
     kind: NoticeKind = NoticeKind.INFO,
     title: String? = null,
+    icon: ImageVector? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
     val colors = statusColors()
     val scheme = MaterialTheme.colorScheme
-    val (tint, icon: ImageVector) = when (kind) {
+    val (tint, defaultIcon: ImageVector) = when (kind) {
         NoticeKind.INFO -> scheme.primary to Icons.Filled.Info
         NoticeKind.WARNING -> colors.warning to Icons.Filled.Warning
         NoticeKind.DANGER -> colors.error to Icons.Filled.Warning
@@ -114,7 +115,7 @@ fun Notice(
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+            Icon(icon ?: defaultIcon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
                 Text(text, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurface)

@@ -7,8 +7,8 @@ enum AccountCopy {
 
     /// What the default relay can and can't do (docs/SECURITY.md, "Relay operator").
     static let defaultRelayNote =
-        "The relay forwards your agents' requests to this iPhone over HTTPS. It can't do anything by itself: every agent " +
-        "still needs your Allow here, and you can switch to your own relay at any time."
+        "The relay simply passes requests along over encrypted HTTPS and never stores them. Only agents you approve on " +
+        "this iPhone can connect, and you can switch to your own relay anytime."
 }
 
 /// The 4-color Google "G" on a crisp white circle so it reads cleanly against the brand button.

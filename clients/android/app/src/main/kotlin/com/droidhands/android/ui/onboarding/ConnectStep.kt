@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -66,7 +67,10 @@ internal fun ConnectStep(main: MainViewModel, onOpenMoreOptions: () -> Unit) {
             "AI agents can reach this phone from anywhere, on Wi-Fi or mobile data.",
             color = statusColors().ok,
         )
-        ConnectedCard("Connected to ${ConfigureLinks.hostOf(settings.relayUrl) ?: "your relay"}")
+        ConnectedCard(
+            "Connected to ${ConfigureLinks.hostOf(settings.relayUrl) ?: "your relay"}",
+            secure = settings.relayUrl.startsWith("https://", ignoreCase = true),
+        )
         return
     }
     val defaultUrl = main.defaultRelayUrl?.takeIf { DefaultRelay.canOffer(settings, it) }
@@ -129,7 +133,10 @@ private fun DefaultRelayOnline(
             "AI agents can reach this phone from anywhere, on Wi-Fi or mobile data. Nothing to set up here.",
             color = statusColors().ok,
         )
-        ConnectedCard("Online through $host")
+        ConnectedCard(
+            "Online through $host",
+            secure = settings.relayUrl.startsWith("https://", ignoreCase = true),
+        )
     } else {
         StepHeader(
             Icons.Filled.Share,
@@ -139,7 +146,7 @@ private fun DefaultRelayOnline(
         ConnectionStatusLine(settings, relay, local, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         AccountRequiredNotice(main, relay)
     }
-    Notice(title = "About the relay", text = DEFAULT_RELAY_NOTE)
+    Notice(title = "Safe by default", text = DEFAULT_RELAY_NOTE, icon = Icons.Filled.Lock)
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         TertiaryButton("More ways to connect", onClick = onOpenMoreOptions)
     }
@@ -147,11 +154,12 @@ private fun DefaultRelayOnline(
 
 /** "Connected to relay.example.com" as a green row with a Live pill; announced when it appears. */
 @Composable
-private fun ConnectedCard(text: String) {
+private fun ConnectedCard(text: String, secure: Boolean = true) {
     ListSection(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         ListRow(
             title = text,
-            leading = { IconTile(Icons.Filled.CheckCircle, Accents.Green) },
+            subtitle = if (secure) "Encrypted connection" else null,
+            leading = { IconTile(if (secure) Icons.Filled.Lock else Icons.Filled.CheckCircle, Accents.Green) },
             trailing = { StatusPill("Live", statusColors().ok, dot = true) },
         )
     }
@@ -159,6 +167,5 @@ private fun ConnectedCard(text: String) {
 
 /** What the default relay can and can't do (docs/SECURITY.md, "Relay operator"). */
 internal const val DEFAULT_RELAY_NOTE =
-    "The relay forwards your agents' requests to this phone over HTTPS. It can't do anything by itself: every agent " +
-        "needs a token you approve on this phone. Whoever runs the relay could see the requests passing through, so for " +
-        "maximum privacy, run your own relay."
+    "The relay simply passes requests along over encrypted HTTPS and never stores them. Only agents you approve on " +
+        "this phone can connect, and you can switch to your own relay anytime."

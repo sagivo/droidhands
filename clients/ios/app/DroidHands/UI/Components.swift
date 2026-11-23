@@ -126,15 +126,16 @@ struct Notice<Action: View>: View {
     let kind: Kind
     let title: String
     var message: String?
+    var symbol: String? = nil
     @ViewBuilder var action: () -> Action
 
     private var color: Color { kind == .info ? Palette.brand : kind == .warning ? Palette.warning : Palette.error }
-    private var symbol: String { kind == .info ? "info.circle.fill" : "exclamationmark.triangle.fill" }
+    private var resolvedSymbol: String { symbol ?? (kind == .info ? "info.circle.fill" : "exclamationmark.triangle.fill") }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: symbol).foregroundStyle(color)
+                Image(systemName: resolvedSymbol).foregroundStyle(color)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.subheadline.weight(.semibold))
                     if let message { Text(message).font(.subheadline).foregroundStyle(.secondary) }
@@ -149,8 +150,8 @@ struct Notice<Action: View>: View {
 }
 
 extension Notice where Action == EmptyView {
-    init(kind: Kind, title: String, message: String? = nil) {
-        self.init(kind: kind, title: title, message: message) { EmptyView() }
+    init(kind: Kind, title: String, message: String? = nil, symbol: String? = nil) {
+        self.init(kind: kind, title: title, message: message, symbol: symbol) { EmptyView() }
     }
 }
 
