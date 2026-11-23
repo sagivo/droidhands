@@ -5,7 +5,9 @@
 #      https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk always serves the
 #      newest one), plus SHA256SUMS;
 #   2. the relay image ghcr.io/sagivo/droidhands-relay:1.2.3 and :latest;
-#   3. the Android App Bundle on Google Play (production track unless the variable PLAY_TRACK says otherwise);
+#   3. the Android App Bundle on Google Play (production track unless the variable PLAY_TRACK says otherwise),
+#      only while the variable PLAY_PUBLISH is true: paused since Play rejected the app under its Accessibility
+#      API policy (2026-11-23), so new builds don't pile up rejections on the developer account;
 #   4. the iPhone app on App Store Connect, submitted for App Review and released once Apple approves it
 #      (TestFlight only when the variable APP_STORE_SUBMIT is false).
 #
@@ -208,6 +210,7 @@ jobs:
   google-play:
     name: Google Play
     needs: apk
+    if: vars.PLAY_PUBLISH == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

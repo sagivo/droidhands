@@ -113,6 +113,11 @@ account may release it), add these secrets next to the four `ANDROID_*` signing 
 The `ANDROID_*` key is the Play *upload* key. Optional variable `PLAY_TRACK`: `internal`, `alpha` or `beta`
 instead of `production`.
 
+Google Play publishing is **off** unless the repository variable `PLAY_PUBLISH` is `true`
+(`gh variable set PLAY_PUBLISH --body true`). It was paused on 2026-11-23, when Play rejected the app under its
+Accessibility API policy ("cannot be requested for performing autonomous tasks"); turn it back on only for a
+build that complies, since every rejected upload counts against the developer account.
+
 ### App Store
 
 After the one-time setup below (API key, bundle id, the app in App Store Connect, and for the first version
