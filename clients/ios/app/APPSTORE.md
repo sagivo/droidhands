@@ -129,7 +129,15 @@ hashing, which are exempt. No questionnaire appears on upload.
 
 ## Screenshots
 
-`scripts/ios-app.sh screenshots --simulator <6.9" iPhone UDID> --relay http://127.0.0.1:8788` with a local relay
-whose `PUBLIC_URL` is `https://connect.droidhands.com` (so the connection URL on screen is the real one). Use
-`1-home`, `2-connect`, `3-agents`, `5-access` and `6-activity`, after pairing an agent named "Claude" and making a
-few calls, so the lists aren't empty.
+On an iPhone 6.9" simulator (iPhone 17 Pro Max, 1320 × 2868) connected to the default relay, without accounts like
+the store build:
+
+1. `DROIDHANDS_API_URL= scripts/ios-app.sh run --simulator <UDID>`, grant Calendar, Reminders, Contacts and Location
+   (`xcrun simctl privacy <UDID> grant calendar com.droidhands.ios`, …), and set the status bar
+   (`xcrun simctl status_bar <UDID> override --time 9:41 --batteryState charged --batteryLevel 100`).
+2. Relaunch with `SIMCTL_CHILD_DH_SKIP_ONBOARDING=1 SIMCTL_CHILD_DH_TEST_TOKEN_NAME=Claude` (then `ChatGPT`) to make
+   two agents; each token lands in the app's `Documents/test-token.txt`. Make a few calls with them (device status,
+   add a calendar event and a reminder, list them, location) so the lists aren't empty.
+3. `DROIDHANDS_API_URL= scripts/ios-app.sh screenshots --simulator <UDID>`.
+
+The listing uses `1-home`, `2-connect`, `3-agents`, `4-agent`, `5-access` and `6-activity`.
