@@ -47,6 +47,8 @@ struct PairingSheet: View {
                     Text("How this agent appears in DroidHands.")
                 }
                 GrantEditor(grant: $grant)
+                AIDisclosureSection(agent: AIDisclosure.agentLabel(name: r.clientName, host: r.viaAgent ? nil : r.redirectHost),
+                                    scopes: grant.scopes, button: "Allow")
                 Section {
                     LabeledContent(r.viaAgent ? "Signed in" : "Website", value: r.viaAgent ? "In the agent's chat" : r.redirectHost)
                     if let ip = r.remoteAddress { LabeledContent("Requested from", value: ip) }
@@ -127,6 +129,25 @@ struct GrantEditor: View {
             Toggle("Ask me before it sends messages, calls or runs shortcuts", isOn: $grant.askBeforeSensitive)
         } footer: {
             Text(grant.askBeforeSensitive ? "DroidHands asks you on this iPhone before each of these." : "Inside its access the agent acts without asking. You can pause or revoke it any time.")
+        }
+    }
+}
+
+/// "Shared with a third-party AI": what reaches the agent and that the named button is the consent (5.1.2(i)).
+struct AIDisclosureSection: View {
+    let agent: String
+    let scopes: Set<String>
+    let button: String
+
+    var body: some View {
+        Section {
+            Label {
+                Text(AIDisclosure.text(agent: agent, scopes: scopes, button: button)).font(.subheadline)
+            } icon: {
+                Image(systemName: "sparkles").foregroundStyle(.purple)
+            }
+        } header: {
+            Text("Shared with a third-party AI")
         }
     }
 }

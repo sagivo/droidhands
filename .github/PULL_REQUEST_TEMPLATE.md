@@ -24,7 +24,7 @@
 
 <!-- For changes outside plugins/. Delete what doesn't apply. -->
 
-- [ ] Tests pass: `./gradlew :core:test :app:testDebugUnitTest :app:assembleDebug` (in `clients/android`) and/or
+- [ ] Tests pass: `./gradlew :core:test :app:testFullDebugUnitTest :app:testStoreDebugUnitTest :app:assembleDebug` (in `clients/android`) and/or
       `npm test` (in `relay`).
 - [ ] New pure logic has unit tests.
 - [ ] Security still fails closed: scopes, app access, approvals, pause / revoke stop checks and the audit log

@@ -92,6 +92,23 @@ final class TokenTests: XCTestCase {
         XCTAssertEqual(r.scopes, [Scopes.location, Scopes.calls])
         XCTAssertEqual(GrantDraft(record: GrantDraft().applied(to: r)).mode, .everything)
     }
+
+    func testAIDisclosureNamesAgentAndData() {
+        let agent = AIDisclosure.agentLabel(name: "Claude", host: "claude.ai")
+        XCTAssertEqual(agent, "Claude (claude.ai)")
+        XCTAssertEqual(AIDisclosure.agentLabel(name: "Claude", host: nil), "Claude")
+        XCTAssertEqual(AIDisclosure.agentLabel(name: "localhost", host: "localhost"), "localhost")
+        XCTAssertEqual(
+            AIDisclosure.text(agent: agent, scopes: Scopes.all, button: "Allow"),
+            "Data from this iPhone (contacts, calendar events and reminders, your location, battery and device status and " +
+                "what your shortcuts return), what you ask it to do and the results of its actions will be sent to Claude " +
+                "(claude.ai), a third-party AI service, which handles it under its own privacy policy. DroidHands sends it " +
+                "only when the agent asks, and only within the access above. Tap Allow only if you agree."
+        )
+        XCTAssertEqual(AIDisclosure.dataShared([Scopes.calls, Scopes.messagesSend]), [])
+        XCTAssertTrue(AIDisclosure.text(agent: "X", scopes: [Scopes.calls], button: "Create")
+            .hasPrefix("What you ask it to do, and the results of its actions, will be sent to X"))
+    }
 }
 
 final class McpServerTests: XCTestCase {

@@ -31,7 +31,8 @@ an optional leading `+`, and spacing or punctuation). USSD/MMI codes containing 
 
 ## Platforms
 
-Android has every tool below except those marked iPhone only. **DroidHands for iPhone** (the App Store app,
+Android's full edition has every tool below except those marked iPhone only; the Google Play (store) edition has
+all of them except the Screen tools ([EDITIONS.md](EDITIONS.md)). **DroidHands for iPhone** (the App Store app,
 [IOS.md](IOS.md#droidhands-for-iphone-the-app-store-app)) has `bridge_capabilities`, `device_status`,
 `flashlight_set`, `clipboard_set`, `speak`, `url_open`, `contacts_search`, `sms_send` (the user taps Send in the
 message composer), `phone_call` (the user taps Call), `call_status`, `calendar_list`, `calendar_events_list`,
@@ -198,6 +199,9 @@ message without a tap, control HomeKit, run other apps' App Intents).
 | `location_get` | READ | `accuracy`: `high\|balanced` (default balanced), `timeout_seconds` (default 20), `address` bool (reverse-geocode) → `{latitude,longitude,accuracy_m,time,provider,address?}` |
 
 ## Screen — scopes `screen.read`, `screen.control`
+
+Full Android edition and the Mac-hosted iPhone route only ([EDITIONS.md](EDITIONS.md)): the Google Play edition has
+no accessibility service, so these tools aren't registered there.
 
 Generic control of **any** app through the platform's accessibility layer: "phone use", like browser use. The agent
 looks (`screen_observe`: a screenshot with each actionable element boxed and numbered, plus those elements with refs),

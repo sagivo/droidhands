@@ -284,9 +284,10 @@ play_prepare() {
 
 android_build() {
   say "Building the Android App Bundle…"
-  local tasks=(:app:bundleRelease)
+  # The store edition (docs/EDITIONS.md): no accessibility service, so it meets Play's Accessibility API policy.
+  local tasks=(:app:bundleStoreRelease)
   if [ "$SKIP_TESTS" -eq 0 ]; then
-    tasks=(:core:test :core:checkPlugins :app:testDebugUnitTest "${tasks[@]}")
+    tasks=(:core:test :core:checkPlugins :app:testStoreDebugUnitTest "${tasks[@]}")
   fi
   # The in-app update check reads GitHub releases and points to an APK signed with another key; Play
   # installs must update through Play, so the Play build has the check off (no repository, no GITHUB_REPOSITORY).
@@ -300,7 +301,7 @@ android_build() {
       --console=plain
   ) || die "The Android build failed (see Gradle's output above)."
 
-  local built="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
+  local built="$ANDROID_DIR/app/build/outputs/bundle/storeRelease/app-store-release.aab"
   [ -f "$built" ] || die "Gradle finished but $built is missing."
   AAB="$OUT_DIR/DroidHands-$VERSION.aab"
   cp "$built" "$AAB"

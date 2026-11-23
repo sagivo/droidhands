@@ -1,5 +1,6 @@
 package com.droidhands.android.ui.grant
 
+import com.droidhands.android.Edition
 import com.droidhands.android.ui.apps.AppInfo
 import com.droidhands.android.ui.apps.AppSelection
 import com.droidhands.core.auth.Ability
@@ -113,10 +114,11 @@ object GrantPresentation {
         }
         return buildList {
             add("Apps: " + appsSummary(grant, labels))
-            val can = Ability.entries.filter { it in grant.abilities }.map { it.label } +
-                Ability.entries.filter { it in grant.partialAbilities }.map { "${it.label} (partly)" }
+            val offered = Ability.offered(Edition.PHONE_USE)
+            val can = offered.filter { it in grant.abilities }.map { it.label } +
+                offered.filter { it in grant.partialAbilities }.map { "${it.label} (partly)" }
             add("Can: " + can.ifEmpty { listOf("nothing") }.joinToString(", "))
-            val cannot = Ability.entries.filter { it !in grant.abilities && it !in grant.partialAbilities }.map { it.label }
+            val cannot = offered.filter { it !in grant.abilities && it !in grant.partialAbilities }.map { it.label }
             if (cannot.isNotEmpty()) add("Can't: " + cannot.joinToString(", "))
             capNotice(record.maxRisk)?.let { add(it.substringBefore(",") + ".") }
             add(askSummary(record.confirmPolicy) + ".")

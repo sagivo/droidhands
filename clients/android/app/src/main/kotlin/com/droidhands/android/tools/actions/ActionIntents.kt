@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.net.Uri
+import com.droidhands.android.Edition
 import com.droidhands.android.tools.support.Launcher
 import com.droidhands.android.tools.system.LaunchGate
 import com.droidhands.android.tools.system.queryIntentActivitiesCompat
@@ -57,10 +58,10 @@ internal object ActionIntents {
         throw IntegrationException(
             if (plan.retryWithoutBrowsable) {
                 "$appLabel can't open this link on this phone (maybe its app version doesn't support it), so nothing was " +
-                    "opened. App actions never open links in another app; use phone use (screen_observe, ui_tap) instead."
+                    "opened. App actions never open links in another app; use ${Edition.fallback()} instead."
             } else {
                 "$appLabel has no screen for this action on this phone (maybe its app version doesn't support it), so " +
-                    "nothing was opened. Use phone use (screen_observe, ui_tap) instead."
+                    "nothing was opened. Use ${Edition.fallback()} instead."
             },
         )
     }

@@ -446,16 +446,19 @@ struct AccessEditView: View {
     @State private var grant = GrantDraft()
 
     var body: some View {
-        Form { GrantEditor(grant: $grant) }
-            .navigationTitle("Access")
-            .onAppear { grant = GrantDraft(record: agent) }
-            .toolbar {
-                Button("Save") {
-                    model.update(agent.id) { $0 = grant.applied(to: $0) }
-                    dismiss()
-                }
-                .disabled(grant.error != nil || grant == GrantDraft(record: agent))
+        Form {
+            GrantEditor(grant: $grant)
+            AIDisclosureSection(agent: AIDisclosure.agentLabel(name: agent.name, host: agent.clientHost), scopes: grant.scopes, button: "Save")
+        }
+        .navigationTitle("Access")
+        .onAppear { grant = GrantDraft(record: agent) }
+        .toolbar {
+            Button("Save") {
+                model.update(agent.id) { $0 = grant.applied(to: $0) }
+                dismiss()
             }
+            .disabled(grant.error != nil || grant == GrantDraft(record: agent))
+        }
     }
 }
 

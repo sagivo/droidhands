@@ -117,5 +117,5 @@ To sign a release build on this computer instead:
 
   export PB_KEYSTORE_PATH="$OUT" PB_KEY_ALIAS="$ALIAS"
   export PB_KEYSTORE_PASSWORD="\$(cat "$PASSWORD_FILE")" PB_KEY_PASSWORD="\$(cat "$PASSWORD_FILE")"
-  (cd clients/android && ./gradlew :app:assembleRelease)
+  (cd clients/android && ./gradlew :app:assembleFullRelease)
 EOF

@@ -273,6 +273,7 @@ struct ManualTokenView: View {
                 } else {
                     Section("Name") { TextField("e.g. My laptop", text: $name) }
                     GrantEditor(grant: $grant)
+                    AIDisclosureSection(agent: "the AI agent that uses this token", scopes: grant.scopes, button: "Create")
                     Section {
                         Picker("Expires", selection: $expiry) {
                             ForEach(ExpiryChoice.allCases) { Text($0 == .never ? "Never" : "In \($0.rawValue)").tag($0) }

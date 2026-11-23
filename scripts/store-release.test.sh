@@ -33,8 +33,8 @@ cat >"$WORK/android/gradlew" <<'EOF'
 #!/usr/bin/env bash
 printf 'gradlew%s\n' "$(printf ' [%s]' "$@")" >>"$FAKE_LOG"
 printf 'env github_repository=[%s] keystore_password=[%s]\n' "${GITHUB_REPOSITORY:-}" "${PB_KEYSTORE_PASSWORD:-}" >>"$FAKE_LOG"
-mkdir -p app/build/outputs/bundle/release
-printf 'fake aab' >app/build/outputs/bundle/release/app-release.aab
+mkdir -p app/build/outputs/bundle/storeRelease
+printf 'fake aab' >app/build/outputs/bundle/storeRelease/app-store-release.aab
 EOF
 cat >"$WORK/bin/jarsigner" <<'EOF'
 #!/usr/bin/env bash
@@ -182,8 +182,8 @@ EXTRA_ENV=""
 if run 0 android --version 1.2.3 --build-only --relay-url https://relay.example.com; then
   expect_in "versionName" "$LOG" "[-Pdroidhands.versionName=1.2.3]"
   expect_in "versionCode is MAJOR*10000+MINOR*100+PATCH" "$LOG" "[-Pdroidhands.versionCode=10203]"
-  expect_in "builds the bundle" "$LOG" "[:app:bundleRelease]"
-  expect_in "runs the tests first" "$LOG" "[:core:test] [:core:checkPlugins] [:app:testDebugUnitTest] [:app:bundleRelease]"
+  expect_in "builds the bundle" "$LOG" "[:app:bundleStoreRelease]"
+  expect_in "runs the tests first" "$LOG" "[:core:test] [:core:checkPlugins] [:app:testStoreDebugUnitTest] [:app:bundleStoreRelease]"
   expect_in "requires release signing" "$LOG" "[-Pdroidhands.requireReleaseSigning=true]"
   expect_in "turns the GitHub update check off" "$LOG" "[-Pdroidhands.githubRepo=]"
   expect_in "default relay" "$LOG" "[-Pdroidhands.defaultRelayUrl=https://relay.example.com]"
@@ -198,7 +198,7 @@ if run 0 android --version 1.2.3 --build-only --relay-url https://relay.example.
 fi
 EXTRA_ENV="GITHUB_REPOSITORY=someone/else"
 if run 0 android --version 1.2.3 --build-only --skip-tests; then
-  expect_in "skip-tests drops the test tasks" "$LOG" "gradlew [:app:bundleRelease]"
+  expect_in "skip-tests drops the test tasks" "$LOG" "gradlew [:app:bundleStoreRelease]"
   expect_in "GITHUB_REPOSITORY is removed from Gradle's environment" "$LOG" "github_repository=[]"
   expect_in "warns about a missing relay" "$OUTPUT" "no default relay"
 fi

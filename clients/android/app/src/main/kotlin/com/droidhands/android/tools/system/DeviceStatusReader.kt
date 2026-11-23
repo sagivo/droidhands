@@ -12,6 +12,7 @@ import android.os.PowerManager
 import android.os.StatFs
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import com.droidhands.android.Edition
 import com.droidhands.android.access.BridgeAccessibilityService
 import com.droidhands.android.notify.BridgeNotificationListener
 import com.droidhands.android.tools.support.DeviceState
@@ -155,7 +156,7 @@ internal class DeviceStatusReader(private val context: Context) {
                 pm.packageInfoOrNull(pkg)?.applicationInfo?.loadLabel(pm)?.toString()
             }.getOrNull()?.let { put("foreground_app_label", it) }
         }
-        put("accessibility_enabled", accessibilityEnabled ?: accessibilityConnected)
+        if (Edition.PHONE_USE) put("accessibility_enabled", accessibilityEnabled ?: accessibilityConnected)
         runCatching { BridgeNotificationListener.isEnabled(context) }.getOrNull()?.let { put("notification_access", it) }
         runCatching { AudioControl(context).hasDndAccess() }.getOrNull()?.let { put("dnd_access", it) }
     }

@@ -58,7 +58,24 @@ enum class Ability(val label: String, val description: String, val phrase: Strin
     ),
     ;
 
+    /** Only phone use: not offered on a device without it (the Android store edition). */
+    val phoneUseOnly: Boolean get() = scopes.all { it in Scopes.PHONE_USE }
+
+    /** The scopes that count on a device with or without phone use. */
+    fun effectiveScopes(phoneUse: Boolean): Set<String> = if (phoneUse) scopes else scopes - Scopes.PHONE_USE
+
+    /** [description] for a device with or without phone use. */
+    fun description(phoneUse: Boolean): String =
+        if (!phoneUse && this == USE_APPS) "Open the allowed apps and links, and run their actions." else description
+
+    /** [phrase] for a device with or without phone use. */
+    fun phrase(phoneUse: Boolean): String =
+        if (!phoneUse && this == USE_APPS) "use apps (open them and run their actions)" else phrase
+
     companion object {
+        /** The abilities a device offers: all of them, or without the phone-use-only ones. */
+        fun offered(phoneUse: Boolean): List<Ability> = if (phoneUse) entries else entries.filterNot { it.phoneUseOnly }
+
         /** The ability [scope] belongs to, or null for "" and unknown scopes. */
         fun of(scope: String): Ability? = entries.firstOrNull { scope in it.scopes }
 

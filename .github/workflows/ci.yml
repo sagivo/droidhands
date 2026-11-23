@@ -41,7 +41,7 @@ jobs:
           packages: platform-tools
 
       - name: Unit tests, plugin checks and debug build
-        run: ./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleDebug --console=plain --stacktrace
+        run: ./gradlew :core:test :core:checkPlugins :app:testFullDebugUnitTest :app:testStoreDebugUnitTest :app:assembleDebug --console=plain --stacktrace
 
       - name: Upload test reports
         if: failure()

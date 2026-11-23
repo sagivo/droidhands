@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The accessibility service (phone use) exists only in the full edition (docs/EDITIONS.md). -->
+<resources>
+    <string name="accessibility_service_label">DroidHands agent control</string>
+    <string name="accessibility_service_description">Lets AI agents that YOU authorized in DroidHands read the screen and tap, type and scroll in apps on your behalf (for example pressing Send in WhatsApp). Every agent needs a token you created, actions are logged, and sensitive actions ask for your approval.</string>
+</resources>

@@ -1,6 +1,7 @@
 package com.droidhands.android.tools.notifications
 
 import android.content.Context
+import com.droidhands.android.Edition
 import com.droidhands.android.notify.ActionSelector
 import com.droidhands.android.notify.NotificationActions
 import com.droidhands.android.tools.system.LaunchNotes
@@ -28,9 +29,10 @@ internal fun notificationActionTool(context: Context): Tool {
         description = "Tap one of a notification's action buttons (e.g. \"Mark as read\", \"Archive\", \"Answer\"), chosen " +
             "by its title (case-insensitive) or by its index from notifications_list (use the index when titles are " +
             "blank). Actions that need typed text (can_reply=true) must use notification_reply instead. Some buttons " +
-            "open a screen (e.g. Gmail's Reply; result opens_screen=true): Android lets DroidHands open screens from the " +
-            "background only while its accessibility service is on, and the user sees them only when the phone is " +
-            "unlocked; the result's note says when that may have stopped it. Continue with screen_read / ui_* tools. " +
+            "open a screen (e.g. Gmail's Reply; result opens_screen=true): Android may block DroidHands from opening " +
+            "screens from the background " + (if (Edition.PHONE_USE) "unless its accessibility service is on" else "unless Display over other apps is allowed") +
+            ", and the user sees them only when the phone is unlocked; the result's note says when that may have stopped it. " +
+            (if (Edition.PHONE_USE) "Continue with screen_read / ui_* tools. " else "The user continues on that screen. ") +
             "Refused for apps blocked for this agent. The user may have to approve it on the phone.",
         scope = Scopes.NOTIFICATIONS_ACT,
         risk = Risk.SENSITIVE,

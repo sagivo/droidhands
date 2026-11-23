@@ -267,6 +267,7 @@ class McpServer(
             confirmPolicy = token.confirmPolicy,
             maxRisk = token.maxRisk,
             toolRules = token.toolRules,
+            phoneUse = Scopes.hasPhoneUse(registry),
         )
         AccessSummary.instructions(facts) { pkg -> runCatching { appLabel(pkg) }.getOrNull() }
     } catch (e: Exception) {

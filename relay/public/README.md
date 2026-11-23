@@ -6,7 +6,7 @@ file is picked up on the next page load; no restart needed. Without it, the page
 user to get the app from you.
 
 ```sh
-cp clients/android/app/build/outputs/apk/release/DroidHands-*.apk relay/public/droidhands.apk
+cp clients/android/app/build/outputs/apk/full/release/DroidHands-*.apk relay/public/droidhands.apk
 ```
 
 If the app is published on GitHub Releases, set `APK_URL` instead (for example

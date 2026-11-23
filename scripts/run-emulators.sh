@@ -106,11 +106,11 @@ open /Applications/Xcode.app/Contents/Applications/DeviceHub.app --args -alwaysS
 # 4. Fresh clean build + install + launch on Android
 echo "==> Clean building and installing fresh Android app..."
 adb -s "$ANDROID_SERIAL" uninstall com.droidhands.android >/dev/null 2>&1 || true
-(cd clients/android && ./gradlew :app:clean :app:assembleDebug \
+(cd clients/android && ./gradlew :app:clean :app:assembleFullDebug \
   -Pdroidhands.defaultRelayUrl="$DEFAULT_RELAY" \
   -Pdroidhands.apiUrl="$API_URL" \
   --console=plain -q)
-ANDROID_ARGS=(--serial "$ANDROID_SERIAL" --apk "$REPO_DIR/clients/android/app/build/outputs/apk/debug/app-debug.apk")
+ANDROID_ARGS=(--serial "$ANDROID_SERIAL" --apk "$REPO_DIR/clients/android/app/build/outputs/apk/full/debug/app-full-debug.apk")
 [ -z "$RELAY" ] || ANDROID_ARGS+=(--relay "$RELAY")
 ./scripts/setup-phone.sh "${ANDROID_ARGS[@]}"
 

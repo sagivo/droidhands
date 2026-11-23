@@ -24,7 +24,7 @@ readonly MIN_SDK=30
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANDROID_DIR="$REPO_ROOT/clients/android"
-DEFAULT_APK="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
+DEFAULT_APK="$ANDROID_DIR/app/build/outputs/apk/full/debug/app-full-debug.apk"
 MANIFEST="$ANDROID_DIR/app/src/main/AndroidManifest.xml"
 
 usage() {
@@ -264,8 +264,8 @@ if [ -z "$APK" ]; then
       export JAVA_HOME=/opt/homebrew/opt/openjdk@17
     fi
   fi
-  info "Building the debug APK (./gradlew :app:assembleDebug)…"
-  if (cd "$ANDROID_DIR" && ./gradlew :app:assembleDebug --console=plain -q); then
+  info "Building the debug APK (./gradlew :app:assembleFullDebug)…"
+  if (cd "$ANDROID_DIR" && ./gradlew :app:assembleFullDebug --console=plain -q); then
     APK="$DEFAULT_APK"
     record ok "Built $APK"
   else

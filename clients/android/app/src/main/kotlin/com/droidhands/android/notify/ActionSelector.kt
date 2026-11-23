@@ -1,11 +1,13 @@
 package com.droidhands.android.notify
 
+import com.droidhands.android.Edition
 import com.droidhands.core.tools.ToolException
 
 /** Picks the action a tool call refers to (pure). Failures are agent-readable [ToolException]s. */
 object ActionSelector {
-    const val NO_REPLY_ACTION =
-        "This notification has no reply action: open the app and reply with phone use (screen_observe, ui_type, ui_tap)."
+    val NO_REPLY_ACTION =
+        "This notification has no reply action: " +
+            if (Edition.PHONE_USE) "open the app and reply with phone use (screen_observe, ui_type, ui_tap)." else "ask the user to reply in the app."
 
     const val NO_ACTIONS =
         "This notification has no action buttons. Use notification_dismiss to clear it, or open the app with app_open."

@@ -14,7 +14,8 @@ tracking. We (the DroidHands project) never sell or share data, and we don't bui
   stored only as SHA-256 hashes. You can clear the activity log, revoke agents, or delete the app to remove all of it.
 - **To your agent.** What a tool returns (for example a calendar event or a contact's number) goes to the agent
   that asked, which is a service you chose (such as Claude or ChatGPT). Its own privacy policy applies to what it
-  does with that data.
+  does with that data. Before an agent gets any access, the screen that connects it names the agent, lists the data
+  its access lets it read, and shares nothing unless you tap Allow.
 - **Through the relay.** Requests and answers travel between your agent and your phone through a relay, over
   HTTPS and WebSocket (TLS). The default relay is run by the DroidHands project on Cloudflare Workers. It passes
   traffic through and does not store it: no request or answer bodies, tokens or secrets are logged. To route and

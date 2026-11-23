@@ -33,10 +33,17 @@ internal object AccessSummary {
         val confirmPolicy: ConfirmPolicy?,
         val maxRisk: Risk?,
         val toolRules: Map<String, ToolRule>,
+        /** Whether the device has phone use; without it, phone-use-only abilities and scopes don't count. */
+        val phoneUse: Boolean = true,
     ) {
-        val abilities: List<Ability> get() = Ability.entries.filter { a -> a.scopes.all { it in scopes } }
-        val partial: List<Ability> get() = Ability.entries.filter { a -> a.scopes.any { it in scopes } && !a.scopes.all { it in scopes } }
-        val missing: List<Ability> get() = Ability.entries.filter { a -> a.scopes.none { it in scopes } }
+        private fun Ability.own() = effectiveScopes(phoneUse)
+        private val offered get() = Ability.offered(phoneUse)
+        val abilities: List<Ability> get() = offered.filter { a -> a.own().all { it in scopes } }
+        val partial: List<Ability> get() = offered.filter { a -> a.own().any { it in scopes } && !a.own().all { it in scopes } }
+        val missing: List<Ability> get() = offered.filter { a -> a.own().none { it in scopes } }
+
+        /** [Ability.phrase] for this device. */
+        fun phrase(ability: Ability): String = ability.phrase(phoneUse)
         val asksFor: List<String> get() = toolRules.filterValues { it == ToolRule.ASK }.keys.sorted()
     }
 
@@ -47,7 +54,7 @@ internal object AccessSummary {
         append("- Apps: ").append(appsLine(facts.apps, label)).append('\n')
         append("- You may: ").append(abilitiesLine(facts)).append('\n')
         if (facts.missing.isNotEmpty()) {
-            append("- You may not: ").append(facts.missing.joinToString("; ") { it.phrase }).append(". Such requests are refused.\n")
+            append("- You may not: ").append(facts.missing.joinToString("; ") { facts.phrase(it) }).append(". Such requests are refused.\n")
         }
         facts.maxRisk?.let { append("- Limit: ").append(capLine(it)).append('\n') }
         facts.confirmPolicy?.let { append("- Approvals: ").append(approvalLine(it, facts.asksFor)).append('\n') }
@@ -57,9 +64,9 @@ internal object AccessSummary {
 
     /** `token.access` of bridge_capabilities. */
     fun json(facts: Facts): JsonObject = buildJsonObject {
-        putJsonArray("abilities") { facts.abilities.forEach { add(JsonPrimitive(it.phrase)) } }
-        if (facts.partial.isNotEmpty()) putJsonArray("partly") { facts.partial.forEach { add(JsonPrimitive(it.phrase)) } }
-        putJsonArray("not_allowed") { facts.missing.forEach { add(JsonPrimitive(it.phrase)) } }
+        putJsonArray("abilities") { facts.abilities.forEach { add(JsonPrimitive(facts.phrase(it))) } }
+        if (facts.partial.isNotEmpty()) putJsonArray("partly") { facts.partial.forEach { add(JsonPrimitive(facts.phrase(it))) } }
+        putJsonArray("not_allowed") { facts.missing.forEach { add(JsonPrimitive(facts.phrase(it))) } }
         facts.confirmPolicy?.let {
             put("asks_user_before", askScope(it))
             put("approvals", approvalLine(it, facts.asksFor))
@@ -88,8 +95,8 @@ internal object AccessSummary {
     }
 
     private fun abilitiesLine(facts: Facts): String {
-        val full = facts.abilities.map { it.phrase }
-        val partly = facts.partial.map { "partly ${it.phrase}" }
+        val full = facts.abilities.map { facts.phrase(it) }
+        val partly = facts.partial.map { "partly ${facts.phrase(it)}" }
         val all = full + partly
         return when {
             facts.missing.isEmpty() && facts.partial.isEmpty() -> "everything DroidHands offers (${all.joinToString("; ")})."

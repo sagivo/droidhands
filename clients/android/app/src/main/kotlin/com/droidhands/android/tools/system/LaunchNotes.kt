@@ -3,6 +3,7 @@ package com.droidhands.android.tools.system
 import android.app.ActivityManager
 import android.content.Context
 import android.provider.Settings
+import com.droidhands.android.Edition
 import com.droidhands.android.access.BridgeAccessibilityService
 import com.droidhands.android.tools.support.DeviceState
 
@@ -26,8 +27,13 @@ internal object LaunchNotes {
             }
             if (!canStartFromBackground(context)) {
                 add(
-                    "DroidHands's accessibility service is off, so Android may silently block opening apps from the " +
-                        "background. If nothing opened, ask the user to enable it in DroidHands app > Settings > Permissions & access > Accessibility.",
+                    if (Edition.PHONE_USE) {
+                        "DroidHands's accessibility service is off, so Android may silently block opening apps from the " +
+                            "background. If nothing opened, ask the user to enable it in DroidHands app > Settings > Permissions & access > Accessibility."
+                    } else {
+                        "Android may silently block opening apps from the background. If nothing opened, ask the user to allow " +
+                            "Display over other apps in DroidHands app > Settings > Permissions & access."
+                    },
                 )
             }
         }

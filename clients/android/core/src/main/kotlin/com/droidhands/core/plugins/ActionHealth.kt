@@ -77,9 +77,10 @@ class ActionHealth(private val store: ActionHealthStore? = null, private val clo
     }
 
     /** The sentence added to an action's error once it has failed on this app version. */
-    fun failureNote(app: InstalledApp, record: Record): String =
+    fun failureNote(app: InstalledApp, record: Record, phoneUse: Boolean = true): String =
         "(This action has now failed ${times(record.failures)} on ${app.label} ${versionLabel(app)} on this phone: the app " +
-            "probably changed. Do it with phone use instead: screen_observe, then ui_tap / ui_type.)"
+            "probably changed. " +
+            (if (phoneUse) "Do it with phone use instead: screen_observe, then ui_tap / ui_type.)" else "Ask the user to do it on the phone instead.)")
 
     private fun times(n: Int) = if (n == 1) "once" else "$n times in a row"
 

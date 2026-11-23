@@ -1,13 +1,14 @@
 # Publishes a release when a version tag is created: by publishing a release with a new tag v1.2.3 on GitHub
 # (Releases › Draft a new release), or with git tag v1.2.3 && git push origin v1.2.3:
 #
-#   1. a signed APK on the GitHub Release, as DroidHands-1.2.3.apk and DroidHands.apk (so
+#   1. the full edition's signed APK (docs/EDITIONS.md: with phone use) on the GitHub Release, as DroidHands-1.2.3.apk
+#      and DroidHands.apk (so
 #      https://github.com/sagivo/droidhands/releases/latest/download/DroidHands.apk always serves the
 #      newest one), plus SHA256SUMS;
 #   2. the relay image ghcr.io/sagivo/droidhands-relay:1.2.3 and :latest;
-#   3. the Android App Bundle on Google Play (production track unless the variable PLAY_TRACK says otherwise),
-#      only while the variable PLAY_PUBLISH is true: paused since Play rejected the app under its Accessibility
-#      API policy (2026-11-23), so new builds don't pile up rejections on the developer account;
+#   3. the store edition's App Bundle (no accessibility service, for Play's Accessibility API policy) on Google Play
+#      (production track unless the variable PLAY_TRACK says otherwise), only while the variable PLAY_PUBLISH is
+#      true (docs/RELEASING.md says when to turn it on);
 #   4. the iPhone app on App Store Connect, submitted for App Review and released once Apple approves it
 #      (TestFlight only when the variable APP_STORE_SUBMIT is false).
 #
@@ -108,7 +109,7 @@ jobs:
             echo "::notice::No repository variable DROIDHANDS_RELAY_URL: this release has no default relay, and users connect their own."
           fi
 
-      - name: Test and build the signed release APK
+      - name: Test both editions and build the full edition's signed release APK
         working-directory: clients/android
         env:
           PB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -118,7 +119,7 @@ jobs:
           DROIDHANDS_API_URL: ${{ vars.DROIDHANDS_API_URL }}
           # GITHUB_REPOSITORY (set by Actions) becomes BuildConfig.GITHUB_REPO for the in-app update check.
         run: >-
-          ./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleRelease
+          ./gradlew :core:test :core:checkPlugins :app:testFullDebugUnitTest :app:testStoreDebugUnitTest :app:assembleFullRelease
           -Pdroidhands.versionName=${{ steps.version.outputs.name }}
           -Pdroidhands.versionCode=${{ steps.version.outputs.code }}
           -Pdroidhands.requireReleaseSigning=true
@@ -128,7 +129,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.name }}
         run: |
-          apk="clients/android/app/build/outputs/apk/release/DroidHands-$VERSION.apk"
+          apk="clients/android/app/build/outputs/apk/full/release/DroidHands-$VERSION.apk"
           test -f "$apk" || { echo "::error::$apk was not built"; exit 1; }
           apksigner="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
           "$apksigner" verify --print-certs "$apk" | tee "$RUNNER_TEMP/certs.txt"

@@ -9,6 +9,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.annotation.WorkerThread
 import androidx.core.app.NotificationManagerCompat
+import com.droidhands.android.Edition
 import com.droidhands.android.access.BridgeAccessibilityService
 import com.droidhands.android.notify.BridgeNotificationListener
 import com.droidhands.android.tools.support.PermissionCatalog
@@ -49,7 +50,8 @@ internal object SetupChecks {
             )
         }
         add(backgroundLocation(context, asked, showRationale))
-        add(accessibility(context).withRestrictedHelp(source))
+        // Phone use only exists in the full edition (docs/EDITIONS.md).
+        if (Edition.PHONE_USE) add(accessibility(context).withRestrictedHelp(source))
         add(notificationAccess(context).withRestrictedHelp(source))
         add(battery(context))
         add(overlay(context))
@@ -166,7 +168,8 @@ internal object SetupChecks {
     private fun overlay(context: Context): SetupItem = SetupItem(
         id = SetupLogic.OVERLAY,
         title = "Display over other apps",
-        description = "Helps open apps from the background (opening apps, links and calls) when accessibility is off. " +
+        description = "Helps open apps from the background (opening apps, links and calls)" +
+            (if (Edition.PHONE_USE) " when accessibility is off. " else ". ") +
             "On the next screen, find DroidHands in the list and allow it.",
         unlocks = "Opening apps, links and calls from the background",
         essential = false,

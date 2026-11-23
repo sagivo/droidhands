@@ -159,6 +159,42 @@ struct GrantDraft: Equatable {
     }
 }
 
+/// The consent text shown before an agent gets access (App Store guideline 5.1.2(i)): which personal data the
+/// grant lets reach the agent, and that the agent is a third-party AI. The button it names is the consent.
+enum AIDisclosure {
+    /// The personal data [scopes] let an agent read, in plain words, in Ability order. Abilities that only act
+    /// (send, call, open links, add events) send the agent nothing of the user's.
+    static func dataShared(_ scopes: Set<String>) -> [String] {
+        var items: [String] = []
+        if scopes.contains(Scopes.contactsRead) || scopes.contains(Scopes.calendarRead) { items.append("contacts, calendar events and reminders") }
+        if scopes.contains(Scopes.location) { items.append("your location") }
+        if scopes.contains(Scopes.device) { items.append("battery and device status") }
+        if scopes.contains(Scopes.intents) { items.append("what your shortcuts return") }
+        return items
+    }
+
+    /// "Claude (claude.ai)", or just the name when the host is unknown or the same.
+    static func agentLabel(name: String, host: String?) -> String {
+        let n = GrantText.display(name)
+        guard let host, !host.isEmpty, host.caseInsensitiveCompare(n) != .orderedSame else { return n }
+        return "\(n) (\(host))"
+    }
+
+    static func text(agent: String, scopes: Set<String>, button: String) -> String {
+        let data = dataShared(scopes)
+        let what = data.isEmpty
+            ? "What you ask it to do, and the results of its actions,"
+            : "Data from this iPhone (\(list(data))), what you ask it to do and the results of its actions"
+        return "\(what) will be sent to \(agent), a third-party AI service, which handles it under its own privacy policy. " +
+            "DroidHands sends it only when the agent asks, and only within the access above. Tap \(button) only if you agree."
+    }
+
+    private static func list(_ items: [String]) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        return items.dropLast().joined(separator: ", ") + " and " + items.last!
+    }
+}
+
 /// Agent-facing refusals for requests outside an agent's grant. They are refused at once, never turned into a
 /// prompt; the text names what is missing and where the user can add it.
 enum GrantText {

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.provider.AlarmClock
+import com.droidhands.android.Edition
 import com.droidhands.android.tools.support.onMain
 import com.droidhands.android.tools.system.AudioControl
 import com.droidhands.android.tools.system.CalendarTime
@@ -63,7 +64,8 @@ private fun deviceStatus(context: Context) = tool(
     title = "Device status",
     description = "Snapshot of the phone: battery % and charging, model and Android version, screen on/locked, network " +
         "(wifi/cellular, validated, metered), ringer mode and Do Not Disturb, volumes per stream (%), time zone and local " +
-        "time, free storage, foreground app (needs accessibility), and which special accesses DroidHands has.",
+        "time, free storage, " + (if (Edition.PHONE_USE) "foreground app (needs accessibility), " else "") +
+        "and which special accesses DroidHands has.",
     scope = Scopes.DEVICE,
     risk = Risk.READ,
 ) { _, _ ->

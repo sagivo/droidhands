@@ -4,6 +4,11 @@ What to enter in the [Play Console](https://play.google.com/console) for `com.dr
 (account: hello@droidhands.com). Build and upload with `scripts/store-release.sh android --draft`
 ([docs/RELEASING.md](../../docs/RELEASING.md)).
 
+Play gets the **store edition** ([docs/EDITIONS.md](../../docs/EDITIONS.md)): it has no accessibility service, so
+agents can't read or tap other apps' screens. Play rejected the earlier builds on 2026-11-23 under its Accessibility
+API policy ("cannot be requested for performing autonomous tasks"). The listing must describe only what this edition
+does, and must not point users to the full edition on GitHub or droidhands.com.
+
 ## Create app
 
 | Field | Value |
@@ -31,8 +36,9 @@ What to enter in the [Play Console](https://play.google.com/console) for `com.dr
 > • add a meeting to your calendar, or tell you what's next
 > • set an alarm or a timer
 > • find where you are, or open directions
-> • open any app and do something in it, such as sending a WhatsApp message, by looking at the screen and tapping
->   like you would
+> • reply to WhatsApp, Telegram, Signal or Slack messages straight from their notifications, even with the phone
+>   locked
+> • open an app at the right place, for example a chat with your message already written, a song, a ride or a route
 >
 > SET UP IN A MINUTE
 > Paste your DroidHands connection URL into your agent as a custom connector, then tap Allow on your phone. That's
@@ -51,12 +57,6 @@ What to enter in the [Play Console](https://play.google.com/console) for `com.dr
 > No account, no analytics, no ads, no tracking. Requests travel from your agent to your phone through a relay that
 > stores nothing, or through your own relay or Tailscale. DroidHands is open source (Apache 2.0):
 > https://github.com/sagivo/droidhands
->
-> ABOUT ACCESSIBILITY
-> To let an agent use other apps on your behalf (read the screen, tap, type, scroll), DroidHands uses Android's
-> Accessibility Service API, only if you turn it on, and only for agents you have connected and allowed. It is not
-> used to collect data, and nothing it reads is stored or sent anywhere except back to the agent you allowed, in
-> answer to its request.
 
 ## Store settings
 
@@ -127,10 +127,8 @@ The Play review of these is where DroidHands is most likely to be rejected, so d
    declaration form with the core-functionality justification "lets the user's own AI agent send and read their
    texts and calls on their request" (expect a rejection), or remove these permissions and the `sms_*` and
    `call_log` tools from the Play build.
-2. **AccessibilityService**: the form asks whether the app is an accessibility tool. DroidHands isn't; it uses the
-   API to act for the user on their request. State this plainly. Complete the in-app *prominent disclosure* and
-   consent screen before the service is turned on (it must say what is read and why, and have an explicit Agree).
-   Play also asks for a short **video** showing the disclosure and enabling the service.
+2. **AccessibilityService**: none. The store edition declares no accessibility service. Remove the earlier
+   accessibility declaration in *Policy › App content*, since the bundle no longer needs it.
 3. **Foreground service, special use** (`BridgeService`): purpose "keeps the connection to the user's AI agent
    open while it is working". Provide the video of the user-visible notification.
 4. **Background location** (`ACCESS_BACKGROUND_LOCATION`): needs its own form and video; drop it from the Play

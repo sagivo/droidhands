@@ -45,10 +45,18 @@ private fun appActionsList(catalog: AppActionCatalog): Tool = tool(
         "Pass 'app' (the app's name, e.g. Spotify, or its package) for that app's actions, or 'query' (what you want to do, " +
         "e.g. \"play music\" or \"navigate home\") to search the actions of every installed app; both together search " +
         "within the app. apps_list shows each app's action ids. Actions come from what each installed app declares on this " +
-        "phone (plus community plugins checked against it), so they differ between phones and app versions. They are " +
-        "faster than phone use (screen_observe, ui_tap), which works for anything not listed; an action with " +
-        "available=false or a 'health' entry doesn't work on this phone right now, so use phone use for it. Only actions " +
-        "this agent may run are listed, and apps the user blocked for this agent never appear.",
+        "phone (plus community plugins checked against it), so they differ between phones and app versions. " +
+        (
+            if (catalog.platform.phoneUse) {
+                "They are faster than phone use (screen_observe, ui_tap), which works for anything not listed; an action " +
+                    "with available=false or a 'health' entry doesn't work on this phone right now, so use phone use for it. "
+            } else {
+                "This edition of DroidHands has no phone use (it can't read or tap other apps' screens), so a task no " +
+                    "action covers is left to the user; an action with available=false or a 'health' entry doesn't work on " +
+                    "this phone right now. "
+            }
+        ) +
+        "Only actions this agent may run are listed, and apps the user blocked for this agent never appear.",
     scope = Scopes.APPS,
     risk = Risk.READ,
     schema = objectSchema {
@@ -94,7 +102,8 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
         if (unmatched) add("No action of ${app.label} matched '$query'; these are all its actions.")
         if (shown.size < (if (unmatched) runnable.size else ranked.size)) add("More actions not shown; raise limit.")
         if (declares != null) {
-            add("'declares' lists what ${app.label} declares it can do that app actions can't start: do those with phone use.")
+            val how = if (catalog.platform.phoneUse) "do those with phone use" else "the user has to do those on the phone"
+            add("'declares' lists what ${app.label} declares it can do that app actions can't start: $how.")
         }
         if (!runner) {
             add("This agent may not run app actions (app_action_run is blocked for it or above its access level), so none are listed.")
@@ -107,7 +116,7 @@ private suspend fun listForApp(catalog: AppActionCatalog, appName: String, query
         put("package", app.packageName)
         put("integration", integration.id)
         plugins.firstOrNull()?.let { put("status", it.status.id) }
-        ActionText.integrationNote(integration, plugins.firstOrNull())?.let { put("note", it) }
+        ActionText.integrationNote(integration, plugins.firstOrNull(), catalog.platform.phoneUse)?.let { put("note", it) }
         putJsonArray("actions") { shown.forEach { a -> addJsonObject { describe(catalog, a, withApp = false) } } }
         if (shown.isNotEmpty()) put("how_to_run", ActionText.howToRun(app.packageName))
         declares?.let { put("declares", it) }
@@ -178,7 +187,8 @@ private fun JsonObjectBuilder.describe(catalog: AppActionCatalog, a: AppAction, 
                 put("status", if (record.failing) "failing" else "failed_last_time")
                 put("failures", record.failures)
                 put("last_error", record.lastError)
-                put("note", "Failed on ${a.app.label} ${catalog.health.versionLabel(a.app)} on this phone; prefer phone use (screen_observe) for this task.")
+                val instead = if (catalog.platform.phoneUse) "prefer phone use (screen_observe) for this task" else "ask the user to do this task on the phone"
+                put("note", "Failed on ${a.app.label} ${catalog.health.versionLabel(a.app)} on this phone; $instead.")
             },
         )
     }
@@ -200,7 +210,8 @@ internal class AppActionRunTool(private val catalog: AppActionCatalog) : Dispatc
             "matching the action's parameters). app_actions_list shows the actions and their parameters; apps_list shows " +
             "each app's action ids. Each action is checked and approved like a tool of its own (named <package>/<action>), " +
             "so it may need the user's approval on the phone. Actions with completes=false open the right screen and " +
-            "leave the last step to you (screen_observe, ui_tap) or the user. Apps the user blocked for this agent are refused."
+            (if (catalog.platform.phoneUse) "leave the last step to you (screen_observe, ui_tap) or the user. " else "leave the last step to the user. ") +
+            "Apps the user blocked for this agent are refused."
     override val scope = Scopes.APPS
     override val risk = Risk.ACTION
     override val inputSchema: JsonObject = objectSchema {
@@ -302,14 +313,14 @@ internal class AppActionTool(
         } catch (e: ToolException) {
             if (e is AppBlockedException || e is CallStoppedException) throw e
             val notes = listOfNotNull(
-                (e as? IntegrationException)?.let { health.failureNote(app, health.failed(app, action.id, it.message.orEmpty())) },
-                ActionText.failureNote(target.plugin),
+                (e as? IntegrationException)?.let { health.failureNote(app, health.failed(app, action.id, it.message.orEmpty()), platform.phoneUse) },
+                ActionText.failureNote(target.plugin, platform.phoneUse),
             )
             if (notes.isEmpty()) throw e
             throw ToolException((listOf(e.message.orEmpty().trimEnd()) + notes).joinToString(" "))
         }
         health.succeeded(app, action.id)
-        return ActionText.result(target, result)
+        return ActionText.result(target, result, platform.phoneUse)
     }
 }
 
@@ -409,39 +420,43 @@ internal object ActionText {
     private const val MAX_TYPED = 60
     private const val MAX_VALUE = 40
 
-    fun integrationNote(integration: Integration, plugin: AppPlugin?): String? = when {
+    fun integrationNote(integration: Integration, plugin: AppPlugin?, phoneUse: Boolean = true): String? = when {
         integration == Integration.LOCAL ->
             "Local plugin that the DroidHands project has not reviewed: the user must approve each of its actions on the phone."
         plugin?.status == PluginStatus.EXPERIMENTAL ->
-            "Community plugin, marked experimental: if an action fails or the result looks wrong, fall back to the screen tools " +
-                "(screen_observe, ui_tap)."
+            "Community plugin, marked experimental: if an action fails or the result looks wrong, " +
+                if (phoneUse) "fall back to the screen tools (screen_observe, ui_tap)." else "ask the user to check it on the phone."
         else -> null
     }
 
     /** Appended to failures of local and experimental plugin actions. */
-    fun failureNote(plugin: AppPlugin?): String? = when {
-        plugin == null -> null
-        plugin.source == PluginSource.LOCAL ->
-            "(${plugin.name} support comes from a local plugin that has not been reviewed: if this keeps failing, use the screen tools instead.)"
-        plugin.status == PluginStatus.EXPERIMENTAL ->
-            "(${plugin.name} support is an experimental community plugin: if this keeps failing, use the screen tools instead.)"
-        else -> null
+    fun failureNote(plugin: AppPlugin?, phoneUse: Boolean = true): String? {
+        val instead = if (phoneUse) "use the screen tools instead" else "ask the user to do it on the phone"
+        return when {
+            plugin == null -> null
+            plugin.source == PluginSource.LOCAL ->
+                "(${plugin.name} support comes from a local plugin that has not been reviewed: if this keeps failing, $instead.)"
+            plugin.status == PluginStatus.EXPERIMENTAL ->
+                "(${plugin.name} support is an experimental community plugin: if this keeps failing, $instead.)"
+            else -> null
+        }
     }
 
     /** Added to results of local and experimental plugin actions. */
-    private fun resultNote(plugin: AppPlugin?): String? = when {
-        plugin == null -> null
-        plugin.source == PluginSource.LOCAL ->
-            "${plugin.name} support comes from a local plugin that has not been reviewed. If the result looks wrong, check with " +
-                "screen_observe and fall back to the screen tools."
-        plugin.status == PluginStatus.EXPERIMENTAL ->
-            "${plugin.name} support is an experimental community plugin. If the result looks wrong, check with screen_observe and " +
-                "fall back to the screen tools."
-        else -> null
+    private fun resultNote(plugin: AppPlugin?, phoneUse: Boolean): String? {
+        val check = if (phoneUse) "check with screen_observe and fall back to the screen tools" else "ask the user to check it on the phone"
+        return when {
+            plugin == null -> null
+            plugin.source == PluginSource.LOCAL ->
+                "${plugin.name} support comes from a local plugin that has not been reviewed. If the result looks wrong, $check."
+            plugin.status == PluginStatus.EXPERIMENTAL ->
+                "${plugin.name} support is an experimental community plugin. If the result looks wrong, $check."
+            else -> null
+        }
     }
 
     /** The agent-facing result of a platform-run action. */
-    fun result(target: AppAction, result: ActionResult): ToolResult = ToolResult.json {
+    fun result(target: AppAction, result: ActionResult, phoneUse: Boolean = true): ToolResult = ToolResult.json {
         val action = target.action
         put("app", target.app.label)
         put("package", target.app.packageName)
@@ -455,10 +470,15 @@ internal object ActionText {
             put(
                 "next",
                 "${target.app.label} is open at the right place, but the task is not finished: someone still has to complete " +
-                    "it there. Use screen_observe to see the screen and ui_tap to finish it, or ask the user to finish it on the phone.",
+                    "it there. " +
+                    if (phoneUse) {
+                        "Use screen_observe to see the screen and ui_tap to finish it, or ask the user to finish it on the phone."
+                    } else {
+                        "Tell the user what is left to do on the phone (for example: tap Send); this edition of DroidHands can't tap in other apps."
+                    },
             )
         }
-        resultNote(target.plugin)?.let { put("integration_note", it) }
+        resultNote(target.plugin, phoneUse)?.let { put("integration_note", it) }
     }
 
     private val RESERVED = setOf("app", "package", "action", "done", "opened", "note", "next", "integration_note")

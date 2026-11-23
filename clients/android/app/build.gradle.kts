@@ -94,8 +94,27 @@ android {
         versionCode = pbVersionCode
         versionName = pbVersionName
         buildConfigField("String", "DEFAULT_RELAY_URL", literal(defaultRelayUrl))
-        buildConfigField("String", "GITHUB_REPO", literal(githubRepo))
         buildConfigField("String", "API_URL", literal(apiUrl))
+    }
+
+    // Two editions of the same app (docs/EDITIONS.md). Both have the application id com.droidhands.android, so a
+    // phone has one or the other.
+    flavorDimensions += "edition"
+    productFlavors {
+        // The APK on GitHub Releases and droidhands.com: everything, including phone use (the accessibility
+        // service, src/full/AndroidManifest.xml) and the in-app update check.
+        create("full") {
+            dimension = "edition"
+            buildConfigField("boolean", "PHONE_USE", "true")
+            buildConfigField("String", "GITHUB_REPO", literal(githubRepo))
+        }
+        // Google Play: no accessibility service (Play's Accessibility API policy bars it for AI agents), so no
+        // screen tools or screen recipes, and no update check (Play installs update through Play).
+        create("store") {
+            dimension = "edition"
+            buildConfigField("boolean", "PHONE_USE", "false")
+            buildConfigField("String", "GITHUB_REPO", literal(""))
+        }
     }
 
     signingConfigs {
@@ -189,9 +208,10 @@ kotlin {
 
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->
-        // DroidHands-1.2.3.apk, the file the release workflow publishes.
+        // DroidHands-1.2.3.apk (full, the file the release workflow publishes) or DroidHands-store-1.2.3.apk.
+        val edition = if (variant.flavorName == "full") "" else "${variant.flavorName}-"
         variant.outputs.forEach { output ->
-            (output as? VariantOutputImpl)?.outputFileName?.set("DroidHands-$pbVersionName.apk")
+            (output as? VariantOutputImpl)?.outputFileName?.set("DroidHands-$edition$pbVersionName.apk")
         }
     }
 }
@@ -199,7 +219,7 @@ androidComponents {
 if (!releaseSigningConfigured) {
     val warning = "WARNING: no release key configured (PB_KEYSTORE_PATH, PB_KEYSTORE_PASSWORD, PB_KEY_ALIAS, PB_KEY_PASSWORD), " +
         "so this release APK is signed with the DEBUG key. Fine for your own phone; never publish it. See docs/RELEASING.md."
-    tasks.matching { it.name == "packageRelease" }.configureEach {
+    tasks.matching { it.name.startsWith("package") && it.name.endsWith("Release") }.configureEach {
         doFirst { logger.warn(warning) }
     }
 }

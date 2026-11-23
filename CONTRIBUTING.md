@@ -95,7 +95,7 @@ Not up for writing it? [Request an integration](../../issues/new?template=app-in
 | Path | What | Tests |
 |---|---|---|
 | `clients/android/core` | Platform-neutral Kotlin: MCP server, tokens, policy, audit, transports, the plugin engine | `./gradlew :core:test` |
-| `clients/android/app` | The Android app: services, tools, accessibility, Compose UI | `./gradlew :app:testDebugUnitTest :app:assembleDebug` |
+| `clients/android/app` | The Android app: services, tools, accessibility, Compose UI | `./gradlew :app:testFullDebugUnitTest :app:testStoreDebugUnitTest :app:assembleDebug` |
 | `relay/` | The relay (TypeScript, Node 22) | `npm ci && npm test` |
 | `scripts/` | Setup, plugin and release scripts | `./scripts/setup-phone.test.sh`; plugin scripts run in `:core:test` |
 | `scripts/e2e/` | End-to-end scenarios against a device or emulator | see the file headers |
@@ -104,7 +104,7 @@ Gradle runs from `clients/android` and needs a JDK 17 and the Android SDK (`JAVA
 
 ```bash
 cd clients/android
-./gradlew :core:test :core:checkPlugins :app:testDebugUnitTest :app:assembleDebug
+./gradlew :core:test :core:checkPlugins :app:testFullDebugUnitTest :app:testStoreDebugUnitTest :app:assembleDebug
 ```
 
 CI runs the same commands, plus the relay's tests and build, on every push and pull request. The developer

@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.actions
 
+import com.droidhands.android.Edition
 import com.droidhands.core.plugins.ExtraSpec
 import com.droidhands.core.plugins.IntentRecipe
 import com.droidhands.core.plugins.ParamSpec
@@ -148,8 +149,9 @@ object DeclaredActions {
             id = id,
             title = (if (email) "Write an email" else "Write ${what.removePrefix("a ")}").replaceFirstChar { it.titlecase(Locale.ROOT) }.take(PluginRules.MAX_TITLE),
             description = ("Opens $appLabel's compose screen for $what to the recipient ($scheme: link), with the text filled " +
-                "in. Nothing is sent: finish with the screen tools (screen_observe, then tap Send and check it went out) or " +
-                "ask the user to.").take(PluginRules.MAX_ACTION_DESCRIPTION),
+                "in. Nothing is sent: " +
+                (if (Edition.PHONE_USE) "finish with the screen tools (screen_observe, then tap Send and check it went out) or ask the user to." else "the user taps Send.")
+                ).take(PluginRules.MAX_ACTION_DESCRIPTION),
             keywords = listOf("write", "compose", "message", "draft", scheme) + if (email) listOf("email", "mail") else if (sms) listOf("sms", "text") else emptyList(),
             risk = Risk.ACTION,
             params = params,

@@ -27,8 +27,8 @@ internal object PolicySummary {
      * included so the agent stops trying them), `active_hours`, `one_time_codes_hidden` and `max_risk` (the risk
      * cap's name, or null for none) for [ctx].
      */
-    fun put(builder: JsonObjectBuilder, ctx: CallContext, inScopeTools: Set<String>) {
-        val facts = AccessSummary.Facts(ctx.tokenName, ctx.scopes, ctx.appAccess, ctx.confirmPolicy, ctx.maxRisk, ctx.toolRules)
+    fun put(builder: JsonObjectBuilder, ctx: CallContext, inScopeTools: Set<String>, phoneUse: Boolean = true) {
+        val facts = AccessSummary.Facts(ctx.tokenName, ctx.scopes, ctx.appAccess, ctx.confirmPolicy, ctx.maxRisk, ctx.toolRules, phoneUse)
         builder.put("access", AccessSummary.json(facts))
         builder.put("app_access", appAccess(ctx.appAccess))
         builder.putJsonObject("tool_rules") {

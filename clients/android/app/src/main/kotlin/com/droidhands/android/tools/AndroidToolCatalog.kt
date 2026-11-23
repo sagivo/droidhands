@@ -1,6 +1,7 @@
 package com.droidhands.android.tools
 
 import android.content.Context
+import com.droidhands.android.Edition
 import com.droidhands.core.plugins.AppActionCatalog
 import com.droidhands.core.plugins.appActionTools
 import com.droidhands.core.tools.Tool
@@ -18,7 +19,7 @@ object AndroidToolCatalog {
             notificationTools(app) +
             appTools(app, actions) +
             appActionTools(actions) +
-            screenTools(app) +
+            (if (Edition.PHONE_USE) screenTools(app) else emptyList()) +
             deviceTools(app) +
             calendarTools(app) +
             locationTools(app) +

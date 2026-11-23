@@ -12,6 +12,12 @@ object ToolNames {
     const val APP_ACTION_RUN = "app_action_run"
     const val INTENT_START = "intent_start"
 
+    /** Phone use, the screen tools: left out by devices without it, such as the Android store edition (docs/EDITIONS.md). */
+    val PHONE_USE: Set<String> = linkedSetOf(
+        "screen_observe", "screen_read", "screen_find", "screen_screenshot", "ui_wait", "ui_tap", "ui_type", "ui_scroll", "ui_swipe",
+        "ui_global_action",
+    )
+
     /** Every catalog tool, in the order of docs/TOOLS.md. */
     val ALL: Set<String> = linkedSetOf(
         // Meta
@@ -33,10 +39,7 @@ object ToolNames {
         "calendar_list", "calendar_events_list", "calendar_event_create",
         // Location
         "location_get",
-        // Screen
-        "screen_observe", "screen_read", "screen_find", "screen_screenshot", "ui_wait", "ui_tap", "ui_type", "ui_scroll", "ui_swipe",
-        "ui_global_action",
-    )
+    ) + PHONE_USE
 
     /**
      * Null if a plugin's `tool:` recipe may run [name]; otherwise why not (docs/PLUGINS.md §9). Refused:

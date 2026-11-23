@@ -63,6 +63,7 @@ class AppActionToolsTest {
         val executed: MutableList<ActionRequest> = Collections.synchronizedList(mutableListOf())
         var failure: String? = null
         var integrationFailure: String? = null
+        override var phoneUse = true
 
         override suspend fun installedApps() = apps
 
@@ -498,6 +499,18 @@ class AppActionToolsTest {
         assertEquals(false, json["done"]!!.jsonPrimitive.boolean)
         assertEquals(true, json["opened"]!!.jsonPrimitive.boolean)
         assertTrue("screen_observe" in json["next"]!!.jsonPrimitive.content && "ask the user" in json["next"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun withoutPhoneUseHintsSendTheAgentToTheUser() = runTest {
+        platform.phoneUse = false
+        val json = call(issue(), "app_action_run", """{"app":"com.spotify.music","action":"com.spotify.music/search","params":"{\"query\":\"daft punk\"}"}""").json()
+        val next = json["next"]!!.jsonPrimitive.content
+        assertTrue("Tell the user" in next && "screen_observe" !in next, next)
+        assertTrue("screen_tools" !in json.toString() && "screen_observe" !in json.toString(), json.toString())
+        // Descriptions are fixed when the tools are built: built without phone use, they never name the screen tools.
+        for (t in appActionTools(catalog)) assertTrue("screen_observe" !in t.description && "ui_tap" !in t.description, t.description)
+        assertTrue("phone use" in appActionTools(AppActionCatalog({ plugins }, FakePlatform(), registry::get)).first().description)
     }
 
     @Test

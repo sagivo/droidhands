@@ -37,6 +37,12 @@ object Scopes {
 
     val ALL: Set<String> = DESCRIPTIONS.keys
 
+    /** The scopes of phone use (the screen tools), which devices without it (the Android store edition) have no tools for. */
+    val PHONE_USE: Set<String> = setOf(SCREEN_READ, SCREEN_CONTROL)
+
+    /** Whether [registry] has phone use: any tool in a [PHONE_USE] scope. */
+    fun hasPhoneUse(registry: ToolRegistry): Boolean = registry.all().any { it.scope in PHONE_USE }
+
     val PRESET_READ_ONLY: Set<String> = setOf(
         DEVICE, APPS, CONTACTS_READ, MESSAGES_READ, NOTIFICATIONS_READ, CALENDAR_READ, LOCATION, SCREEN_READ,
     )

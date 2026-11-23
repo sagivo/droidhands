@@ -1,6 +1,7 @@
 package com.droidhands.android.tools.actions
 
 import android.content.Context
+import com.droidhands.android.Edition
 import com.droidhands.android.tools.screen.UiAutomation
 import com.droidhands.android.tools.system.AppEntry
 import com.droidhands.android.tools.system.AppPick
@@ -40,6 +41,8 @@ internal class AndroidAppActions(context: Context) : AppActionsPlatform {
     private val context = context.applicationContext
     private val scanner = AppScanner(this.context)
 
+    override val phoneUse: Boolean get() = Edition.PHONE_USE
+
     override suspend fun installedApps(): List<InstalledApp> =
         scanner.scan().apps.filter { it.entry.packageName != context.packageName }.map(::installed)
 
@@ -58,7 +61,7 @@ internal class AndroidAppActions(context: Context) : AppActionsPlatform {
     private val verified = ConcurrentHashMap<Any, String>()
 
     override fun unavailableReason(packageName: String, action: PluginAction): String? = when (action.android) {
-        is StepsRecipe -> UiAutomation.actionUnavailableReason(context)
+        is StepsRecipe -> if (Edition.PHONE_USE) UiAutomation.actionUnavailableReason(context) else Edition.NO_PHONE_USE
         is IntentRecipe, is UrlRecipe -> {
             val app = scanner.cachedApp(packageName)
             if (app == null) {
@@ -89,7 +92,7 @@ internal class AndroidAppActions(context: Context) : AppActionsPlatform {
             val version = app.entry.versionName?.let { " $it" } ?: ""
             "${app.entry.label}$version on this phone has no screen that accepts this action's " +
                 (if (action.android is UrlRecipe) "link" else "intent") + " (it was written for another version of the app). " +
-                "Use the app's open_link action if it has one, or phone use (screen_observe, ui_tap)."
+                "Use the app's open_link action if it has one, or ${Edition.fallback()}."
         }
     } catch (e: Exception) {
         "" // Can't check (e.g. a recipe that needs real values): don't hide the action.

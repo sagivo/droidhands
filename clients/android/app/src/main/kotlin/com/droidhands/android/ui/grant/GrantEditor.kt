@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
+import com.droidhands.android.Edition
 import com.droidhands.android.ui.components.Accents
 import com.droidhands.android.ui.components.AppsIcon
 import com.droidhands.android.ui.components.CardPadding
@@ -166,7 +167,7 @@ private fun ChosenSections(
         val full = grant.abilities
         val partial = grant.partialAbilities
         ListSection(title = GrantPresentation.ABILITIES_HEADER) {
-            Ability.entries.forEachIndexed { index, ability ->
+            Ability.offered(Edition.PHONE_USE).forEachIndexed { index, ability ->
                 if (index > 0) ListDivider(ControlRowInset)
                 val state = when (ability) {
                     in full -> ToggleableState.On
@@ -228,7 +229,7 @@ private fun AbilityRow(ability: Ability, state: ToggleableState, partly: String?
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(ability.label, style = MaterialTheme.typography.bodyLarge)
-            Text(ability.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(ability.description(Edition.PHONE_USE), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (partly != null) {
                 Text(partly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }

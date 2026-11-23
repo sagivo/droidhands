@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
+import com.droidhands.android.Edition
 import com.droidhands.android.tools.support.Launcher
 import com.droidhands.android.tools.system.AppEntry
 import com.droidhands.android.tools.system.AppPick
@@ -121,7 +122,8 @@ private fun appOpen(context: Context) = tool(
     title = "Open an app",
     description = "Opens an installed app by 'package' (exact) or 'name' (the label as the user says it; tolerant of case, " +
         "accents and small typos). If several apps match, nothing is opened and the error lists the candidates: ask the " +
-        "user, then call again with 'package'. Use screen_read afterwards to see what is on screen. $APP_ACCESS_NOTE",
+        "user, then call again with 'package'. " + (if (Edition.PHONE_USE) "Use screen_read afterwards to see what is on screen. " else "") +
+        APP_ACCESS_NOTE,
     scope = Scopes.APPS,
     risk = Risk.ACTION,
     schema = objectSchema {

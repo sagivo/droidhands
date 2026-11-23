@@ -2,6 +2,7 @@ package com.droidhands.android.tools
 
 import android.content.Context
 import android.content.ContextWrapper
+import com.droidhands.android.Edition
 import com.droidhands.core.mcp.capabilitiesTool
 import com.droidhands.core.plugins.ActionRequest
 import com.droidhands.core.plugins.ActionResult
@@ -13,12 +14,13 @@ import com.droidhands.core.plugins.PluginAction
 import com.droidhands.core.plugins.PluginCatalog
 import com.droidhands.core.tools.AppAccess
 import com.droidhands.core.tools.CallContext
+import com.droidhands.core.tools.Scopes
 import com.droidhands.core.tools.ToolNames
 import com.droidhands.core.tools.ToolRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The Android registry offers exactly the platform-neutral catalog of docs/TOOLS.md ([ToolNames.ALL]). */
+/** The Android registry offers exactly the platform-neutral catalog of docs/TOOLS.md ([ToolNames.ALL]), less phone use in the store edition. */
 class AndroidToolCatalogTest {
     private object NoApps : AppActionsPlatform {
         override suspend fun installedApps(): List<InstalledApp> = emptyList()
@@ -46,7 +48,10 @@ class AndroidToolCatalogTest {
         val registry = ToolRegistry()
         registry.register(capabilitiesTool(registry))
         registry.registerAll(tools)
-        assertEquals(ToolNames.ALL, registry.all().map { it.name }.toSet())
+        // The store edition leaves out phone use (docs/EDITIONS.md).
+        val expected = if (Edition.PHONE_USE) ToolNames.ALL else ToolNames.ALL - ToolNames.PHONE_USE
+        assertEquals(expected, registry.all().map { it.name }.toSet())
+        assertEquals(Edition.PHONE_USE, Scopes.hasPhoneUse(registry))
     }
 
     @Test

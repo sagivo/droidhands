@@ -112,6 +112,13 @@ hashing, which are exempt. No questionnaire appears on upload.
 >    to buy milk at 6 pm". The event or reminder appears in Calendar / Reminders, and in DroidHands › Activity.
 > 5. Agents › (the agent) › Revoke access ends its access at once.
 >
+> Third-party AI (guideline 5.1.2(i)): before any data can reach an agent, the screen that grants access (step 3's
+> "Connect agent" sheet, and also "New token" and an agent's Access page) has a "Shared with a third-party AI"
+> section. It names the agent and its website (e.g. "Claude (claude.ai)"), lists the data its access lets it read
+> (contacts, calendar events and reminders, location, device status, shortcut results), says it is a third-party AI
+> service that handles the data under its own privacy policy, and that tapping Allow (Create, Save) means the user
+> agrees. Nothing is pre-selected; Deny or Cancel shares nothing.
+>
 > Messages and calls always need the user's tap: DroidHands shows the system message composer or iOS's call prompt.
 > The app does not run in the background; it works while it is open, as the Home screen says.
 >

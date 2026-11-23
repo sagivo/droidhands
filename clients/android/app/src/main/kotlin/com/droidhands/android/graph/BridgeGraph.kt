@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.droidhands.android.BuildConfig
+import com.droidhands.android.Edition
 import com.droidhands.android.account.AccountManager
 import com.droidhands.android.account.AccountStore
 import com.droidhands.android.account.SignInOutcome
@@ -500,9 +501,17 @@ class BridgeGraph private constructor(val app: Application) {
     /** Platform status merged into `bridge_capabilities`. Never throws. */
     private fun extraStatus(): Map<String, Any?> {
         val current = settings.state.value
-        return linkedMapOf(
-            "accessibility_enabled" to (BridgeAccessibilityService.instance != null),
-            "accessibility_problem" to BridgeAccessibilityService.healthCached(),
+        val phoneUse = if (Edition.PHONE_USE) {
+            linkedMapOf(
+                "accessibility_enabled" to (BridgeAccessibilityService.instance != null),
+                "accessibility_problem" to BridgeAccessibilityService.healthCached(),
+            )
+        } else {
+            // docs/EDITIONS.md: the store edition has no screen tools at all, so there is nothing to turn on. It never
+            // points to the full edition: Play doesn't allow steering users to an app installed from outside Play.
+            linkedMapOf<String, Any?>("phone_use" to "not in this edition: DroidHands can't see or tap other apps' screens")
+        }
+        return phoneUse + linkedMapOf(
             "notification_access" to try {
                 BridgeNotificationListener.isEnabled(app)
             } catch (e: Exception) {

@@ -2,7 +2,5 @@
 <!-- Shared strings only. Feature code keeps its own strings in Kotlin or in values/strings_<area>.xml. -->
 <resources>
     <string name="app_name">DroidHands</string>
-    <string name="accessibility_service_label">DroidHands agent control</string>
-    <string name="accessibility_service_description">Lets AI agents that YOU authorized in DroidHands read the screen and tap, type and scroll in apps on your behalf (for example pressing Send in WhatsApp). Every agent needs a token you created, actions are logged, and sensitive actions ask for your approval.</string>
     <string name="notification_listener_label">DroidHands notifications</string>
 </resources>

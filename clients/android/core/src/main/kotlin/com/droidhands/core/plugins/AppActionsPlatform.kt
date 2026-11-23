@@ -66,6 +66,12 @@ interface AppActionsPlatform {
     /** Which OS this is: plugin actions run with their recipe for it ([PluginAction.recipeFor]). */
     val os: DeviceOs get() = DeviceOs.ANDROID
 
+    /**
+     * Whether this device has phone use (the screen_* and ui_* tools, and steps recipes). False in the Android store
+     * edition (docs/EDITIONS.md): hints then send the agent to the user instead of to the screen tools.
+     */
+    val phoneUse: Boolean get() = true
+
     /** Launchable apps installed now, DroidHands itself excluded. May be cached and refreshed on package changes. */
     suspend fun installedApps(): List<InstalledApp>
 

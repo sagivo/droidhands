@@ -113,10 +113,15 @@ account may release it), add these secrets next to the four `ANDROID_*` signing 
 The `ANDROID_*` key is the Play *upload* key. Optional variable `PLAY_TRACK`: `internal`, `alpha` or `beta`
 instead of `production`.
 
+Play gets the **store edition** ([EDITIONS.md](EDITIONS.md)), built by `store-release.sh android`
+(`:app:bundleStoreRelease`): no accessibility service, so no phone use. Play rejected the earlier builds on
+2026-11-23 under its Accessibility API policy ("cannot be requested for performing autonomous tasks").
+
 Google Play publishing is **off** unless the repository variable `PLAY_PUBLISH` is `true`
-(`gh variable set PLAY_PUBLISH --body true`). It was paused on 2026-11-23, when Play rejected the app under its
-Accessibility API policy ("cannot be requested for performing autonomous tasks"); turn it back on only for a
-build that complies, since every rejected upload counts against the developer account.
+(`gh variable set PLAY_PUBLISH --body true`). Before turning it on for the first store-edition release, in the
+Play Console: remove the accessibility declaration (*Policy › App content › Accessibility API*), and update the
+listing from [PLAY_LISTING.md](../clients/android/PLAY_LISTING.md) so it no longer describes screen control. Every
+rejected upload counts against the developer account.
 
 ### App Store
 
@@ -228,16 +233,18 @@ optional; blank counts as unset.
 | `droidhands.versionCode` | | `1` | `versionCode` |
 | `droidhands.defaultRelayUrl` | `DROIDHANDS_DEFAULT_RELAY_URL` | empty | `BuildConfig.DEFAULT_RELAY_URL`: the relay a fresh install connects to on first run |
 | `droidhands.apiUrl` | `DROIDHANDS_API_URL` | empty | `BuildConfig.API_URL`: the DroidHands API server (sign in with Google). Set, the default relay needs a signed-in account and a fresh install waits for the sign-in; empty, no account is needed. |
-| `droidhands.githubRepo` | `GITHUB_REPOSITORY` | empty | `BuildConfig.GITHUB_REPO` (`owner/name`): the repository whose releases the daily update check reads. Empty turns the check off. |
+| `droidhands.githubRepo` | `GITHUB_REPOSITORY` | empty | `BuildConfig.GITHUB_REPO` (`owner/name`): the repository whose releases the daily update check reads. Empty turns the check off. The store edition never has the check. |
 | `PB_KEYSTORE_PATH`, `PB_KEYSTORE_PASSWORD`, `PB_KEY_ALIAS`, `PB_KEY_PASSWORD` | same names | unset | Release signing key. All four or none. |
 | `droidhands.requireReleaseSigning` | | `false` | `true`: fail instead of signing a release with the debug key |
 
-Release APKs are named `DroidHands-<versionName>.apk`
-(`clients/android/app/build/outputs/apk/release/`).
+The app has two editions ([EDITIONS.md](EDITIONS.md)), as Gradle product flavors: `full` (GitHub Releases,
+with phone use) and `store` (Google Play, without the accessibility service). Release APKs are named
+`DroidHands-<versionName>.apk` (full, `clients/android/app/build/outputs/apk/full/release/`) and
+`DroidHands-store-<versionName>.apk`; the Play bundle is `app/build/outputs/bundle/storeRelease/app-store-release.aab`.
 
 ## Local release builds
 
-Without a key, `./gradlew :app:assembleRelease` signs with your debug key and prints a warning.
+Without a key, `./gradlew :app:assembleFullRelease` signs with your debug key and prints a warning.
 That APK is fine for your own phone, but it can't update, or be updated by, a published release:
 Android would ask to uninstall first. To sign with the release key on your computer, export the
 four `PB_*` variables (`make-release-key.sh` prints the commands).

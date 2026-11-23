@@ -61,7 +61,7 @@ fun capabilitiesTool(
         putJsonObject("token") {
             put("name", ctx.tokenName)
             putJsonArray("scopes") { ctx.scopes.sorted().forEach { add(JsonPrimitive(it)) } }
-            PolicySummary.put(this, ctx, inScope.mapTo(HashSet()) { it.name })
+            PolicySummary.put(this, ctx, inScope.mapTo(HashSet()) { it.name }, Scopes.hasPhoneUse(registry))
         }
         put("status", status)
         putJsonArray("tools") {
