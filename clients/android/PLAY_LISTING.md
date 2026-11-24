@@ -23,7 +23,7 @@ does, and must not point users to the full edition on GitHub or droidhands.com.
 
 **Short description (80)**
 
-> Let your AI agents (Claude, ChatGPT, Grok…) use your phone. You set what they may do.
+> Let your AI agents (Claude, ChatGPT, Grok…) use your phone. You set the limits.
 
 **Full description (4000)**
 
