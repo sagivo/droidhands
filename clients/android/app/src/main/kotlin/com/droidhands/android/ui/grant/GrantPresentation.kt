@@ -20,7 +20,9 @@ object GrantPresentation {
     fun title(agentName: String): String = "Give ${agentName.trim().ifEmpty { "this agent" }} access"
 
     const val EVERYTHING = "Everything"
-    const val EVERYTHING_DESCRIPTION = "Every app and ability: messages, calls, the screen. It acts without asking you first."
+    /** The store edition has no phone use, so it doesn't promise "the screen" (docs/EDITIONS.md). */
+    fun everythingDescription(phoneUse: Boolean = Edition.PHONE_USE): String =
+        "Every app and ability: messages, calls, ${if (phoneUse) "the screen" else "your calendar"}. It acts without asking you first."
 
     const val CHOSEN = "Only what I choose"
     const val CHOSEN_DESCRIPTION = "Pick apps and abilities; anything else is refused. Best for agents you don't fully trust."

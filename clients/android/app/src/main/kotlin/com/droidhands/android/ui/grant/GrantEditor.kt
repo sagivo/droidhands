@@ -68,7 +68,7 @@ internal fun GrantEditor(
                 Column(Modifier.selectableGroup()) {
                     GrantChoiceRow(
                         title = GrantPresentation.EVERYTHING,
-                        description = GrantPresentation.EVERYTHING_DESCRIPTION,
+                        description = GrantPresentation.everythingDescription(),
                         selected = grant.mode == GrantMode.EVERYTHING,
                         enabled = enabled,
                         onSelect = { onChange(grant.withMode(GrantMode.EVERYTHING)) },

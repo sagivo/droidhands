@@ -1,6 +1,7 @@
 package com.droidhands.android.ui.apps
 
 import android.content.pm.ApplicationInfo
+import com.droidhands.android.Edition
 import com.droidhands.android.ui.agents.ToolRules
 import com.droidhands.android.update.UpdateLogic
 import com.droidhands.core.plugins.Integration
@@ -23,6 +24,11 @@ data class AppsSection(val key: String, val title: String?, val rows: List<AppsR
 /** Pure presentation of the Apps tab and the app detail page (unit-tested). */
 object AppsPresentation {
     fun actionCount(n: Int): String = if (n == 1) "1 action" else "$n actions"
+
+    /** What agents can still do with an app that has no ready-made actions; the store edition has no screen tools. */
+    fun noActionsLine(label: String, phoneUse: Boolean = Edition.PHONE_USE): String =
+        if (phoneUse) "Agents can still use $label through the screen tools (read the screen, tap, type)."
+        else "Agents can still open $label, but can't act inside it."
 
     fun badge(app: AppListing): AppBadge {
         val count = actionCount(app.actions.size)
