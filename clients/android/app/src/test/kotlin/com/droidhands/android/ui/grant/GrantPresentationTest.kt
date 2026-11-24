@@ -29,7 +29,10 @@ class GrantPresentationTest {
     fun screenTexts() {
         assertEquals("Give Claude access", GrantPresentation.title(" Claude "))
         assertEquals("Give this agent access", GrantPresentation.title(""))
-        assertTrue(GrantPresentation.EVERYTHING_DESCRIPTION.contains("without asking you first"))
+        assertTrue(GrantPresentation.everythingDescription(phoneUse = true).contains("without asking you first"))
+        assertTrue(GrantPresentation.everythingDescription(phoneUse = true).contains("the screen"))
+        assertTrue(GrantPresentation.everythingDescription(phoneUse = false).contains("without asking you first"))
+        assertFalse(GrantPresentation.everythingDescription(phoneUse = false).contains("screen"))
         assertEquals("Ask me before it sends messages, calls or pays", GrantPresentation.ASK_SWITCH)
         assertTrue(GrantPresentation.neverAllowLine(3).startsWith("3 apps on your never-allow list"))
         assertTrue(GrantPresentation.neverAllowLine(3).endsWith("stay off-limits, even with Everything."))

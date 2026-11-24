@@ -138,7 +138,7 @@ private fun AppDetailContent(
                 if (app.actions.isEmpty()) {
                     ListRow(
                         title = "No ready-made actions",
-                        subtitle = "Agents can still use ${app.label} through the screen tools (read the screen, tap, type).",
+                        subtitle = AppsPresentation.noActionsLine(app.label),
                         leading = { IconTile(Icons.Filled.Info, Accents.Gray) },
                     )
                 }

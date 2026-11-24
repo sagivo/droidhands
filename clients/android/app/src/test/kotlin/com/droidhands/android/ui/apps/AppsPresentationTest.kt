@@ -114,4 +114,10 @@ class AppsPresentationTest {
         assertEquals("other", AppsPresentation.draftCategory(ApplicationInfo.CATEGORY_UNDEFINED, listOf("open")))
         assertEquals("DroidHands plugin draft for Spotify (plugin.yaml)", AppsPresentation.draftSubject("Spotify"))
     }
+
+    @Test
+    fun noActionsLineFollowsTheEdition() {
+        assertTrue(AppsPresentation.noActionsLine("Maps", phoneUse = true).contains("screen tools"))
+        assertEquals("Agents can still open Maps, but can't act inside it.", AppsPresentation.noActionsLine("Maps", phoneUse = false))
+    }
 }

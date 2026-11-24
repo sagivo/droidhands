@@ -73,9 +73,23 @@ does, and must not point users to the full edition on GitHub or droidhands.com.
 - App icon 512 × 512 PNG: render from `app/src/main/res/drawable/ic_launcher_foreground.xml` on the indigo
   background of `mipmap-anydpi-v26/ic_launcher.xml`.
 - Feature graphic 1024 × 500 PNG.
-- Phone screenshots: at least 2, 16:9 to 9:16 (for example 1080 × 2400), from a signed-off build: Home, Connect,
-  Agents, Access, Activity. The iPhone ones in `dist/ios-screenshots` are a visual reference only; Play wants
-  Android screenshots.
+- Phone screenshots: the 7 marketing images in `dist/play-marketing` (1080 × 1920, 9:16), in the same style as the
+  App Store ones: a headline about what the app does for you ("Control your phone with AI agents", "Connect your AI
+  agent to your phone", …) above a real store-edition screenshot in a phone frame. They show only what the store
+  edition does (no screen reading or tapping). To remake them:
+  1. Install a store-edition build on an emulator (`./gradlew installStoreDebug`) and connect two agents named
+     Claude and ChatGPT, with Claude's redirect `https://claude.ai/api/mcp/auth_callback` and ChatGPT's
+     `https://chatgpt.com/connector_platform_oauth_redirect`, so the lists show their real sites. Give Claude
+     Everything and ChatGPT only some abilities, then make a few calls with each, including one ChatGPT isn't
+     allowed, so the log shows a refusal.
+  2. Clean up the status bar with demo mode (`adb shell settings put global sysui_demo_allowed 1`, then
+     `adb shell am broadcast -a com.android.systemui.demo -e command enter`, `… -e command notifications -e visible
+     false`, `… -e command network -e mobile hide`, `… -e command battery -e level 100 -e plugged false`).
+  3. Save `adb exec-out screencap -p` captures to `dist/play-screenshots`: `1-home`, `2-connect`, `3-agents`,
+     `4-agent` (Claude), `5-access` (ChatGPT › Change access), `6-activity`, and `7-request` (Home while a
+     "wants to connect" request waits; the approval screen itself is FLAG_SECURE and captures blank).
+  4. `python3 scripts/store-images.py --store play` (it needs Roboto: `adb pull /system/fonts/Roboto-Regular.ttf
+     ~/Library/Fonts/`, or pass `--font`).
 
 ## App content
 
