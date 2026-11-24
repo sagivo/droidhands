@@ -10,6 +10,7 @@
 # to the app's Documents/test-token.txt, so you can call it with curl right away. `screenshots` walks every screen
 # (DroidHandsUITests) and saves a PNG of each, at the simulator's size: use an iPhone 6.9" simulator for the
 # App Store. Without --simulator, the first booted iPhone simulator is used, else the first available one.
+# DROIDHANDS_API_URL= (set, empty) builds without accounts, like the App Store build; use it for store screenshots.
 #
 # Releases are built by scripts/store-release.sh ios. Needs: Xcode and xcodegen (brew install xcodegen).
 # Works with macOS's bash 3.2.
@@ -52,7 +53,8 @@ xcodegen generate --spec "$APP_DIR/project.yml" --project "$APP_DIR" --quiet
 build() {
   local extra=()
   [ -z "${DROIDHANDS_DEFAULT_RELAY_URL:-}" ] || extra+=("DROIDHANDS_DEFAULT_RELAY_URL=$DROIDHANDS_DEFAULT_RELAY_URL")
-  [ -z "${DROIDHANDS_API_URL:-}" ] || extra+=("DROIDHANDS_API_URL=$DROIDHANDS_API_URL")
+  # Set but empty builds without accounts, as the store build does (the project default has them).
+  [ -z "${DROIDHANDS_API_URL+set}" ] || extra+=("DROIDHANDS_API_URL=$DROIDHANDS_API_URL")
   xcodebuild -project "$APP_DIR/DroidHands.xcodeproj" -scheme DroidHands -destination "platform=iOS Simulator,id=$SIM" \
     -derivedDataPath "$DERIVED" -quiet ${extra[@]+"${extra[@]}"} "$@"
 }

@@ -295,10 +295,16 @@ if run 0 ios --version 1.2.3 --build-only; then
   expect_in "exports an ipa" "$LOG" "xcodebuild [-exportArchive]"
   expect_in "the app's project and scheme" "$LOG" "[-project] [$WORK/iosapp/DroidHands.xcodeproj] [-scheme] [DroidHands]"
   expect_in "bundle id" "$LOG" "[PB_APP_BUNDLE_ID=com.droidhands.ios]"
+  expect_in "no accounts unless DROIDHANDS_API_URL is set" "$LOG" "[DROIDHANDS_API_URL=]"
   expect_in "build only uploads nothing" "$OUTPUT" "nothing was uploaded"
   expect_not_in "build only never calls altool" "$LOG" "xcrun "
   expect_in "export options" "$(cat "$WORK/out/ios/ExportOptions.plist")" "<string>app-store-connect</string>"
 fi
+EXTRA_ENV="$ASC DROIDHANDS_API_URL=https://api.example.com"
+if run 0 ios --version 1.2.3 --build-only; then
+  expect_in "accounts server when set" "$LOG" "[DROIDHANDS_API_URL=https://api.example.com]"
+fi
+EXTRA_ENV="$ASC"
 if run 0 ios --version 1.2.3 --allow-dirty --build-number 77; then
   expect_in "custom build number" "$LOG" "[CURRENT_PROJECT_VERSION=77]"
   expect_in "asks App Store Connect for the build first" "$LOG" "asc [has-build] [--bundle-id] [com.droidhands.ios] [--version] [1.2.3] [--build] [77]"

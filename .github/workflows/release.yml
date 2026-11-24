@@ -16,7 +16,8 @@
 # can be re-run: what a store already has is left alone. Secrets and the one-time store setup are listed in
 # docs/RELEASING.md ("Automatic releases"). A release is never signed with a debug key. The optional repository
 # variable DROIDHANDS_RELAY_URL becomes the app's default relay, and DROIDHANDS_API_URL the accounts server
-# that relay needs a sign-in with (docs/PROTOCOL.md §7).
+# that relay needs a sign-in with (docs/PROTOCOL.md §7); unset, the Android and iPhone store builds have no
+# accounts, which their store listings and privacy answers assume.
 name: Release
 
 on:
