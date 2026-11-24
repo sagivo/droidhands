@@ -274,7 +274,9 @@ jobs:
   app-store:
     name: App Store
     needs: apk
-    runs-on: macos-latest
+    # App Store Connect wants the newest iOS SDK (ITMS-90725). GitHub ships each major Xcode on its own image:
+    # macos-latest (macOS 26) has only Xcode 26. Move to the next xcode-NN label when Apple asks for that SDK.
+    runs-on: xcode-27
     timeout-minutes: 120
     permissions:
       contents: read
