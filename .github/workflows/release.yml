@@ -91,6 +91,13 @@ jobs:
           # Gradle downloads the platform and build tools it needs.
           packages: platform-tools
 
+      - name: Gradle memory
+        # clients/android/gradle.properties keeps the heaps small for dev machines; compiling both editions at
+        # once ran the Kotlin compiler out of memory (v0.1.6). ~/.gradle/gradle.properties wins over it.
+        run: |
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8\nkotlin.daemon.jvmargs=-Xmx3g\n' >> ~/.gradle/gradle.properties
+
       - name: Decode the keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -238,6 +245,13 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
+
+      - name: Gradle memory
+        # clients/android/gradle.properties keeps the heaps small for dev machines; compiling both editions at
+        # once ran the Kotlin compiler out of memory (v0.1.6). ~/.gradle/gradle.properties wins over it.
+        run: |
+          mkdir -p ~/.gradle
+          printf 'org.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8\nkotlin.daemon.jvmargs=-Xmx3g\n' >> ~/.gradle/gradle.properties
 
       - name: Keys and release notes
         env:
