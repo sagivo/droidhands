@@ -3,6 +3,7 @@ package com.droidhands.android.tools
 import android.Manifest
 import android.content.Context
 import android.location.LocationManager
+import com.droidhands.android.Edition
 import com.droidhands.android.tools.support.Perms
 import com.droidhands.android.tools.system.CalendarTime
 import com.droidhands.android.tools.system.LaunchNotes
@@ -28,9 +29,9 @@ import kotlin.math.roundToLong
 
 private const val GEOCODE_TIMEOUT_MS = 10_000L
 
-private const val NO_LOCATION_PERMISSION =
-    "Location permission not granted on the phone. Ask the user to open the DroidHands app > Settings > Permissions & access and grant Location " +
-        "(then \"Allow all the time\", because agent requests arrive while the app is in the background)."
+private val NO_LOCATION_PERMISSION =
+    "Location permission not granted on the phone. Ask the user to open the DroidHands app > Settings > Permissions & access and grant Location" +
+        if (Edition.BACKGROUND_LOCATION) " (then \"Allow all the time\", because agent requests arrive while the app is in the background)." else "."
 
 private const val LOCATION_OFF =
     "Location is turned off on the phone. Ask the user to turn on Location (quick settings or Android Settings > Location)."
@@ -38,6 +39,14 @@ private const val LOCATION_OFF =
 private const val NO_BACKGROUND =
     "DroidHands does not have background location (\"Allow all the time\"), so Android may withhold the location while " +
         "the DroidHands app is not open. Ask the user to grant it in the DroidHands app > Settings > Permissions & access > Location while in background."
+
+/**
+ * The store edition has no background location (docs/EDITIONS.md), so Android gives DroidHands the location only
+ * while its own screen is open; the bridge's foreground service doesn't count.
+ */
+private const val ONLY_WHILE_OPEN =
+    "Android shares the phone's location with DroidHands only while the DroidHands app is open on the screen, and it " +
+        "isn't open now. Ask the user to open the DroidHands app, then call location_get again."
 
 /** Tools: location_get (docs/TOOLS.md). */
 fun locationTools(context: Context): List<Tool> = listOf(locationGet(context))
@@ -48,7 +57,8 @@ private fun locationGet(context: Context) = tool(
     description = "Current location of the phone: {latitude,longitude,accuracy_m,time,age_seconds,provider,address?}. " +
         "accuracy=high prefers GPS (slower, outdoors); balanced (default) uses Wi-Fi/cell. Waits up to timeout_seconds " +
         "(default 20, max 60) for a fresh fix, else returns the last known location with its age. address=true adds a " +
-        "best-effort street address.",
+        "best-effort street address." +
+        if (Edition.BACKGROUND_LOCATION) "" else " Works only while the DroidHands app is open on the phone's screen.",
     scope = Scopes.LOCATION,
     risk = Risk.READ,
     schema = objectSchema {
@@ -62,7 +72,10 @@ private fun locationGet(context: Context) = tool(
 ) { args, _ ->
     val hasFine = Perms.has(context, Manifest.permission.ACCESS_FINE_LOCATION)
     if (!hasFine && !Perms.has(context, Manifest.permission.ACCESS_COARSE_LOCATION)) throw ToolException(NO_LOCATION_PERMISSION)
-    val hasBackground = Perms.has(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    // Without background location in the manifest, waiting for a fix in the background would only time out.
+    if (!Edition.BACKGROUND_LOCATION && !LaunchNotes.isAppInForeground()) throw ToolException(ONLY_WHILE_OPEN)
+    // In the store edition the check above stands in for background location.
+    val hasBackground = !Edition.BACKGROUND_LOCATION || Perms.has(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     val accuracy = LocationLogic.Accuracy.parse(args.optString("accuracy"))
     val timeoutSeconds = LocationLogic.timeoutSeconds(args.optInt("timeout_seconds"))
     val wantAddress = args.optBool("address") ?: false

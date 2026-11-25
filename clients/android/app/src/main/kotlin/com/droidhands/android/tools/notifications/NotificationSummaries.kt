@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.notifications
 
+import com.droidhands.android.Edition
 import com.droidhands.android.notify.FilteredNotifications
 import com.droidhands.android.notify.NotificationQuery
 import com.droidhands.android.notify.NotificationText
@@ -45,8 +46,9 @@ object NotificationSummaries {
     fun dismissFallback(key: String?): String = "Dismiss notification ${key?.let { label(it) } ?: "(no key)"}"
 
     /** Footer hint when Android hid the content of listed notifications (see [NotificationJson.CONTENT_HIDDEN]). */
-    const val CONTENT_HIDDEN_HINT =
-        "Android hid the content of notification(s) marked ${NotificationJson.CONTENT_HIDDEN}: read SMS with sms_list and " +
+    val CONTENT_HIDDEN_HINT: String =
+        "Android hid the content of notification(s) marked ${NotificationJson.CONTENT_HIDDEN}: " +
+            (if (Edition.SMS_AND_CALL_LOG) "read SMS with sms_list and " else "") +
             "check or answer calls with call_status / call_answer. notification_reply still works on them; choose " +
             "actions by index because their titles may be blank."
 

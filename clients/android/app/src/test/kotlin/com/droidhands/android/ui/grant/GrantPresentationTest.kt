@@ -120,4 +120,14 @@ class GrantPresentationTest {
         assertEquals(listOf("com.whatsapp"), results.single().rows.map { it.packageName })
         assertEquals(mapOf("com.bank" to "Bank", "com.spotify.music" to "Spotify", "com.whatsapp" to "WhatsApp", "com.notes" to "Notes"), GrantApps.labels(apps))
     }
+
+    @Test
+    fun `without SMS permissions reading messages means notifications only`() {
+        val store = GrantPresentation.abilityDescription(Ability.READ_MESSAGES, phoneUse = false, smsAndCallLog = false)
+        assertFalse(store, store.contains("SMS") || store.contains("call"))
+        assertTrue(GrantPresentation.abilityDescription(Ability.READ_MESSAGES, phoneUse = true, smsAndCallLog = true).contains("SMS"))
+        val send = GrantPresentation.abilityDescription(Ability.SEND_MESSAGES, phoneUse = false, smsAndCallLog = false)
+        assertFalse(send, send.contains("Send SMS"))
+        assertEquals(Ability.CALLS.description, GrantPresentation.abilityDescription(Ability.CALLS, phoneUse = false, smsAndCallLog = false))
+    }
 }

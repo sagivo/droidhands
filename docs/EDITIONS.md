@@ -8,7 +8,10 @@ DroidHands ships as three apps, built from this repository and published by the 
 | Where | GitHub Releases (`DroidHands.apk`), droidhands.com | Google Play | App Store |
 | Built by | `:app:assembleFullRelease` | `:app:bundleStoreRelease` (`scripts/store-release.sh android`) | `scripts/store-release.sh ios` |
 | Phone use (`screen_*`, `ui_*`, screen recipes) | yes, through the accessibility service | no | no |
-| Messages, notifications, calls, contacts, calendar, location, device, app actions | yes | yes | public iOS APIs only ([IOS.md](IOS.md)) |
+| Notifications, calls, contacts, calendar, device, app actions | yes | yes | public iOS APIs only ([IOS.md](IOS.md)) |
+| SMS | read (`sms_list`) and send through the SIM | `sms_send` opens the SMS app with the message written; the user taps Send | like the store edition |
+| Call history (`call_log_list`), caller number in `call_status` | yes | no | no |
+| Location (`location_get`) | any time, with "Allow all the time" | only while DroidHands is on screen | while the app is open |
 | Approvals | the user's choice per agent | the user's choice per agent | the user's choice per agent |
 | In-app update check (GitHub) | yes | no (Play updates it) | no |
 
@@ -32,6 +35,28 @@ finishes there.
 The App Store has no API for one app to control another, so the iPhone app never had phone use; the Mac host with the
 XCUITest runner ([IOS.md](IOS.md)) is the iPhone route to it, outside the App Store.
 
+## Why the store edition has no SMS, call log or background location
+
+Play rejected the store edition on 2026-11-25 under its
+[Permissions and APIs that Access Sensitive Information](https://support.google.com/googleplay/android-developer/answer/16558241)
+policy: the SMS and call-log declaration ("Device Automation") didn't match the app's core functionality, and the
+background-location feature didn't meet the location requirements. SMS and call-log permissions are for default
+SMS, phone and assistant handlers and a short list of exceptions, and background location is for features that are
+broken without it; Google's fix for both is to remove the permissions. So the store edition's manifest has no
+`READ_SMS`, `SEND_SMS`, `READ_CALL_LOG` or `ACCESS_BACKGROUND_LOCATION`; they are in `src/full/AndroidManifest.xml`.
+
+What changes for agents on the store edition:
+
+- `sms_list` and `call_log_list` don't exist. `sms_send` opens the SMS app with the recipient and text filled in
+  (`sent: false`), and the user taps Send, like on the iPhone. SMS replies through `notification_reply` still work.
+- `call_status` can't tell who is calling (Android reveals the number only with `READ_CALL_LOG`).
+- `location_get` works while the DroidHands app is open on screen. Otherwise it says so at once, and the agent asks
+  the user to open the app. (Android doesn't give location to a background app without background location, and
+  the bridge's `specialUse` foreground service doesn't count.)
+
+In the Play Console, remove the SMS/Call log and background location declarations once the new bundle is live:
+every track's bundles must be free of those permissions.
+
 ## Rules for the store apps
 
 - Nothing in the store editions points users to the full edition or to installing an APK: not in the app, not in
@@ -49,6 +74,10 @@ XCUITest runner ([IOS.md](IOS.md)) is the iPhone route to it, outside the App St
 
 - `clients/android/app/build.gradle.kts`: the flavors and their `BuildConfig.PHONE_USE` and `GITHUB_REPO`.
 - `clients/android/app/src/full/`: the accessibility service's manifest entry, config and strings (full only).
+- `Edition.SMS_AND_CALL_LOG` gates `sms_list`, `call_log_list` and the SIM `sms_send` (`messagingTools`), the SMS
+  and call-log Setup rows (`PermissionCatalog.runtime`) and the agent texts that mention them.
+  `Edition.BACKGROUND_LOCATION` gates the "Location while in background" Setup row and `location_get`'s
+  only-while-open check. Core: `ToolNames.SMS_AND_CALL_LOG_READ`.
 - `Edition` (`com.droidhands.android.Edition`): `PHONE_USE` gates the screen tools in `AndroidToolCatalog`, screen
   recipes, the accessibility setup step and the edition-specific agent text (`AgentInstructions.FULL` / `STORE`).
 - Core: `ToolNames.PHONE_USE` (the screen tools), `Scopes.PHONE_USE` and `Scopes.hasPhoneUse(registry)`,

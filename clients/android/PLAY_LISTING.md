@@ -6,8 +6,11 @@ What to enter in the [Play Console](https://play.google.com/console) for `com.dr
 
 Play gets the **store edition** ([docs/EDITIONS.md](../../docs/EDITIONS.md)): it has no accessibility service, so
 agents can't read or tap other apps' screens. Play rejected the earlier builds on 2026-11-23 under its Accessibility
-API policy ("cannot be requested for performing autonomous tasks"). The listing must describe only what this edition
-does, and must not point users to the full edition on GitHub or droidhands.com.
+API policy ("cannot be requested for performing autonomous tasks"). On 2026-11-25 it rejected the store edition under
+its Permissions and APIs that Access Sensitive Information policy (the SMS/call-log "Device Automation" declaration
+and background location), so the store edition no longer has SMS, call-log or background-location permissions
+either. The listing must describe only what this edition does, and must not point users to the full edition on
+GitHub or droidhands.com.
 
 ## Create app
 
@@ -31,11 +34,11 @@ does, and must not point users to the full edition on GitHub or droidhands.com.
 > Model Context Protocol) use your Android phone for you.
 >
 > Ask your agent to:
-> • text a friend, or read you your latest messages
+> • write a text to a friend for you to send, or read you your latest messages from their notifications
 > • call someone from your contacts
 > • add a meeting to your calendar, or tell you what's next
 > • set an alarm or a timer
-> • find where you are, or open directions
+> • find where you are while DroidHands is open, or open directions
 > • reply to WhatsApp, Telegram, Signal or Slack messages straight from their notifications, even with the phone
 >   locked
 > • open an app at the right place, for example a chat with your message already written, a song, a ride or a route
@@ -111,8 +114,9 @@ does, and must not point users to the full edition on GitHub or droidhands.com.
 > DroidHands has no account. To test: open the app, tap Get started and grant the permissions you want to try. Tap
 > "Connect an AI agent", choose ChatGPT or Claude, and add the copied URL as a custom MCP connector (ChatGPT:
 > chatgpt.com/plugins › Add › Add custom MCP server; a free account works). DroidHands shows a prompt with a code;
-> tap Allow. Then ask the agent: "What's on my calendar tomorrow?" or "Set a 5 minute timer." Agents › (agent) ›
-> Revoke access ends access at once.
+> tap Allow. Then ask the agent: "What's on my calendar tomorrow?", "Set a 5 minute timer", "Where am I?" (with the
+> DroidHands app open) or "Text +1 555 0100 'on my way'" (the Messages app opens with the text written; you tap Send).
+> Agents › (agent) › Revoke access ends access at once.
 
 ## Data safety
 
@@ -125,8 +129,8 @@ Recommended answers (they match docs/PRIVACY.md):
   **Collected: not retained**, purpose **App functionality**, **processed ephemerally**, **not required**
   (the user chooses), and shared **No** (the user's own agent is a user-directed transfer; select "Transferring data
   to a third party at the user's request" where Play offers it).
-  - Contacts, Calendar events, Approximate and precise location, SMS or MMS messages, Call log, Phone number, Device
-    or other IDs (the device id used for routing).
+  - Contacts, Calendar events, Approximate and precise location, Messages (notification content the agent reads),
+    Device or other IDs (the device id used for routing). The store edition reads no SMS and no call log.
 - Data encrypted in transit: **Yes** (TLS).
 - Users can request deletion: **Yes**. The app keeps its data only on the phone (clear the log, revoke agents, or
   uninstall).
@@ -136,17 +140,17 @@ Recommended answers (they match docs/PRIVACY.md):
 
 The Play review of these is where DroidHands is most likely to be rejected, so decide before you submit.
 
-1. **SMS and call log** (`SEND_SMS`, `READ_SMS`, `READ_CALL_LOG`): Play restricts them to apps that are the default
-   SMS, phone or assistant handler, or that match a listed exception. DroidHands is neither. Either request the
-   declaration form with the core-functionality justification "lets the user's own AI agent send and read their
-   texts and calls on their request" (expect a rejection), or remove these permissions and the `sms_*` and
-   `call_log` tools from the Play build.
+1. **SMS and call log**: none. The store edition declares no `SEND_SMS`, `READ_SMS` or `READ_CALL_LOG` (Play
+   rejected the "Device Automation" declaration on 2026-11-25). `sms_send` opens the SMS app with the message
+   written and the user taps Send. Once the new bundle is live, the SMS/Call log declaration form should say no
+   bundle uses these permissions; delete the declaration if Play offers it.
 2. **AccessibilityService**: none. The store edition declares no accessibility service. Remove the earlier
    accessibility declaration in *Policy › App content*, since the bundle no longer needs it.
 3. **Foreground service, special use** (`BridgeService`): purpose "keeps the connection to the user's AI agent
    open while it is working". Provide the video of the user-visible notification.
-4. **Background location** (`ACCESS_BACKGROUND_LOCATION`): needs its own form and video; drop it from the Play
-   build unless an agent really must read the location while the app is closed.
+4. **Background location**: none. The store edition declares no `ACCESS_BACKGROUND_LOCATION` (rejected on
+   2026-11-25); `location_get` works while the DroidHands app is open. Remove the background-location declaration
+   with the new bundle. Every track (internal, closed, open, production) must carry only bundles without it.
 5. `SYSTEM_ALERT_WINDOW`, `USE_FULL_SCREEN_INTENT` and `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` each need a short
    justification (approval prompts shown over other apps; keeping the connection alive).
 6. Notification listener: declare in the data safety form that notifications are read on the user's request.

@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.notifications
 
+import com.droidhands.android.Edition
 import android.content.Context
 import com.droidhands.android.notify.AppLabels
 import com.droidhands.android.notify.BridgeNotificationListener
@@ -35,10 +36,12 @@ internal object NotificationAccess {
         "That is one of DroidHands's own notifications (bridge status or an approval prompt); agents can't act on it."
 
     /** For notifications whose content (and here: actions) Android 15+ hid from DroidHands. */
-    const val HIDDEN_WITHOUT_ACTION =
+    val HIDDEN_WITHOUT_ACTION: String =
         "Android hid this notification's content and buttons from DroidHands (it treats it as sensitive), so it can't " +
-            "be replied to or acted on here. For SMS use sms_list / sms_send, for phone calls call_status / call_answer / " +
-            "call_end; otherwise open the app (app_open, then screen tools)."
+            "be replied to or acted on here. " +
+            (if (Edition.SMS_AND_CALL_LOG) "For SMS use sms_list / sms_send, for" else "For SMS use sms_send (the user taps Send), for") +
+            " phone calls call_status / call_answer / call_end; otherwise " +
+            (if (Edition.PHONE_USE) "open the app (app_open, then screen tools)." else "ask the user to open the app.")
 
     /** Generous bound on real keys (`0|com.example|12|tag|10123`), to reject garbage early. */
     private const val MAX_KEY_LENGTH = 1024

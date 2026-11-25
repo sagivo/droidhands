@@ -17,7 +17,10 @@ import com.droidhands.core.tools.CallContext
 import com.droidhands.core.tools.Scopes
 import com.droidhands.core.tools.ToolNames
 import com.droidhands.core.tools.ToolRegistry
+import com.droidhands.core.tools.Risk
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The Android registry offers exactly the platform-neutral catalog of docs/TOOLS.md ([ToolNames.ALL]), less phone use in the store edition. */
@@ -48,8 +51,10 @@ class AndroidToolCatalogTest {
         val registry = ToolRegistry()
         registry.register(capabilitiesTool(registry))
         registry.registerAll(tools)
-        // The store edition leaves out phone use (docs/EDITIONS.md).
-        val expected = if (Edition.PHONE_USE) ToolNames.ALL else ToolNames.ALL - ToolNames.PHONE_USE
+        // The store edition leaves out phone use and reading SMS and call history (docs/EDITIONS.md).
+        val expected = ToolNames.ALL -
+            (if (Edition.PHONE_USE) emptySet() else ToolNames.PHONE_USE) -
+            (if (Edition.SMS_AND_CALL_LOG) emptySet() else ToolNames.SMS_AND_CALL_LOG_READ)
         assertEquals(expected, registry.all().map { it.name }.toSet())
         assertEquals(Edition.PHONE_USE, Scopes.hasPhoneUse(registry))
     }
@@ -59,5 +64,17 @@ class AndroidToolCatalogTest {
         val names = AndroidToolCatalog.build(context, AppActionCatalog({ PluginCatalog.EMPTY }, NoApps, builtInTool = { null })).map { it.name }
         val urlOpen = names.indexOf("url_open")
         assertEquals(listOf(ToolNames.APP_ACTIONS_LIST, ToolNames.APP_ACTION_RUN), names.subList(urlOpen + 1, urlOpen + 3))
+    }
+
+    @Test
+    fun withoutSmsPermissionsSmsSendOnlyWritesTheMessage() {
+        assertEquals(listOf("sms_list", "call_log_list", "sms_send", "phone_call"), messagingTools(context, smsAndCallLog = true).map { it.name })
+        val store = messagingTools(context, smsAndCallLog = false)
+        assertEquals(listOf("sms_send", "phone_call"), store.map { it.name })
+        // It opens the SMS app and the user taps Send, so nothing is sent by DroidHands (docs/EDITIONS.md).
+        val compose = store.first()
+        assertEquals(Risk.ACTION, compose.risk)
+        assertTrue(compose.description.contains("taps Send"))
+        assertFalse(store.any { it.description.contains("call_log_list") })
     }
 }

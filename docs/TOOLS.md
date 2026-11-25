@@ -32,7 +32,9 @@ an optional leading `+`, and spacing or punctuation). USSD/MMI codes containing 
 ## Platforms
 
 Android's full edition has every tool below except those marked iPhone only; the Google Play (store) edition has
-all of them except the Screen tools ([EDITIONS.md](EDITIONS.md)). **DroidHands for iPhone** (the App Store app,
+all of them except the Screen tools, `sms_list` and `call_log_list`, and in it `sms_send` opens the SMS app with the
+message written (the user taps Send), `call_status` has no caller number, and `location_get` works only while the
+DroidHands app is on screen ([EDITIONS.md](EDITIONS.md)). **DroidHands for iPhone** (the App Store app,
 [IOS.md](IOS.md#droidhands-for-iphone-the-app-store-app)) has `bridge_capabilities`, `device_status`,
 `flashlight_set`, `clipboard_set`, `speak`, `url_open`, `contacts_search`, `sms_send` (the user taps Send in the
 message composer), `phone_call` (the user taps Call), `call_status`, `calendar_list`, `calendar_events_list`,
@@ -138,7 +140,7 @@ foreground app, and their errors name the step that failed. `bridge_capabilities
 |---|---|---|---|
 | `sms_list` | messages.read | READ | `box`: `inbox\|sent\|all` (default all), `address` or `contact`, `query` (text contains), `since_hours`, `limit` (default 20, max 200) |
 | `call_log_list` | messages.read | READ | `type`: `incoming\|outgoing\|missed\|all`, `address` or `contact`, `since_hours`, `limit` (default 20) |
-| `sms_send` | messages.send | SENSITIVE (internal) | `to` (phone) or `contact` (name), `message` (req) → waits up to 30 s for the radio's sent status |
+| `sms_send` | messages.send | SENSITIVE (internal) | `to` (phone) or `contact` (name), `message` (req) → waits up to 30 s for the radio's sent status. Store edition: ACTION, opens the SMS app with the message written → `{opened, sent: false, to, name?, app?, note}`; the user taps Send |
 | `phone_call` | calls | SENSITIVE (internal) | `to` (phone) or `contact` (name) – places a call |
 | `call_status` | calls | READ | – → `{state: idle\|ringing\|in_call, incoming_number?, contact_name?, call_waiting?, app_call?, note?}` (number/name only with READ_CALL_LOG/READ_CONTACTS) |
 | `call_answer` | calls | SENSITIVE (pre) | – answers the ringing call → `{answered, state, app_call?, note}` (Android 15 hides call-notification actions from listeners, so this uses the telephony API) |

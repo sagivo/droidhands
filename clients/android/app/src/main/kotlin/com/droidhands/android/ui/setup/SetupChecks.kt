@@ -49,7 +49,8 @@ internal object SetupChecks {
                 },
             )
         }
-        add(backgroundLocation(context, asked, showRationale))
+        // The store edition doesn't declare background location (docs/EDITIONS.md).
+        if (Edition.BACKGROUND_LOCATION) add(backgroundLocation(context, asked, showRationale))
         // Phone use only exists in the full edition (docs/EDITIONS.md).
         if (Edition.PHONE_USE) add(accessibility(context).withRestrictedHelp(source))
         add(notificationAccess(context).withRestrictedHelp(source))
@@ -62,7 +63,9 @@ internal object SetupChecks {
         val missing = group.permissions.filterNot { Perms.has(context, it) }
         val status = SetupLogic.runtimeStatus(group.permissions.size - missing.size, group.permissions.size)
         val description = if (group.id == SetupLogic.LOCATION) {
-            "${group.rationale} Choose \"Precise\" so results are accurate."
+            "${group.rationale} Choose \"Precise\" so results are accurate." +
+                // Without background location Android gives it to DroidHands only while DroidHands is on screen.
+                if (Edition.BACKGROUND_LOCATION) "" else " Android shares the location only while DroidHands is open."
         } else {
             group.rationale
         }

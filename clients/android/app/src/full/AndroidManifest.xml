@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Full edition only (docs/EDITIONS.md): the accessibility service behind phone use (screen_* and ui_* tools and
-     screen recipes). The store edition leaves it out, because Google Play's Accessibility API policy doesn't allow
-     it for AI agents. -->
+<!-- Full edition only (docs/EDITIONS.md). The store edition leaves these out because Google Play restricts them:
+     - the accessibility service behind phone use (screen_* and ui_* tools and screen recipes): Play's Accessibility
+       API policy doesn't allow it for AI agents;
+     - SMS and call log (sms_list, call_log_list, sms_send through the SIM, the caller's number in call_status): Play's
+       SMS and Call Log policy allows them only for default handlers and a few listed exceptions;
+     - background location (location_get while DroidHands isn't on screen): Play's location policy. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application>
         <service

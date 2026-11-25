@@ -26,6 +26,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ANDROID_DIR="$REPO_ROOT/clients/android"
 DEFAULT_APK="$ANDROID_DIR/app/build/outputs/apk/full/debug/app-full-debug.apk"
 MANIFEST="$ANDROID_DIR/app/src/main/AndroidManifest.xml"
+# The full edition's own permissions (SMS, call log, background location; docs/EDITIONS.md).
+FULL_MANIFEST="$ANDROID_DIR/app/src/full/AndroidManifest.xml"
 
 usage() {
   cat <<EOF
@@ -211,12 +213,15 @@ requested_permissions() {
     }'
 }
 
-# Fallback: uses-permission entries of the app manifest in this repository.
+# Fallback: uses-permission entries of the app manifests (shared and full edition) in this repository.
 manifest_permissions() {
-  [ -f "$MANIFEST" ] || return 0
-  sed -n 's/.*<uses-permission[^>]*android:name="\([^"]*\)".*/\1/p' "$MANIFEST"
-  # Multi-line <uses-permission> elements put the name on its own line.
-  awk '/<uses-permission/ { inside = 1 } inside && /android:name="/ { sub(/.*android:name="/, ""); sub(/".*/, ""); print; inside = 0 }' "$MANIFEST"
+  local file
+  for file in "$MANIFEST" "$FULL_MANIFEST"; do
+    [ -f "$file" ] || continue
+    sed -n 's/.*<uses-permission[^>]*android:name="\([^"]*\)".*/\1/p' "$file"
+    # Multi-line <uses-permission> elements put the name on its own line.
+    awk '/<uses-permission/ { inside = 1 } inside && /android:name="/ { sub(/.*android:name="/, ""); sub(/".*/, ""); print; inside = 0 }' "$file"
+  done
 }
 
 # ------------------------------------------------------------------------------------------ steps

@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.notifications
 
+import com.droidhands.android.Edition
 import com.droidhands.android.notify.FilteredNotifications
 import com.droidhands.android.notify.NotificationInfo
 import com.droidhands.android.notify.NotificationQuery
@@ -86,7 +87,8 @@ class NotificationSummariesTest {
             1,
         )
         val footer = NotificationSummaries.listFooter(NotificationQuery(), hidden)!!
-        assertTrue(footer.contains("sms_list"))
+        // sms_list exists only with SMS permissions (docs/EDITIONS.md).
+        assertEquals(Edition.SMS_AND_CALL_LOG, footer.contains("sms_list"))
         assertTrue(footer.contains("call_answer"))
         assertTrue(footer.contains("by index"))
     }

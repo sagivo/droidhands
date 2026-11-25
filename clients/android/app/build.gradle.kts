@@ -106,13 +106,18 @@ android {
         create("full") {
             dimension = "edition"
             buildConfigField("boolean", "PHONE_USE", "true")
+            buildConfigField("boolean", "SMS_AND_CALL_LOG", "true")
+            buildConfigField("boolean", "BACKGROUND_LOCATION", "true")
             buildConfigField("String", "GITHUB_REPO", literal(githubRepo))
         }
         // Google Play: no accessibility service (Play's Accessibility API policy bars it for AI agents), so no
-        // screen tools or screen recipes, and no update check (Play installs update through Play).
+        // screen tools or screen recipes, and no update check (Play installs update through Play). No SMS, call-log
+        // or background-location permissions either (Play's restricted-permission policies; docs/EDITIONS.md).
         create("store") {
             dimension = "edition"
             buildConfigField("boolean", "PHONE_USE", "false")
+            buildConfigField("boolean", "SMS_AND_CALL_LOG", "false")
+            buildConfigField("boolean", "BACKGROUND_LOCATION", "false")
             buildConfigField("String", "GITHUB_REPO", literal(""))
         }
     }
