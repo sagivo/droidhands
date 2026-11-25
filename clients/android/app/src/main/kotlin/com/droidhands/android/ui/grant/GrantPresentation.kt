@@ -24,6 +24,23 @@ object GrantPresentation {
     fun everythingDescription(phoneUse: Boolean = Edition.PHONE_USE): String =
         "Every app and ability: messages, calls, ${if (phoneUse) "the screen" else "your calendar"}. It acts without asking you first."
 
+    /**
+     * The grant screen's text for [ability]. Each edition only describes what it can do: the store edition has no
+     * phone use and doesn't read SMS or call history (docs/EDITIONS.md).
+     */
+    fun abilityDescription(
+        ability: Ability,
+        phoneUse: Boolean = Edition.PHONE_USE,
+        smsAndCallLog: Boolean = Edition.SMS_AND_CALL_LOG,
+    ): String =
+        when {
+            smsAndCallLog -> ability.description(phoneUse)
+            ability == Ability.READ_MESSAGES -> "The notifications on this phone, including message previews."
+            ability == Ability.SEND_MESSAGES ->
+                "Write texts and emails for you to send, and reply to, act on or dismiss notifications."
+            else -> ability.description(phoneUse)
+        }
+
     const val CHOSEN = "Only what I choose"
     const val CHOSEN_DESCRIPTION = "Pick apps and abilities; anything else is refused. Best for agents you don't fully trust."
 

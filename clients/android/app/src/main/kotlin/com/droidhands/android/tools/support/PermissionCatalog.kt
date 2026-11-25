@@ -2,6 +2,7 @@ package com.droidhands.android.tools.support
 
 import android.Manifest
 import android.content.Context
+import com.droidhands.android.Edition
 import com.droidhands.core.tools.Scopes
 
 /** A runtime permission group shown in the Setup screen. */
@@ -26,24 +27,43 @@ object PermissionCatalog {
         listOf(Manifest.permission.POST_NOTIFICATIONS), emptyList(),
     )
 
-    val RUNTIME: List<PermissionGroup> = listOf(
+    /** The runtime rows of this build's edition ([Edition.SMS_AND_CALL_LOG]). */
+    val RUNTIME: List<PermissionGroup> get() = runtime(Edition.SMS_AND_CALL_LOG)
+
+    /**
+     * The runtime rows, with or without SMS and call log. The store edition doesn't declare those permissions
+     * (docs/EDITIONS.md), so it has no SMS row and its Phone row is calls only.
+     */
+    fun runtime(smsAndCallLog: Boolean): List<PermissionGroup> = listOfNotNull(
         NOTIFICATIONS,
         PermissionGroup(
             "contacts", "Contacts", "Find people by name (\"send WhatsApp to Tania\").",
             listOf(Manifest.permission.READ_CONTACTS), listOf(Scopes.CONTACTS_READ, Scopes.MESSAGES_SEND, Scopes.CALLS),
         ),
-        PermissionGroup(
-            "sms", "SMS", "Read and send text messages.",
-            listOf(Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS), listOf(Scopes.MESSAGES_READ, Scopes.MESSAGES_SEND),
-        ),
-        PermissionGroup(
-            "phone", "Phone & call log", "Place, answer and end calls, and read call history.",
-            listOf(
-                Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS,
-                Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE,
-            ),
-            listOf(Scopes.CALLS, Scopes.MESSAGES_READ),
-        ),
+        if (smsAndCallLog) {
+            PermissionGroup(
+                "sms", "SMS", "Read and send text messages.",
+                listOf(Manifest.permission.READ_SMS, Manifest.permission.SEND_SMS), listOf(Scopes.MESSAGES_READ, Scopes.MESSAGES_SEND),
+            )
+        } else {
+            null
+        },
+        if (smsAndCallLog) {
+            PermissionGroup(
+                "phone", "Phone & call log", "Place, answer and end calls, and read call history.",
+                listOf(
+                    Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS,
+                    Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_PHONE_STATE,
+                ),
+                listOf(Scopes.CALLS, Scopes.MESSAGES_READ),
+            )
+        } else {
+            PermissionGroup(
+                "phone", "Phone", "Place, answer and end calls.",
+                listOf(Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS, Manifest.permission.READ_PHONE_STATE),
+                listOf(Scopes.CALLS),
+            )
+        },
         PermissionGroup(
             "calendar", "Calendar", "Read and create events.",
             listOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR), listOf(Scopes.CALENDAR_READ, Scopes.CALENDAR_WRITE),
@@ -57,6 +77,7 @@ object PermissionCatalog {
     /**
      * Must be requested AFTER [RUNTIME] location is granted, on its own (Android 11+ sends the user to
      * Settings > "Allow all the time"). Needed because agent calls arrive while the app is in background.
+     * Full edition only ([Edition.BACKGROUND_LOCATION]).
      */
     val BACKGROUND_LOCATION = PermissionGroup(
         "background_location", "Location while in background", "Required for location requests while the app is not open.",

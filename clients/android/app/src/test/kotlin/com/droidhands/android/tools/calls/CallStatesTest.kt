@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.calls
 
+import com.droidhands.android.Edition
 import android.telephony.TelephonyManager
 import com.droidhands.core.tools.ToolException
 import org.junit.Assert.assertEquals
@@ -90,7 +91,9 @@ class CallStatesTest {
     fun `status note explains a missing number and call waiting`() {
         assertNull(CallStates.statusNote(CallSnapshot(CallState.IN_CALL), numberKnown = false, canReadNumber = false))
         assertNull(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = true, canReadNumber = true))
-        assertTrue(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = false, canReadNumber = false)!!.contains("Permissions & access"))
+        // The store edition has no call log, so there is nothing to grant (docs/EDITIONS.md).
+        val noNumber = CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = false, canReadNumber = false)!!
+        assertTrue(noNumber, noNumber.contains(if (Edition.SMS_AND_CALL_LOG) "Permissions & access" else "can't see the caller's number"))
         assertTrue(CallStates.statusNote(CallSnapshot(CallState.RINGING), numberKnown = false, canReadNumber = true)!!.contains("withheld"))
         val waiting = CallStates.statusNote(CallSnapshot(CallState.RINGING, callWaiting = true), numberKnown = true, canReadNumber = true)!!
         assertTrue(waiting.contains("on hold"))

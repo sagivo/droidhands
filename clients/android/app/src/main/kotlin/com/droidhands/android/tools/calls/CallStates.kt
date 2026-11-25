@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.calls
 
+import com.droidhands.android.Edition
 import android.telephony.TelephonyManager
 import com.droidhands.core.tools.ToolException
 
@@ -87,7 +88,11 @@ object CallStates {
                     if (canReadNumber) {
                         "Android did not reveal the caller's number (it may be withheld, or the call is in a calling app)."
                     } else {
-                        "To see the caller's number, the user must grant DroidHands Phone & call log access (DroidHands app > Settings > Permissions & access)."
+                        if (Edition.SMS_AND_CALL_LOG) {
+                            "To see the caller's number, the user must grant DroidHands Phone & call log access (DroidHands app > Settings > Permissions & access)."
+                        } else {
+                            "This edition of DroidHands can't see the caller's number."
+                        }
                     },
                 )
             }

@@ -2,6 +2,10 @@ package com.droidhands.android.tools
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import com.droidhands.android.Edition
 import com.droidhands.android.tools.comms.AddressFilter
 import com.droidhands.android.tools.comms.CallLogReader
 import com.droidhands.android.tools.comms.CallTypes
@@ -14,9 +18,13 @@ import com.droidhands.android.tools.comms.SmsResultCodes
 import com.droidhands.android.tools.comms.SmsSender
 import com.droidhands.android.tools.comms.TelephonySupport
 import com.droidhands.android.tools.support.ContactLookup
+import com.droidhands.android.tools.support.Launcher
 import com.droidhands.android.tools.support.Perms
 import com.droidhands.android.tools.support.Recipient
+import com.droidhands.android.tools.system.LaunchGate
+import com.droidhands.android.tools.system.LaunchNotes
 import com.droidhands.android.tools.system.Redaction
+import com.droidhands.android.tools.system.resolveActivityCompat
 import com.droidhands.core.tools.Risk
 import com.droidhands.core.tools.SchemaBuilder
 import com.droidhands.core.tools.Scopes
@@ -33,13 +41,16 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.put
 
-/** Tools: sms_list, sms_send, call_log_list, phone_call (docs/TOOLS.md). */
-fun messagingTools(context: Context): List<Tool> = listOf(
-    smsList(context),
-    callLogList(context),
-    smsSend(context),
-    phoneCall(context),
-)
+/**
+ * Tools: sms_list, sms_send, call_log_list, phone_call (docs/TOOLS.md). Without SMS and call-log permissions (the
+ * store edition, docs/EDITIONS.md) there is no sms_list or call_log_list, and sms_send opens the SMS app instead.
+ */
+fun messagingTools(context: Context, smsAndCallLog: Boolean = Edition.SMS_AND_CALL_LOG): List<Tool> =
+    if (smsAndCallLog) {
+        listOf(smsList(context), callLogList(context), smsSend(context), phoneCall(context, smsAndCallLog))
+    } else {
+        listOf(smsCompose(context), phoneCall(context, smsAndCallLog))
+    }
 
 private const val LIST_DEFAULT_LIMIT = 20
 private const val LIST_MAX_LIMIT = 200
@@ -163,12 +174,55 @@ private fun smsSend(context: Context): Tool = tool(
     }
 }
 
-private fun phoneCall(context: Context): Tool = tool(
+/**
+ * sms_send without SEND_SMS (the store edition): opens the SMS app's compose screen with the recipient and text filled
+ * in, and the user taps Send. Nothing reaches anyone without the user, so it needs no approval of its own.
+ */
+private fun smsCompose(context: Context): Tool = tool(
+    name = "sms_send",
+    title = "Write an SMS",
+    description = "Open the phone's SMS app with a text message to the recipient filled in. $RECIPIENT_HELP This " +
+        "edition of DroidHands can't send SMS by itself: the user taps Send in the SMS app, so tell them the message is " +
+        "ready to send, not that it was sent. Returns {opened:true,sent:false,to,name?,app?,note}.",
+    scope = Scopes.MESSAGES_SEND,
+    risk = Risk.ACTION,
+    schema = objectSchema {
+        recipientArgs()
+        string("message", "The text to fill in.", required = true)
+    },
+    timeoutMs = 30_000,
+    unavailable = { TelephonySupport.unavailableReason(context, "send SMS") },
+    describe = { args -> "Write SMS to ${describeTarget(args)}" },
+) { args, ctx ->
+    val message = args.reqString("message")
+    val recipient = resolveRecipient(context, args)
+    val label = CommsArgs.label(recipient)
+    val intent = Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", recipient.number, null)).putExtra("sms_body", message)
+    val resolved = withContext(Dispatchers.IO) {
+        context.packageManager.resolveActivityCompat(intent, PackageManager.MATCH_DEFAULT_ONLY)
+    } ?: throw ToolException("No app on the phone can write SMS messages.")
+    val handler = LaunchGate.check(context, intent, resolved, ctx.appAccess, "the SMS app")
+    ctx.reportActivity("Writing an SMS to $label")
+    Launcher.startActivity(context, intent)
+    ToolResult.json {
+        put("opened", true)
+        put("sent", false)
+        putRecipient(recipient)
+        handler?.let { put("app", it.packageName) }
+        val notes = listOfNotNull(
+            "The message is written in the SMS app but not sent: the user has to tap Send there.",
+            LaunchNotes.afterLaunch(context, chooser = handler == null),
+        )
+        put("note", notes.joinToString(" "))
+    }
+}
+
+private fun phoneCall(context: Context, smsAndCallLog: Boolean): Tool = tool(
     name = "phone_call",
     title = "Place a phone call",
     description = "Place a phone call. $RECIPIENT_HELP The user may have to approve on the phone; the prompt shows the " +
         "resolved name and number. The call is handed to the phone's dialer: DroidHands cannot speak on it or tell " +
-        "whether it was answered (call_log_list shows it afterwards).",
+        "whether it was answered" + (if (smsAndCallLog) " (call_log_list shows it afterwards)." else "."),
     scope = Scopes.CALLS,
     risk = Risk.SENSITIVE,
     schema = objectSchema { recipientArgs() },

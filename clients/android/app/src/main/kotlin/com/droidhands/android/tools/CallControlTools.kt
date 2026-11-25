@@ -1,5 +1,6 @@
 package com.droidhands.android.tools
 
+import com.droidhands.android.Edition
 import android.Manifest
 import android.content.Context
 import com.droidhands.android.tools.calls.CallMonitor
@@ -31,10 +32,16 @@ fun callControlTools(context: Context): List<Tool> = listOf(callStatus(context),
 private fun callStatus(context: Context) = tool(
     name = "call_status",
     title = "Phone call status",
-    description = "Whether the phone is idle, ringing (incoming call) or in_call: {state,incoming_number?,contact_name?," +
-        "call_waiting?,app_call?,note?}. For a ringing call, incoming_number (needs the Phone & call log permission) and " +
-        "contact_name (needs Contacts) are best effort: Android doesn't always reveal the number, and withheld numbers " +
-        "never appear. call_waiting=true: a call is ringing while another is active. app_call=true: the call is in a " +
+    description = "Whether the phone is idle, ringing (incoming call) or in_call: " +
+        if (Edition.SMS_AND_CALL_LOG) {
+            "{state,incoming_number?,contact_name?,call_waiting?,app_call?,note?}. For a ringing call, incoming_number " +
+                "(needs the Phone & call log permission) and contact_name (needs Contacts) are best effort: Android doesn't " +
+                "always reveal the number, and withheld numbers never appear. "
+        } else {
+            // No READ_CALL_LOG in the store edition, so Android never reveals the caller's number.
+            "{state,call_waiting?,app_call?,note?}. This edition of DroidHands can't see who is calling. "
+        } +
+        "call_waiting=true: a call is ringing while another is active. app_call=true: the call is in a " +
         "calling app (WhatsApp, Telegram…) rather than on the SIM. Act on calls with call_answer and call_end.",
     scope = Scopes.CALLS,
     risk = Risk.READ,

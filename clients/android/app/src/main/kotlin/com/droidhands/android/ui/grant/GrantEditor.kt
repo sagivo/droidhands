@@ -229,7 +229,7 @@ private fun AbilityRow(ability: Ability, state: ToggleableState, partly: String?
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(ability.label, style = MaterialTheme.typography.bodyLarge)
-            Text(ability.description(Edition.PHONE_USE), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(GrantPresentation.abilityDescription(ability), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (partly != null) {
                 Text(partly, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }

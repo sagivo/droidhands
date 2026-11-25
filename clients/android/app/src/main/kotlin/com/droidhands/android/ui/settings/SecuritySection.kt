@@ -1,5 +1,6 @@
 package com.droidhands.android.ui.settings
 
+import com.droidhands.android.Edition
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -52,9 +53,16 @@ internal fun SecuritySection(
 ) {
     ListSection(
         title = "Security",
-        footer = "With hidden codes, verification and 2FA codes in SMS and notifications reach agents as [code hidden], " +
-            "so a tricked agent can't use them to take over your accounts. Screen reading and screenshots can still " +
-            "show a code that is on screen: add your SMS and authenticator apps to Never-allow apps.",
+        footer = "With hidden codes, verification and 2FA codes in " +
+            (if (Edition.SMS_AND_CALL_LOG) "SMS and notifications" else "notifications") +
+            " reach agents as [code hidden], so a tricked agent can't use them to take over your accounts." +
+            // Only phone use can read a code off the screen (docs/EDITIONS.md).
+            if (Edition.PHONE_USE) {
+                " Screen reading and screenshots can still show a code that is on screen: add your SMS and " +
+                    "authenticator apps to Never-allow apps."
+            } else {
+                ""
+            },
     ) {
         ListRow(
             title = "Never-allow apps",

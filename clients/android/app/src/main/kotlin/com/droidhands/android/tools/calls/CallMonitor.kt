@@ -1,5 +1,6 @@
 package com.droidhands.android.tools.calls
 
+import com.droidhands.android.Edition
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioManager
@@ -72,8 +73,8 @@ internal class CallMonitor(private val context: Context) {
 
         const val NO_TELECOM = "This device has no phone-call service (Telecom), so DroidHands can't see or control calls."
 
-        const val PERMISSION_DENIED =
+        val PERMISSION_DENIED: String =
             "Android denied access to phone calls. Ask the user to open the DroidHands app > Settings > Permissions & access and grant " +
-                "Phone & call log (it includes answering and ending calls)."
+                (if (Edition.SMS_AND_CALL_LOG) "Phone & call log" else "Phone") + " (it includes answering and ending calls)."
     }
 }

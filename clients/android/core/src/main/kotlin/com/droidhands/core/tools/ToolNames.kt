@@ -18,6 +18,12 @@ object ToolNames {
         "ui_global_action",
     )
 
+    /**
+     * The tools that read SMS and call history: left out by devices without those permissions, such as the Android
+     * store edition (docs/EDITIONS.md).
+     */
+    val SMS_AND_CALL_LOG_READ: Set<String> = linkedSetOf("sms_list", "call_log_list")
+
     /** Every catalog tool, in the order of docs/TOOLS.md. */
     val ALL: Set<String> = linkedSetOf(
         // Meta
