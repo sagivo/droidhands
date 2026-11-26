@@ -101,6 +101,21 @@ The `google-play` and `app-store` jobs of the release workflow run
 fails with a list of what is missing when its secrets aren't set; the GitHub release still happens. Re-running a
 job is safe: a version a store already has is not uploaded or submitted again.
 
+A store only gets a release when its app changed. Each job asks its store which version it already has (Play:
+the newest on the track; App Store: the newest version that is in review or released, or the newest TestFlight
+upload when `APP_STORE_SUBMIT` is `false`), and skips with a notice in the run summary when nothing that goes into
+that app changed since that version's tag:
+
+| Store | Counts | Doesn't count |
+|---|---|---|
+| Google Play | `clients/android/`, `plugins/` | Markdown, tests, `fixtures/`, the full edition's `app/src/full/`, `plugins/_template` |
+| App Store | `clients/ios/app/` | Markdown, `DroidHandsTests/`, `DroidHandsUITests/` |
+
+So an Android-only fix doesn't send the iPhone app to App Review, and the next iPhone release still picks up
+every iPhone change since the version Apple has, even when the releases in between skipped it. Build settings
+(the `DROIDHANDS_*` variables) aren't compared: to ship only a new setting, run `store-release.sh` by hand without
+`--only-if-changed`.
+
 ### Google Play
 
 After the one-time setup below (the app exists in the Play Console, a release was made by hand, and a service
@@ -171,6 +186,7 @@ git tag v1.2.3
 ./scripts/store-release.sh ios                      # signed .ipa → App Store Connect / TestFlight
 ./scripts/store-release.sh ios --submit --notes "What's new"   # … then submit it for App Review
 ./scripts/store-release.sh all --build-only         # build and sign both, upload nothing
+./scripts/store-release.sh all --only-if-changed    # skip a store whose app didn't change (as CI does)
 ```
 
 Settings come from environment variables or `~/.droidhands/store.env` (`KEY=VALUE` lines, `chmod 600`; the

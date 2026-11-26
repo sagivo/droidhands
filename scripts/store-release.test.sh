@@ -65,6 +65,10 @@ case "$url" in
   */bundles*) body='{"versionCode":10203}' ;;
   */edits) body='{"id":"edit-1"}' ;;
 esac
+# Play after a rejection: a plain commit is refused, one with changesNotSentForReview=true goes through.
+if [ -n "${FAKE_COMMIT_NOT_SENT:-}" ] && [[ "$url" == *":commit" ]]; then
+  body='{"error":{"message":"Changes cannot be sent for review automatically. Please set the query parameter changesNotSentForReview to true."}}' code=400
+fi
 if [ -n "${FAKE_PLAY_FAIL_ON:-}" ] && [[ "$url" == *"$FAKE_PLAY_FAIL_ON"* ]]; then
   body='{"error":{"message":"Only releases with status draft may be created on draft app."}}' code=400
 fi
@@ -97,6 +101,7 @@ printf 'asc%s\n' "$(printf ' [%s]' "$@")" >>"$FAKE_LOG"
 printf 'asc-env key=[%s] issuer=[%s] path=[%s]\n' "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$ASC_KEY_PATH" >>"$FAKE_LOG"
 case "$1" in
   has-build) echo "${FAKE_HAS_BUILD:-no}" ;;
+  latest-version) [ -z "${FAKE_LATEST:-}" ] || echo "$FAKE_LATEST" ;;
   profile)
     while [ $# -gt 0 ]; do [ "$1" = --out ] && printf 'profile' >"$2"; shift; done
     echo '{"name":"com.droidhands.ios App Store (CI)","uuid":"UUID-1"}'
@@ -256,6 +261,17 @@ if run 1 android --version 1.2.3 --allow-dirty --relay-url https://relay.example
   expect_in "deletes the uncommitted edit" "$LOG" "[DELETE]"
   expect_not_in "no commit after an error" "$LOG" ":commit]"
 fi
+EXTRA_ENV="$PLAY FAKE_COMMIT_NOT_SENT=1"
+if run 0 android --version 1.2.3 --allow-dirty --track production --yes --relay-url https://relay.example.com; then
+  expect_in "commits without sending for review when Play asks" "$LOG" ":commit?changesNotSentForReview=true]"
+  expect_in "says to send it from the Console" "$OUTPUT" "Send changes for review"
+  expect_not_in "the committed edit isn't deleted" "$LOG" "[DELETE]"
+fi
+EXTRA_ENV="$PLAY FAKE_PLAY_FAIL_ON=:commit"
+if run 1 android --version 1.2.3 --allow-dirty --relay-url https://relay.example.com; then
+  expect_in "other commit errors still stop the release" "$OUTPUT" "Google Play answered 400"
+  expect_not_in "and aren't retried without review" "$LOG" "changesNotSentForReview"
+fi
 printf '{"not":"a key"}' >"$WORK/bad.json"
 EXTRA_ENV="PLAY_SERVICE_ACCOUNT_JSON=$WORK/bad.json"
 if run 1 android --version 1.2.3 --allow-dirty; then expect_in "rejects a file that is not a service account key" "$OUTPUT" "not a service account key"; fi
@@ -353,6 +369,90 @@ if run 0 all --version 1.2.3 --allow-dirty --relay-url https://relay.example.com
   expect_in "all uploads to Play" "$LOG" "/edits/edit-1:commit]"
   expect_in "all uploads to App Store Connect" "$LOG" "xcrun [altool]"
 fi
+
+# ---------------------------------------------------------------------------- only if changed
+# A scratch repository whose v1.2.2 tag is what the stores have; each case changes files in its working tree.
+REPO="$WORK/repo"
+mkdir -p "$REPO/clients/android/app/src/main" "$REPO/clients/android/app/src/full" "$REPO/clients/ios/app/DroidHands" \
+  "$REPO/clients/ios/app/DroidHandsTests" "$REPO/plugins/_template" "$REPO/plugins/maps" "$REPO/docs"
+for file in clients/android/app/src/main/App.kt clients/android/app/src/full/Full.kt clients/android/PLAY_LISTING.md \
+  clients/ios/app/DroidHands/App.swift clients/ios/app/DroidHandsTests/AppTests.swift plugins/_template/plugin.yaml \
+  plugins/maps/plugin.yaml docs/RELEASING.md; do
+  printf 'v1\n' >"$REPO/$file"
+done
+git -C "$REPO" init -q
+git -C "$REPO" add -A
+git -C "$REPO" -c user.name=test -c user.email=test@example.com commit -qm "1.2.2"
+git -C "$REPO" tag v1.2.2
+# change FILE…: the working tree differs from v1.2.2 in exactly these files.
+change() {
+  git -C "$REPO" checkout -q -- .
+  local file
+  for file in "$@"; do printf 'v2\n' >>"$REPO/$file"; done
+}
+ON_PLAY="FAKE_TRACKS={\"tracks\":[{\"track\":\"production\",\"releases\":[{\"versionCodes\":[\"10201\"]},{\"versionCodes\":[\"10202\"]}]}]}"
+PROD=(--version 1.2.3 --allow-dirty --track production --yes --relay-url https://relay.example.com --only-if-changed)
+
+EXTRA_ENV="$PLAY $ON_PLAY DROIDHANDS_SOURCE_REPO=$REPO"
+change clients/ios/app/DroidHands/App.swift clients/android/PLAY_LISTING.md clients/android/app/src/full/Full.kt plugins/_template/plugin.yaml docs/RELEASING.md
+if run 0 android "${PROD[@]}"; then
+  expect_in "skips Play when the Android app didn't change" "$OUTPUT" "Nothing in the Android app changed since 1.2.2, which Google Play (production track) already has"
+  expect_in "asks Play for the track" "$LOG" "/edits/edit-1/tracks]"
+  expect_in "and deletes that edit" "$LOG" "[DELETE]"
+  expect_not_in "builds nothing" "$LOG" "gradlew"
+  expect_not_in "uploads nothing" "$LOG" "uploadType=media"
+  expect_not_in "commits nothing" "$LOG" ":commit"
+  expect_not_in "no Actions notice outside GitHub Actions" "$OUTPUT" "::notice::"
+fi
+change plugins/maps/plugin.yaml
+if run 0 android "${PROD[@]}"; then
+  expect_in "a plugin change ships the Android app" "$OUTPUT" "changed since 1.2.2, which Google Play (production track) has (1 files)"
+  expect_in "and it is built" "$LOG" "[:app:bundleStoreRelease]"
+  expect_in "and committed" "$LOG" "/edits/edit-1:commit]"
+fi
+change clients/android/app/src/main/App.kt
+if run 0 android "${PROD[@]}"; then expect_in "an app source change ships it" "$LOG" "/edits/edit-1:commit]"; fi
+EXTRA_ENV="$PLAY DROIDHANDS_SOURCE_REPO=$REPO"
+change
+if run 0 android "${PROD[@]}"; then expect_in "an empty track gets the first release" "$OUTPUT" "no earlier version of the Android app"; fi
+EXTRA_ENV="$PLAY FAKE_TRACKS={\"tracks\":[{\"track\":\"production\",\"releases\":[{\"versionCodes\":[\"10000\"]}]}]} DROIDHANDS_SOURCE_REPO=$REPO"
+if run 0 android "${PROD[@]}"; then expect_in "a store version without a tag here is released over" "$OUTPUT" "no tag v1.0.0 here"; fi
+EXTRA_ENV="$PLAY $ON_PLAY DROIDHANDS_SOURCE_REPO=$REPO GITHUB_ACTIONS=true"
+if run 0 android "${PROD[@]}"; then expect_in "a skipped store is a notice in GitHub Actions" "$OUTPUT" "::notice::Nothing in the Android app changed"; fi
+if run 1 android --version 1.2.3 --build-only --only-if-changed; then expect_in "only-if-changed needs the stores" "$OUTPUT" "can't be used with --build-only"; fi
+
+EXTRA_ENV="$ASC FAKE_LATEST=1.2.2 DROIDHANDS_SOURCE_REPO=$REPO"
+change clients/android/app/src/main/App.kt clients/ios/app/DroidHandsTests/AppTests.swift
+if run 0 ios --version 1.2.3 --allow-dirty --submit --only-if-changed; then
+  expect_in "asks the App Store which version it has" "$LOG" "asc [latest-version] [--bundle-id] [com.droidhands.ios] [--source] [app-store]"
+  expect_in "skips the App Store when the iPhone app didn't change" "$OUTPUT" "Nothing in the iPhone app changed since 1.2.2, which the App Store already has"
+  expect_not_in "no archive" "$LOG" "xcodebuild"
+  expect_not_in "no upload" "$LOG" "xcrun"
+  expect_not_in "no submission" "$LOG" "asc [submit]"
+fi
+if run 0 ios --version 1.2.3 --allow-dirty --only-if-changed; then
+  expect_in "without --submit it compares with TestFlight" "$LOG" "[--source] [uploads]"
+fi
+change clients/ios/app/DroidHands/App.swift
+if run 0 ios --version 1.2.3 --allow-dirty --submit --only-if-changed; then
+  expect_in "an iPhone app change ships it" "$LOG" "xcrun [altool]"
+  expect_in "and submits it" "$LOG" "asc [submit]"
+fi
+EXTRA_ENV="$ASC FAKE_LATEST=1.2.3 DROIDHANDS_SOURCE_REPO=$REPO"
+change
+if run 0 ios --version 1.2.3 --allow-dirty --submit --only-if-changed; then
+  expect_in "the same version (a re-run) goes on to the usual checks" "$LOG" "asc [has-build]"
+fi
+
+EXTRA_ENV="$PLAY $ASC $ON_PLAY FAKE_LATEST=1.2.2 DROIDHANDS_SOURCE_REPO=$REPO"
+change clients/android/app/src/main/App.kt
+if run 0 all "${PROD[@]}" --submit; then
+  expect_in "all: the changed Android app ships" "$LOG" "/edits/edit-1:commit]"
+  expect_in "all: the unchanged iPhone app is skipped" "$OUTPUT" "skipping the App Store"
+  expect_not_in "all: nothing is built for the iPhone" "$LOG" "xcodebuild"
+  expect_in "all: both stores are asked before anything is built" "$(grep -nE '^(asc \[latest-version|gradlew)' "$WORK/log" | head -n 1)" "asc [latest-version]"
+fi
+change
 
 printf '\n%d passed, %d failed\n' "$PASSED" "$FAILED"
 [ "$FAILED" -eq 0 ]
