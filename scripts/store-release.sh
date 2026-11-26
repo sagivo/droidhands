@@ -6,6 +6,7 @@
 #   ./scripts/store-release.sh ios [--build-number N] [--submit]
 #   ./scripts/store-release.sh all
 #   ./scripts/store-release.sh <lane> --build-only      # build and sign, upload nothing
+#   ./scripts/store-release.sh all --only-if-changed    # skip a store whose app is the same as what it has
 #
 # The version comes from the git tag on HEAD (v1.2.3), or --version 1.2.3, and maps to the same
 # versionCode (MAJOR*10000 + MINOR*100 + PATCH) as the GitHub release workflow, so numbers never
@@ -18,6 +19,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# The git checkout --only-if-changed compares (tests point it at a scratch repository).
+SOURCE_REPO="${DROIDHANDS_SOURCE_REPO:-$REPO_ROOT}"
 ANDROID_DIR="${DROIDHANDS_ANDROID_DIR:-$REPO_ROOT/clients/android}"
 IOS_APP_DIR="${DROIDHANDS_IOS_APP_DIR:-$REPO_ROOT/clients/ios/app}"
 OUT_DIR="${DROIDHANDS_STORE_OUT:-$REPO_ROOT/dist/store}"
@@ -37,6 +40,9 @@ Builds the signed release and uploads it: android → Google Play, ios → App S
   --skip-tests          Android: skip the unit tests and plugin checks that run before the build.
   --allow-dirty         Upload from a working tree with uncommitted changes (not recommended).
   --yes                 Don't ask before publishing to Google Play's production track.
+  --only-if-changed     Ask each store which version it already has, and skip that store when nothing that
+                        goes into its app changed since that version's tag (the release workflow does this).
+                        Build settings such as the relay URL aren't compared: leave this out to ship those.
 
 Android:
   --track NAME          Play track: internal (default), alpha, beta or production.
@@ -141,6 +147,7 @@ BUILD_ONLY=0
 SKIP_TESTS=0
 ALLOW_DIRTY=0
 ASSUME_YES=0
+ONLY_IF_CHANGED=0
 TRACK="internal"
 DRAFT=0
 NOTES=""
@@ -162,6 +169,7 @@ while [ $# -gt 0 ]; do
     --skip-tests) SKIP_TESTS=1; shift ;;
     --allow-dirty) ALLOW_DIRTY=1; shift ;;
     --yes) ASSUME_YES=1; shift ;;
+    --only-if-changed) ONLY_IF_CHANGED=1; shift ;;
     --track) need_value "$@"; TRACK="$2"; shift 2 ;;
     --draft) DRAFT=1; shift ;;
     --notes) need_value "$@"; NOTES="$2"; shift 2 ;;
@@ -192,6 +200,7 @@ if [ -n "$NOTES_FILE" ]; then
   [ -f "$NOTES_FILE" ] || die "No such notes file: $NOTES_FILE"
   NOTES="$(cat "$NOTES_FILE")"
 fi
+[ "$BUILD_ONLY" -eq 0 ] || [ "$ONLY_IF_CHANGED" -eq 0 ] || die "--only-if-changed asks the stores, so it can't be used with --build-only."
 [ "${#NOTES}" -le 500 ] || die "Play release notes are limited to 500 characters; these are ${#NOTES}."
 
 load_settings
@@ -649,6 +658,89 @@ first_file() {
   done
 }
 
+# --------------------------------------------------------------------------------- only if changed
+
+# What goes into each store's app, as git pathspecs from the repository root. Docs, tests, and the full edition's
+# own sources (docs/EDITIONS.md: never on Play) don't count. Anything else in these folders does, even if only
+# the GitHub APK uses it: a release too many is better than a fix that never ships.
+ANDROID_APP_PATHS=(clients/android plugins ':(exclude)plugins/_*' ':(glob,exclude)**/*.md' ':(glob,exclude)**/.gitignore'
+  ':(exclude)clients/android/app/src/full' ':(exclude)clients/android/app/src/test' ':(exclude)clients/android/core/src/test'
+  ':(exclude)clients/android/fixtures')
+IOS_APP_PATHS=(clients/ios/app ':(glob,exclude)**/*.md' ':(glob,exclude)**/.gitignore'
+  ':(exclude)clients/ios/app/DroidHandsTests' ':(exclude)clients/ios/app/DroidHandsUITests')
+
+# Prints the versionCode of a 1.2.3 version string, or nothing when it isn't one.
+version_code_of() {
+  [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] || return 0
+  printf '%s' $((BASH_REMATCH[1] * 10000 + BASH_REMATCH[2] * 100 + BASH_REMATCH[3]))
+}
+
+# A line in the GitHub Actions run summary when running there, so a skipped store shows without opening the log.
+notice() {
+  ok "$*"
+  [ -z "${GITHUB_ACTIONS:-}" ] || printf '::notice::%s\n' "$*"
+}
+
+# app_needed NAME STORE STORE_VERSION PATHSPEC…: returns 1 (skip) only when STORE already has an earlier version
+# whose tag exists and nothing in PATHSPEC changed from that tag to this checkout (uncommitted changes included).
+app_needed() {
+  local name="$1" store="$2" have="$3"
+  shift 3
+  if [ -z "$have" ]; then
+    say "$store has no earlier version of the $name app: releasing it."
+    return 0
+  fi
+  local have_code
+  have_code="$(version_code_of "$have")"
+  if [ -z "$have_code" ]; then
+    say "$store's newest $name version is \"$have\", which isn't a release version: releasing."
+    return 0
+  fi
+  # The same version (a re-run) or a newer one: the lane itself says what the store has.
+  [ "$have_code" -lt "$VERSION_CODE" ] || return 0
+  if ! git -C "$SOURCE_REPO" rev-parse -q --verify "refs/tags/v$have^{commit}" >/dev/null 2>&1; then
+    say "$store has $have, but there is no tag v$have here to compare with (a shallow clone?): releasing the $name app."
+    return 0
+  fi
+  local changed
+  changed="$(git -C "$SOURCE_REPO" diff --name-only "v$have" -- "$@")" || die "git could not compare v$have with this checkout."
+  if [ -n "$changed" ]; then
+    say "The $name app changed since $have, which $store has ($(grep -c . <<<"$changed") files): releasing it."
+    return 0
+  fi
+  notice "Nothing in the $name app changed since $have, which $store already has: skipping $store."
+  return 1
+}
+
+# Sets STORE_VERSION to the newest version on the Play track, from a Play edit that is then deleted.
+play_store_version() {
+  play_login
+  play POST "$PLAY_API/$PLAY_PACKAGE/edits" -H 'Content-Type: application/json' -d '{}'
+  EDIT_ID="$(jq -r .id "$WORK/resp")"
+  [ -n "$EDIT_ID" ] && [ "$EDIT_ID" != null ] || die "Google Play did not open an edit."
+  play GET "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID/tracks"
+  local code
+  code="$(jq -r --arg track "$TRACK" '[.tracks[]? | select(.track == $track) | .releases[]? | .versionCodes[]? | tonumber] | max // empty' "$WORK/resp")"
+  play DELETE "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID"
+  EDIT_ID=""
+  STORE_VERSION=""
+  [ -z "$code" ] || STORE_VERSION="$((code / 10000)).$((code / 100 % 100)).$((code % 100))"
+}
+
+android_needed() {
+  play_store_version
+  app_needed Android "Google Play ($TRACK track)" "$STORE_VERSION" "${ANDROID_APP_PATHS[@]}"
+}
+
+# Compares with the App Store with --submit, and with the newest TestFlight upload without it.
+ios_needed() {
+  local source=uploads store="TestFlight"
+  [ "$SUBMIT" -eq 0 ] || source=app-store store="the App Store"
+  STORE_VERSION="$(asc latest-version --bundle-id "$BUNDLE_ID" --source "$source")" ||
+    die "Could not ask App Store Connect which version it has."
+  app_needed iPhone "$store" "$STORE_VERSION" "${IOS_APP_PATHS[@]}"
+}
+
 # ------------------------------------------------------------------------------------------------ run
 
 # Every lane's settings are checked before anything is built or uploaded, so a missing iOS key doesn't leave
@@ -659,13 +751,19 @@ esac
 case "$LANE" in
   ios | all) ios_prepare ;;
 esac
+RUN_ANDROID=0
+RUN_IOS=0
 case "$LANE" in
-  android) android_lane ;;
-  ios) ios_lane ;;
-  all)
-    android_lane
-    ios_lane
-    ;;
+  android) RUN_ANDROID=1 ;;
+  ios) RUN_IOS=1 ;;
+  all) RUN_ANDROID=1 RUN_IOS=1 ;;
 esac
+# Both stores are asked before anything is built.
+if [ "$ONLY_IF_CHANGED" -eq 1 ]; then
+  if [ "$RUN_ANDROID" -eq 1 ] && ! android_needed; then RUN_ANDROID=0; fi
+  if [ "$RUN_IOS" -eq 1 ] && ! ios_needed; then RUN_IOS=0; fi
+fi
+[ "$RUN_ANDROID" -eq 0 ] || android_lane
+[ "$RUN_IOS" -eq 0 ] || ios_lane
 say ""
 ok "Done."

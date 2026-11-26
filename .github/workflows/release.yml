@@ -12,6 +12,11 @@
 #   4. the iPhone app on App Store Connect, submitted for App Review and released once Apple approves it
 #      (TestFlight only when the variable APP_STORE_SUBMIT is false).
 #
+# Each store only gets the release when its app changed: the job asks the store which version it already has and
+# skips when nothing that goes into that app changed since that version's tag (store-release.sh --only-if-changed;
+# the run summary says which store was skipped). To ship a build setting such as a new relay URL anyway, run
+# scripts/store-release.sh without --only-if-changed (docs/RELEASING.md).
+#
 # The store "What's new" text comes from the release's "## What's new" section (or its whole text). Every job
 # can be re-run: what a store already has is left alone. Secrets and the one-time store setup are listed in
 # docs/RELEASING.md ("Automatic releases"). A release is never signed with a debug key. The optional repository
@@ -235,6 +240,9 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+        with:
+          # Every tag, so --only-if-changed can compare with the version Play already has.
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -279,7 +287,7 @@ jobs:
         # The apk job already ran the tests on this commit.
         run: >-
           ./scripts/store-release.sh android --version "${{ needs.apk.outputs.version }}" --track "$PLAY_TRACK"
-          --yes --skip-tests --notes-file "$RUNNER_TEMP/notes.txt"
+          --yes --skip-tests --only-if-changed --notes-file "$RUNNER_TEMP/notes.txt"
 
       - name: Remove the keys
         if: always()
@@ -314,6 +322,9 @@ jobs:
           fi
 
       - uses: actions/checkout@v4
+        with:
+          # Every tag, so --only-if-changed can compare with the version the App Store already has.
+          fetch-depth: 0
 
       - name: Newest Xcode
         # App Store Connect only takes builds made with a recent SDK; the image's default Xcode can lag.
@@ -353,7 +364,7 @@ jobs:
           SUBMIT: ${{ vars.APP_STORE_SUBMIT != 'false' && '--submit' || '' }}
         run: >-
           ./scripts/store-release.sh ios --version "${{ needs.apk.outputs.version }}" ${SUBMIT:+"$SUBMIT"} --wait-minutes 90
-          --notes-file "$RUNNER_TEMP/notes.txt"
+          --only-if-changed --notes-file "$RUNNER_TEMP/notes.txt"
 
       - name: Remove the keys
         if: always()

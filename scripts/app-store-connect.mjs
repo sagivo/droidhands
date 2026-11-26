@@ -16,6 +16,10 @@
 //       Waits until Apple has processed the build, creates (or reuses) the App Store version, attaches the build,
 //       sets "What's New" and submits the version for review. It is released when Apple approves it. Does
 //       nothing when the version is already submitted or released.
+//   node scripts/app-store-connect.mjs latest-version --bundle-id ID [--source app-store|uploads]
+//       Prints the newest version Apple already has, or nothing: app-store (default) counts App Store versions
+//       that are with Apple or released (not ones still being prepared, removed from review or rejected);
+//       uploads counts every uploaded build (TestFlight). store-release.sh --only-if-changed compares with it.
 //
 // Environment: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH (the AuthKey_<id>.p8 file). ASC_API_URL overrides the API
 // address (tests); ASC_POLL_SECONDS the wait between checks of the build (default 30).
@@ -343,7 +347,33 @@ async function createCertificate(options) {
   }
 }
 
-const COMMANDS = { submit, 'has-build': hasBuild, profile, 'create-certificate': createCertificate }
+// Compares "1.2.3" version strings by number.
+const semver = (v) => v.split('.').map(Number)
+const newer = (a, b) => {
+  const [x, y] = [semver(a), semver(b)]
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0)
+  return false
+}
+const newest = (versions) => versions.filter((v) => /^\d+(\.\d+)*$/.test(v)).reduce((best, v) => (!best || newer(v, best) ? v : best), '')
+
+async function latestVersion(options) {
+  const source = options.source ?? 'app-store'
+  if (source !== 'app-store' && source !== 'uploads') die('--source must be app-store or uploads')
+  const call = client()
+  const app = await findApp(call, need(options, 'bundle-id'))
+  let versions
+  if (source === 'app-store') {
+    const all = await call('GET', `/v1/apps/${app.id}/appStoreVersions?${query({ 'filter[platform]': 'IOS', limit: '200' })}`)
+    versions = all.data.filter((v) => !EDITABLE.has(versionState(v))).map((v) => v.attributes.versionString)
+  } else {
+    const all = await call('GET', `/v1/preReleaseVersions?${query({ 'filter[app]': app.id, 'filter[platform]': 'IOS', limit: '200' })}`)
+    versions = all.data.map((v) => v.attributes.version)
+  }
+  const found = newest(versions)
+  if (found) console.log(found)
+}
+
+const COMMANDS = { submit, 'has-build': hasBuild, 'latest-version': latestVersion, profile, 'create-certificate': createCertificate }
 
 export async function main(argv) {
   const { command, options } = parseArgs(argv)

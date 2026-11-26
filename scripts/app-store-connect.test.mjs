@@ -224,6 +224,27 @@ test('profile explains a certificate App Store Connect doesn\'t know', async () 
   await assert.rejects(main(['profile', '--bundle-id', 'com.droidhands.ios', '--certificate-serial', 'AB', '--out', join(dir, 'x')]), /no distribution certificate with serial AB/)
 })
 
+test('latest-version prints the newest App Store version that is with Apple or released', async () => {
+  routes['GET /v1/apps'] = app
+  const version = (versionString, appVersionState) => ({ id: versionString, attributes: { versionString, appVersionState } })
+  routes['GET /v1/apps/app-1/appStoreVersions'] = { data: [
+    version('0.1.10', 'DEVELOPER_REJECTED'), version('0.1.9', 'PREPARE_FOR_SUBMISSION'), version('0.1.2', 'READY_FOR_DISTRIBUTION'),
+    version('0.1.8', 'WAITING_FOR_REVIEW'), version('0.1.6', 'READY_FOR_DISTRIBUTION'),
+  ] }
+  const out = await capture(() => main(['latest-version', '--bundle-id', 'com.droidhands.ios']))
+  assert.equal(out, '0.1.8', 'by number (0.1.8 > 0.1.6 > 0.1.2), skipping versions not sent or pulled from review')
+})
+
+test('latest-version --source uploads counts every uploaded build, and prints nothing when there is none', async () => {
+  routes['GET /v1/apps'] = app
+  routes['GET /v1/preReleaseVersions'] = { data: [{ attributes: { version: '1.0.0' } }, { attributes: { version: '1.2.0' } }] }
+  assert.equal(await capture(() => main(['latest-version', '--bundle-id', 'com.droidhands.ios', '--source', 'uploads'])), '1.2.0')
+  assert.equal(find('GET', '/v1/preReleaseVersions')[0].query['filter[app]'], 'app-1')
+  routes['GET /v1/apps/app-1/appStoreVersions'] = { data: [] }
+  assert.equal(await capture(() => main(['latest-version', '--bundle-id', 'com.droidhands.ios'])), '')
+  await assert.rejects(main(['latest-version', '--bundle-id', 'com.droidhands.ios', '--source', 'testflight']), /--source must be/)
+})
+
 test('unknown commands and missing options are refused', async () => {
   await assert.rejects(main(['bogus']), /Usage/)
   await assert.rejects(main(['submit', '--version', '1.2.3']), /--bundle-id is required/)
