@@ -65,6 +65,10 @@ case "$url" in
   */bundles*) body='{"versionCode":10203}' ;;
   */edits) body='{"id":"edit-1"}' ;;
 esac
+# Play after a rejection: a plain commit is refused, one with changesNotSentForReview=true goes through.
+if [ -n "${FAKE_COMMIT_NOT_SENT:-}" ] && [[ "$url" == *":commit" ]]; then
+  body='{"error":{"message":"Changes cannot be sent for review automatically. Please set the query parameter changesNotSentForReview to true."}}' code=400
+fi
 if [ -n "${FAKE_PLAY_FAIL_ON:-}" ] && [[ "$url" == *"$FAKE_PLAY_FAIL_ON"* ]]; then
   body='{"error":{"message":"Only releases with status draft may be created on draft app."}}' code=400
 fi
@@ -255,6 +259,17 @@ if run 1 android --version 1.2.3 --allow-dirty --relay-url https://relay.example
   expect_in "shows Google's error" "$OUTPUT" "Only releases with status draft may be created on draft app."
   expect_in "deletes the uncommitted edit" "$LOG" "[DELETE]"
   expect_not_in "no commit after an error" "$LOG" ":commit]"
+fi
+EXTRA_ENV="$PLAY FAKE_COMMIT_NOT_SENT=1"
+if run 0 android --version 1.2.3 --allow-dirty --track production --yes --relay-url https://relay.example.com; then
+  expect_in "commits without sending for review when Play asks" "$LOG" ":commit?changesNotSentForReview=true]"
+  expect_in "says to send it from the Console" "$OUTPUT" "Send changes for review"
+  expect_not_in "the committed edit isn't deleted" "$LOG" "[DELETE]"
+fi
+EXTRA_ENV="$PLAY FAKE_PLAY_FAIL_ON=:commit"
+if run 1 android --version 1.2.3 --allow-dirty --relay-url https://relay.example.com; then
+  expect_in "other commit errors still stop the release" "$OUTPUT" "Google Play answered 400"
+  expect_not_in "and aren't retried without review" "$LOG" "changesNotSentForReview"
 fi
 printf '{"not":"a key"}' >"$WORK/bad.json"
 EXTRA_ENV="PLAY_SERVICE_ACCOUNT_JSON=$WORK/bad.json"

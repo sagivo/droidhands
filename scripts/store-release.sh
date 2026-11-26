@@ -344,15 +344,26 @@ play_login() {
   (umask 077 && printf 'Authorization: Bearer %s\n' "$(jq -r .access_token "$WORK/resp")" >"$WORK/auth")
 }
 
+# play_try METHOD URL [curl args…]: like play, but sets PLAY_CODE to the HTTP status instead of stopping on errors.
+play_try() {
+  local method="$1" url="$2"
+  shift 2
+  PLAY_CODE="$("$CURL" -sS -o "$WORK/resp" -w '%{http_code}' -X "$method" -H "@$WORK/auth" "$@" "$url")" ||
+    die "Could not reach Google Play ($method $url)."
+}
+
 # play METHOD URL [curl args…]: the answer lands in $WORK/resp; anything but 2xx stops the release.
 play() {
-  local method="$1" url="$2" code message
-  shift 2
-  code="$("$CURL" -sS -o "$WORK/resp" -w '%{http_code}' -X "$method" -H "@$WORK/auth" "$@" "$url")" ||
-    die "Could not reach Google Play ($method $url)."
-  case "$code" in
+  play_try "$@"
+  case "$PLAY_CODE" in
     2??) return 0 ;;
   esac
+  play_fail
+}
+
+# Stops the release with Google's answer to the last play_try ($PLAY_CODE, $WORK/resp).
+play_fail() {
+  local code="$PLAY_CODE" message
   message="$(jq -r '.error.message // empty' "$WORK/resp" 2>/dev/null || true)"
   [ -n "$message" ] || message="$(head -c 300 "$WORK/resp")"
   case "$code" in
@@ -397,10 +408,22 @@ play_upload() {
      + (if $notes == "" then {} else {releaseNotes: [{language: $lang, text: $notes}]} end)')"
   play PUT "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID/tracks/$TRACK" -H 'Content-Type: application/json' \
     -d "$(jq -nc --arg track "$TRACK" --argjson release "$release" '{track: $track, releases: [$release]}')"
-  play POST "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID:commit" -d ''
+  # After a rejection (and in some other app states) Play won't send changes for review on its own: it asks for
+  # changesNotSentForReview=true, and the changes then wait in the Console's Publishing overview.
+  local sent=1
+  play_try POST "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID:commit" -d ''
+  if [ "$PLAY_CODE" = 400 ] && grep -q changesNotSentForReview "$WORK/resp"; then
+    sent=0
+    play POST "$PLAY_API/$PLAY_PACKAGE/edits/$EDIT_ID:commit?changesNotSentForReview=true" -d ''
+  else
+    case "$PLAY_CODE" in 2??) ;; *) play_fail ;; esac
+  fi
   EDIT_ID=""
   ok "Release $VERSION ($status) is on the $TRACK track"
-  if [ "$status" = draft ]; then
+  if [ "$sent" -eq 0 ]; then
+    say "  Google Play didn't send it for review automatically. Send it in the Play Console: Publishing overview >"
+    say "  Send changes for review."
+  elif [ "$status" = draft ]; then
     say "  Finish it in the Play Console: Release > ${TRACK} > the draft > Review and roll out."
   elif [ "$TRACK" != production ]; then
     say "  Testers on the $TRACK track get it after Google's processing, usually within minutes."
